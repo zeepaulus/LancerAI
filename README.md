@@ -159,7 +159,4 @@ và lọc thêm `tenant_id` khi dữ liệu được tách theo tổ chức. Chi
 - [`TODO.md`](TODO.md) — hạng mục triển khai
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — branch, **commit**, chuẩn mã
 
-## License
-
-License khai báo trong `pyproject.toml` là **MIT**. Khi phát hành chính thức,
-nên bổ sung file `LICENSE` ở gốc repo.
+## License **MIT**
