@@ -76,7 +76,7 @@ dưới `app/`, `frontend/`, v.v.
 PostgreSQL / Redis / Chroma / Neo4j), **Ollama** khi dùng **LLM** local theo
 `LLM_LOCAL_MODEL` (mặc định: `qwen2.5:3b`).
 
-**Backend** (từ thư mục gốc repository — tên thư mục có thể đặt `lancerai`):
+**Backend**:
 
 ```bash
 uv sync
