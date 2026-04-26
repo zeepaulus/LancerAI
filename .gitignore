@@ -1,0 +1,63 @@
+# Environment & Secrets
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual Environment
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# AI Model weight files (large binaries — NOT app/models/ Python code)
+/models/
+*.onnx
+*.bin
+*.safetensors
+*.gguf
+
+# Data
+data/
+*.db
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Audio test artifacts
+*.wav
+*.mp3
+
+# Node (frontend)
+frontend/node_modules/
+frontend/.next/
+
+# Lock files (keep uv.lock, ignore others if present)
+# uv.lock is committed for reproducibility
+
+# Documentation build output (source docs are tracked)
+# /docs/build/
