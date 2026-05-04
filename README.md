@@ -1,162 +1,232 @@
-<div align="center">
-
 # LancerAI
 
-**Hệ trợ lý sự nghiệp bằng AI — trích xuất & tối ưu CV, gợi ý việc làm, phỏng vấn giọng nói**
-
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
-
-[Tổng quan](#tổng-quan) · [Tech stack](#tech-stack) · [Phạm vi](#phạm-vi-sản-phẩm) · [Thiết lập](#thiết-lập) · [Mô hình & biến môi trường](#mô-hình-asset--biến-môi-trường) · [Cấu trúc repo](#cấu-trúc-thư-mục)
-
-</div>
+**Trợ lý sự nghiệp bằng AI — trích xuất và tối ưu CV, gợi ý việc làm, phỏng vấn giọng nói.**
 
 ---
 
-## Tổng quan
+## Giới thiệu
 
-**LancerAI** là nền tảng hỗ trợ ứng viên, có thể phục vụ nhiều tổ chức trên cùng
-một hệ thống và tách dữ liệu theo tài khoản. Ứng viên có thể tải **CV**
-(PDF/ảnh), trích xuất cấu trúc, chạy pipeline **LangGraph** (tìm dữ liệu liên
-quan → góp ý thẳng → viết lại → kiểm tra), so khớp với mô tả công việc (**JD**),
-và mô phỏng phỏng vấn realtime qua **WebSocket** (luồng **PCM** → **STT** →
-**LLM** → **TTS**).
+LancerAI là một web application full-stack giúp ứng viên chuẩn bị cho quá trình xin việc thông qua bốn module chính:
 
-**Backend** FastAPI tách tầng **router** → **service** → **repository**; phần
-gắn kết phụ thuộc nằm tại `app/core/dependencies.py`. **Frontend** Next.js phục
-vụ giao diện và tích hợp **API**/**WS**. Chi tiết kiến trúc, cách tách dữ liệu
-theo tổ chức và pipeline:  
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+- **CV Extraction** — Upload file CV dạng PDF hoặc ảnh; hệ thống dùng OCR để đọc nội dung và cấu trúc hóa thông tin (thông tin cá nhân, kinh nghiệm, kỹ năng, học vấn) bằng LLM.
+- **CV Optimization** — Pipeline đa agent AI (LangGraph) phân tích CV, xác định điểm yếu, viết lại theo công thức có cấu trúc, và kiểm tra tính trung thực trước khi xuất kết quả.
+- **Job Matching** — Chấm điểm mức độ phù hợp giữa CV và một mô tả công việc (JD) bằng thuật toán Hybrid Scoring (tần suất từ khóa + vị trí xuất hiện + semantic similarity). Xác định các kỹ năng còn thiếu và mức độ ảnh hưởng.
+- **Voice Interview** — Phỏng vấn mô phỏng real-time qua WebSocket. Hệ thống lắng nghe ứng viên qua microphone (audio PCM), chuyển giọng nói thành văn bản (STT), tạo câu hỏi/phản hồi bằng LLM, và đọc lại bằng giọng tổng hợp (TTS). Chấm điểm câu trả lời theo framework STAR.
+
+Backend được xây dựng bằng FastAPI (Python), frontend bằng Next.js (React/TypeScript).
 
 ---
 
-## Tech stack
+## Tech Stack
 
 | Tầng | Công nghệ |
-|------|-----------|
-| **API** | **FastAPI**, **Pydantic v2**, **Uvicorn** — OpenAPI tại `/docs` |
-| **CSDL** | **PostgreSQL**, **SQLAlchemy 2.0** (async), **asyncpg** |
-| **Schema** | **Alembic** — `alembic.ini` (gốc repo) + `migration/alembic/` |
-| **Hàng đợi** | **Redis**, **Celery** — `app/workers/` |
-| **Vector / RAG** | **ChromaDB** (có thể thay Qdrant) — `VectorRepository` |
-| **Graph** | **Neo4j** — `GraphRepository` |
-| **AI orchestration** | **LangGraph**, **langchain-core** — tối ưu **CV** (`app/service/agents/`) |
-| **LLM** | **Ollama** (local), tùy chọn **Groq** (OpenAI-compatible) |
-| **OCR** | **PaddleOCR** |
-| **STT** | **vinai/PhoWhisper-base** — **Transformers** |
-| **TTS** | **edge-tts** / **Piper** / **VieNeu** |
-| **Tài liệu** | **PyMuPDF**, **WeasyPrint**, **python-docx** |
-| **UI** | **Next.js 16** (App Router), **React 19** |
-| **Python** | **uv** — `pyproject.toml`, `uv.lock` |
-| **Test** | **pytest** |
+|---|---|
+| API server | FastAPI, Pydantic v2, Uvicorn |
+| Database | PostgreSQL, SQLAlchemy 2.0 async, asyncpg |
+| Schema migration | Alembic |
+| Task queue | Celery + Redis |
+| Vector search | ChromaDB (có thể thay bằng Qdrant) |
+| Knowledge graph | Neo4j |
+| AI orchestration | LangGraph, langchain-core |
+| LLM | Ollama (local, mặc định: qwen2.5:3b) / Groq (cloud fallback) |
+| OCR | PaddleOCR (tiếng Việt + tiếng Anh) |
+| Speech-to-Text | vinai/PhoWhisper-base (HuggingFace Transformers) |
+| Text-to-Speech | edge-tts / Piper / VieNeu SDK |
+| PDF | PyMuPDF (đọc), WeasyPrint (xuất) |
+| Frontend | React 18, Vite 5, react-router-dom 6 |
+| Package manager | uv (Python), npm (Node) |
+| Testing | pytest |
 
 ---
 
-## Phạm vi sản phẩm
+## Trạng thái tính năng
 
-| Mã | Chức năng | API (prefix `/api/v1`) |
-|----|------------|-------------------------|
-| **M0** | Xác thực, tách dữ liệu theo tổ chức/tài khoản, **JWT** | `/auth/...` |
-| **M1** | Trích xuất **CV** (PDF/ảnh → cấu trúc) | `/extraction/...` |
-| **M2** | Tối ưu **CV** (LangGraph), template, xuất **PDF** | `/optimization/...` |
-| **M3** | So khớp **CV**–**JD**, gợi ý vị trí | `/jobs/...` |
-| **M4** | Phỏng vấn **voice** (**STT** / **TTS** / chấm **STAR**) | `/interview/...` + **WS** |
-| **M5** | **Worker** nền (crawl **JD**, xuất tài liệu) | Tích hợp từ service / lịch |
+| Module | Tính năng | Trạng thái |
+|---|---|---|
+| M0 | Đăng ký / đăng nhập (JWT) | Scaffold — chưa implement |
+| M0 | Auth middleware (`get_current_user`) | Đã implement (chế độ demo) |
+| M1 | Upload CV (PDF / ảnh) | Scaffold — chưa implement |
+| M1 | OCR + LLM extraction có cấu trúc | Scaffold — chưa implement |
+| M2 | LangGraph CV optimization pipeline | Graph đã wiring — các agent là stub |
+| M2 | Render template CV (xuất PDF) | Scaffold — chưa implement |
+| M3 | CV-JD matching (Hybrid Scoring) | Scaffold — chưa implement |
+| M3 | Gợi ý việc làm từ corpus | Scaffold — chưa implement |
+| M4 | Voice interview qua WebSocket | Scaffold — chưa implement |
+| M4 | STAR evaluation và báo cáo | Scaffold — chưa implement |
+| M5 | Job listing crawler (Celery) | Stub only |
+| M5 | PDF/DOCX export worker (Celery) | Stub only |
+| Frontend | UI đăng nhập / đăng ký | Chưa bắt đầu |
+| Frontend | UI upload và xem CV | Chưa bắt đầu |
+| Frontend | UI phỏng vấn (WebSocket + audio) | Chưa bắt đầu |
 
-Kế hoạch chi tiết theo từng tầng: [`TODO.md`](TODO.md). Phân công: cập nhật bảng
-trong [`CONTRIBUTING.md`](CONTRIBUTING.md). Mô tả từng thư mục: `README.md` con
-dưới `app/`, `frontend/`, v.v.
+Danh sách công việc chi tiết kèm file tham chiếu: xem [`TODO.md`](TODO.md).
 
 ---
 
-## Thiết lập
+## Yêu cầu hệ thống
 
-**Yêu cầu:** Python 3.11+, **Node.js** 20+, **uv**, Docker (khuyến nghị cho
-PostgreSQL / Redis / Chroma / Neo4j), **Ollama** khi dùng **LLM** local theo
-`LLM_LOCAL_MODEL` (mặc định: `qwen2.5:3b`).
+- Python 3.11+
+- Node.js 20+
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+- Docker + Docker Compose (cho PostgreSQL, Redis, ChromaDB, Neo4j)
+- [Ollama](https://ollama.com/) — nếu chạy LLM local
 
-**Backend**:
+---
+
+## Cài đặt và khởi chạy
+
+### 1. Clone repository
 
 ```bash
-uv sync
-cp .env.example .env
-# Thiết lập .env: DATABASE_URL, STT, TTS, Ollama, LLM, ...
-uv run uvicorn app.main:app --reload --port 8000
+git clone https://github.com/<org>/lancerai.git
+cd lancerai
 ```
 
-- Tài liệu **API:** http://localhost:8000/docs  
-- **Health:** http://localhost:8000/health  
+### 2. Cấu hình biến môi trường
 
-Phụ thuộc Python: `uv sync`. Cần file **pip** tương đương:  
-`uv export --format requirements-txt -o requirements.txt`
+```bash
+cp .env.example .env
+```
 
-**CSDL & dịch vụ nền:**
+Mở `.env` và điền các giá trị cần thiết:
+
+| Biến | Mô tả |
+|---|---|
+| `DATABASE_URL` | Connection string đến PostgreSQL |
+| `AUTH_SECRET_KEY` | Khóa ký JWT — bắt buộc thay đổi trước khi lên production |
+| `LLM_LOCAL_BASE_URL` | Địa chỉ Ollama (mặc định: `http://localhost:11434`) |
+| `LLM_LOCAL_MODEL` | Tên model Ollama (mặc định: `qwen2.5:3b`) |
+| `STT_MODEL_ID` | Model ASR (mặc định: `vinai/PhoWhisper-base`) |
+| `TTS_ENGINE` | Engine TTS: `edge`, `piper`, hoặc `vieneu` |
+
+Xem [`.env.example`](.env.example) để biết danh sách đầy đủ.
+
+### 3. Khởi động các dịch vụ hạ tầng
 
 ```bash
 docker compose up -d
-# Chỉ chạy sau khi đã có file migration trong migration/alembic/versions/
+```
+
+Lệnh này khởi động PostgreSQL, Redis, ChromaDB và Neo4j ở background.
+
+### 4. Cài đặt dependencies Python và chạy migration
+
+```bash
+uv sync
 uv run alembic upgrade head
 ```
 
-**Frontend:**
+### 5. Khởi động backend
 
 ```bash
-cd frontend && npm install && npm run dev
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
-URL **API** cho browser: `NEXT_PUBLIC_API_BASE_URL` trong `frontend/.env.local`.
+- API documentation (Swagger UI): http://localhost:8000/docs
+- Health check: http://localhost:8000/health
 
-**Test:**
+### 6. Khởi động frontend
+
+Mở terminal khác:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend chạy tại http://localhost:3000.
+
+Tạo file `frontend/.env` với nội dung:
+
+```
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+### 7. (Tùy chọn) Tải model LLM local
+
+```bash
+ollama pull qwen2.5:3b
+```
+
+---
+
+## Chạy tests
 
 ```bash
 uv run pytest
 ```
 
----
+Kèm báo cáo coverage:
 
-## Mô hình, asset & biến môi trường
-
-| Thành phần | Gợi ý | Biến (tham chiếu) |
-|-------------|--------|-------------------|
-| **LLM** (Ollama) | Cài Ollama, kéo model | `LLM_LOCAL_BASE_URL`, `LLM_LOCAL_MODEL` |
-| **STT** (PhoWhisper) | Tải từ HuggingFace lần đầu chạy | `STT_MODEL_ID`, `STT_DEVICE` |
-| **TTS** (VieNeu) | File GGUF / asset theo SDK; thư mục `models/` thường ngoài **git** | `TTS_ENGINE`, `TTS_MODEL_PATH`, `TTS_VOICE` |
-| **TTS** (Edge) | Dịch vụ Microsoft, cần mạng | `TTS_ENGINE=edge`, `TTS_VOICE` |
-| **LLM** cloud | **Groq** / OpenAI-compatible | `LLM_CLOUD_API_KEY`, … |
-
-Chi tiết: [`.env.example`](.env.example). Trọng số mẫu lớn nằm ngoài repo (xem
-`.gitignore`).
+```bash
+uv run pytest --cov=app --cov-report=html
+```
 
 ---
 
 ## Cấu trúc thư mục
 
 ```
-lancerai/                  
-├── app/                   # Backend FastAPI
-├── docs/                  # Kiến trúc
-├── frontend/              # Next.js
-├── migration/             # Alembic
-├── tests/
-├── docker-compose.yml
-├── infra/
-├── pyproject.toml
-├── TODO.md
-├── CONTRIBUTING.md
-└── uv.lock
+lancerai/
+├── app/                      Backend — FastAPI application
+│   ├── main.py               Entry point: khởi tạo app, middleware, mount router
+│   ├── core/                 Hạ tầng: settings, DB, connector, DI wiring
+│   ├── models/               SQLAlchemy ORM models (định nghĩa bảng PostgreSQL)
+│   ├── schema/               Pydantic request/response schemas
+│   ├── repository/           Data access layer (PostgreSQL, ChromaDB, Neo4j)
+│   ├── router/v1/            Khai báo HTTP endpoint và WebSocket
+│   ├── service/              Business logic (service, LangGraph agent, interview pipeline)
+│   └── workers/              Celery background tasks
+│
+├── frontend/                 Frontend — React + Vite SPA
+│   └── src/                  Pages, features, components, utils
+│
+├── docs/                     Tài liệu kiến trúc và tổng quan hệ thống
+│   ├── ARCHITECTURE.md       Kiến trúc chi tiết, multi-tenancy, pipeline design
+│   └── SYSTEM_OVERVIEW.md    Cách frontend và backend kết nối; mô tả từng tính năng
+│
+├── migration/                Alembic migration scripts
+├── tests/                    Test tự động (pytest)
+├── infra/                    Cấu hình hạ tầng
+├── docker-compose.yml        Stack dịch vụ local (DB, Redis, ChromaDB, Neo4j)
+├── pyproject.toml            Dependencies Python và cấu hình tooling
+├── .env.example              Mẫu biến môi trường
+├── TODO.md                   Danh sách công việc cần implement
+└── CONTRIBUTING.md           Quy trình phát triển, tiêu chuẩn code, hướng dẫn đóng góp
 ```
 
-**Quy ước dữ liệu:** mọi truy vấn tài nguyên theo người dùng phải lọc `user_id`
-và lọc thêm `tenant_id` khi dữ liệu được tách theo tổ chức. Chi tiết:
-`app/repository/README.md`.
+Mỗi thư mục con trong `app/` có file `README.md` riêng mô tả chi tiết trách nhiệm, các file bên trong và các quyết định thiết kế.
 
 ---
 
 ## Tài liệu
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — kiến trúc, tách dữ liệu theo tổ chức, pipeline
-- [`TODO.md`](TODO.md) — hạng mục triển khai
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — branch, **commit**, chuẩn mã
+| Tài liệu | Mục đích |
+|---|---|
+| [`docs/SYSTEM_OVERVIEW.md`](docs/SYSTEM_OVERVIEW.md) | Cách hệ thống hoạt động end-to-end; mô tả từng tính năng |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Kiến trúc, multi-tenancy, AI pipeline |
+| [`TODO.md`](TODO.md) | Danh sách công việc cần implement theo module |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Quy trình phát triển, tên branch, tiêu chuẩn code |
+| `app/*/README.md` | Tài liệu kỹ thuật từng module backend |
 
-## License **MIT**
+---
+
+## Biến môi trường
+
+Xem [`.env.example`](.env.example) để biết danh sách đầy đủ. Các biến được nhóm theo:
+
+- **Application runtime** — `APP_ENV`, `APP_DEBUG`, `APP_HOST`, `APP_PORT`
+- **Auth / JWT** — `AUTH_SECRET_KEY`, `AUTH_JWT_ALGORITHM`
+- **Database** — `DATABASE_URL`, `REDIS_URL`, `CELERY_BROKER_URL`
+- **Vector DB** — `VECTOR_DB_HOST`, `VECTOR_DB_PORT`, `VECTOR_DB_COLLECTION`
+- **Graph DB** — `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`
+- **LLM** — `LLM_LOCAL_BASE_URL`, `LLM_LOCAL_MODEL`, `LLM_CLOUD_API_KEY`
+- **Voice STT** — `STT_MODEL_ID`, `STT_DEVICE`
+- **Voice TTS** — `TTS_ENGINE`, `TTS_VOICE`, `TTS_MODEL_PATH`
+
+---
+
+## License
+
+MIT — xem [LICENSE](LICENSE).
