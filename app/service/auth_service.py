@@ -1,12 +1,12 @@
 """Authentication service.
 
-Owns the user lifecycle: signup, login, token resolution.
+Owns the user lifecycle for the SaaS surface: signup, login, token resolution.
 Routers depend on this service via ``get_auth_service`` so they don't touch
 ``security`` or ``RelationalRepository`` directly.
 
 TODO:
     - Implement ``signup`` (validate email uniqueness, hash password,
-      set the organization id, persist via ``user_repository``).
+      provision tenant_id, persist via ``user_repository``).
     - Implement ``login`` (verify password, issue JWT via ``security``).
     - Implement ``resolve_token`` (decode JWT, fetch user from DB).
     - Add password reset / email verification flows when needed.
@@ -24,7 +24,7 @@ from app.repository.relational_repository import RelationalRepository
 class AuthService:
     """User registration / login / JWT resolution."""
 
-    def __init__(self, user_repository: RelationalRepository[User], settings: Settings) -> None:
+    def __init__(self, user_repository: RelationalRepository, settings: Settings) -> None:
         self._users = user_repository
         self._settings = settings
 

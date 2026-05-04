@@ -7,17 +7,15 @@ for append-only fields (e.g., messages, issues lists).
 
 import operator
 from typing import Annotated, Any, Literal
-
 from pydantic import BaseModel, Field
+
 
 # ---------------------------------------------------------------------------
 # Sub-schemas for structured data within the state
 # ---------------------------------------------------------------------------
 
-
 class RoastIssue(BaseModel):
     """A single identified problem in the CV."""
-
     field: str = Field(description="Which CV section this issue belongs to (e.g., 'experience[0].key_impacts')")
     severity: Literal["critical", "high", "medium", "low"] = "medium"
     issue_type: Literal["vague_claim", "buzzword", "missing_metric", "weak_verb", "generic_statement"] = "vague_claim"
@@ -28,7 +26,6 @@ class RoastIssue(BaseModel):
 
 class InquiryQuestion(BaseModel):
     """A question to ask the user for missing context."""
-
     question_id: str
     related_field: str
     question: str
@@ -38,7 +35,6 @@ class InquiryQuestion(BaseModel):
 
 class RewrittenSection(BaseModel):
     """A single rewritten CV section using the Google XYZ formula."""
-
     field: str
     original: str
     rewritten: str
@@ -48,7 +44,6 @@ class RewrittenSection(BaseModel):
 
 class AuditFlag(BaseModel):
     """A truthfulness issue flagged by the Audit Agent."""
-
     field: str
     rewritten_text: str
     original_text: str
@@ -59,7 +54,6 @@ class AuditFlag(BaseModel):
 # ---------------------------------------------------------------------------
 # Main LangGraph State
 # ---------------------------------------------------------------------------
-
 
 class CVOptimizationState(BaseModel):
     """Shared state flowing through the entire LangGraph pipeline.

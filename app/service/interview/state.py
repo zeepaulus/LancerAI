@@ -15,14 +15,12 @@ Pre-conditions (per spec UC5):
 
 import operator
 import time
-from typing import Annotated, Any, Literal
-
+from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 
 class STARScore(BaseModel):
     """Structured evaluation of a candidate's answer using the STAR method."""
-
     answer_index: int = 0
     question: str = ""
     answer_transcript: str = ""
@@ -40,7 +38,6 @@ class STARScore(BaseModel):
 
 class ChatMessage(BaseModel):
     """A single message in the interview conversation (LLM chat format)."""
-
     role: Literal["system", "assistant", "user"]
     content: str
     timestamp: float = Field(default_factory=time.time)
@@ -48,7 +45,6 @@ class ChatMessage(BaseModel):
 
 class InterviewTurn(BaseModel):
     """A single turn in the interview conversation."""
-
     role: Literal["interviewer", "candidate"]
     content: str
     audio_duration_ms: int = 0
@@ -66,16 +62,16 @@ class InterviewState(BaseModel):
 
     # --- Session info ---
     session_id: str = ""
-    cv_data: dict[str, Any] = Field(default_factory=dict)
-    jd_data: dict[str, Any] = Field(default_factory=dict)  # Job Description data (from DB)
+    cv_data: dict = Field(default_factory=dict)
+    jd_data: dict = Field(default_factory=dict)  # Job Description data (from DB)
     job_title: str = ""
     job_description: str = ""
     interview_mode: Literal["practice", "mock", "quick"] = "practice"
 
     # --- Duration (time-based) ---
-    duration_minutes: int = 5  # Target duration: 3, 5, 10, 15, or custom
-    start_time: float = 0.0  # Unix timestamp when session started
-    elapsed_seconds: float = 0.0  # Updated periodically
+    duration_minutes: int = 5                # Target duration: 3, 5, 10, 15, or custom
+    start_time: float = 0.0                  # Unix timestamp when session started
+    elapsed_seconds: float = 0.0             # Updated periodically
 
     # --- Chat history (for LLM context) ---
     chat_history: list[ChatMessage] = Field(default_factory=list)
@@ -89,9 +85,9 @@ class InterviewState(BaseModel):
     # --- Current state ---
     current_question: str = ""
     current_question_index: int = 0
-    total_questions: int = 0  # Estimated, flexible
+    total_questions: int = 0                 # Estimated, flexible
     waiting_for_answer: bool = False
-    latest_transcript: str = ""  # STT output from last user turn
+    latest_transcript: str = ""              # STT output from last user turn
 
     # --- Final assessment ---
     overall_score: float = 0.0

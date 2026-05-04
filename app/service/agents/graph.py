@@ -10,9 +10,6 @@ async function that takes the shared ``CVOptimizationState`` plus an injected
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Any
-
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -23,27 +20,22 @@ from app.service.agents.rewrite_agent import rewrite_agent
 from app.service.agents.roast_agent import roast_agent
 from app.service.agents.state import CVOptimizationState
 
-AgentFn = Callable[[CVOptimizationState, LLMConnector], Awaitable[dict[str, Any]]]
-NodeFn = Callable[[CVOptimizationState], Awaitable[dict[str, Any]]]
 
-
-def _make_node(agent_fn: AgentFn, llm: LLMConnector) -> NodeFn:
-    async def node(state: CVOptimizationState) -> dict[str, Any]:
+def _make_node(agent_fn, llm: LLMConnector):
+    async def node(state: CVOptimizationState) -> dict:
         return await agent_fn(state, llm)
 
     node.__name__ = getattr(agent_fn, "__name__", "agent_node")
     return node
 
 
-def build_cv_optimization_graph(
-    llm: LLMConnector,
-) -> CompiledStateGraph[CVOptimizationState, None, CVOptimizationState, CVOptimizationState]:
+def build_cv_optimization_graph(llm: LLMConnector) -> CompiledStateGraph:
     """Construct and compile the CV optimization LangGraph."""
     builder = StateGraph(CVOptimizationState)
-    builder.add_node("retrieval", _make_node(retrieval_agent, llm))  # type: ignore[call-overload]
-    builder.add_node("roast", _make_node(roast_agent, llm))  # type: ignore[call-overload]
-    builder.add_node("rewrite", _make_node(rewrite_agent, llm))  # type: ignore[call-overload]
-    builder.add_node("audit", _make_node(audit_agent, llm))  # type: ignore[call-overload]
+    builder.add_node("retrieval", _make_node(retrieval_agent, llm))
+    builder.add_node("roast", _make_node(roast_agent, llm))
+    builder.add_node("rewrite", _make_node(rewrite_agent, llm))
+    builder.add_node("audit", _make_node(audit_agent, llm))
     builder.set_entry_point("retrieval")
     builder.add_edge("retrieval", "roast")
     builder.add_edge("roast", "rewrite")

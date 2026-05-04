@@ -12,12 +12,10 @@ TODO:
 
 from __future__ import annotations
 
-from typing import Any
-
 from app.core.llm_connector import LLMConnector
 from app.service.agents.state import CVOptimizationState
 
 
-async def audit_agent(state: CVOptimizationState, llm: LLMConnector) -> dict[str, Any]:
+async def audit_agent(state: CVOptimizationState, llm: LLMConnector) -> dict:
     """Return state updates for the Audit node."""
     raise NotImplementedError("audit_agent is not implemented yet.")
