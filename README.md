@@ -13,7 +13,7 @@ LancerAI là một web application full-stack giúp ứng viên chuẩn bị cho
 - **Job Matching** — Chấm điểm mức độ phù hợp giữa CV và một mô tả công việc (JD) bằng thuật toán Hybrid Scoring (tần suất từ khóa + vị trí xuất hiện + semantic similarity). Xác định các kỹ năng còn thiếu và mức độ ảnh hưởng.
 - **Voice Interview** — Phỏng vấn mô phỏng real-time qua WebSocket. Hệ thống lắng nghe ứng viên qua microphone (audio PCM), chuyển giọng nói thành văn bản (STT), tạo câu hỏi/phản hồi bằng LLM, và đọc lại bằng giọng tổng hợp (TTS). Chấm điểm câu trả lời theo framework STAR.
 
-Backend được xây dựng bằng FastAPI (Python), frontend bằng Next.js (React/TypeScript).
+Backend được xây dựng bằng FastAPI (Python), frontend bằng React + Vite.
 
 ---
 

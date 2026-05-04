@@ -18,7 +18,7 @@ Trình duyệt (user)
     |
     | HTTP request / WebSocket
     v
-Frontend — Next.js (port 3000)
+Frontend — React + Vite (port 3000)
     |
     | fetch() / WebSocket
     v
@@ -38,7 +38,7 @@ Backend — FastAPI (port 8000)
 ```
 lancerai/
 ├── app/               Backend FastAPI — toàn bộ business logic
-├── frontend/          Frontend Next.js — giao diện người dùng
+├── frontend/          Frontend React + Vite — giao diện người dùng
 ├── docs/              Tài liệu kiến trúc (file này nằm ở đây)
 ├── migration/         Alembic — quản lý thay đổi schema database
 ├── tests/             Test tự động (pytest)
