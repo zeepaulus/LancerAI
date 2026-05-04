@@ -1,6 +1,6 @@
 # LancerAI
 
-**Trợ lý sự nghiệp bằng AI — trích xuất và tối ưu CV, gợi ý việc làm, phỏng vấn giọng nói.**
+**Trợ lý AI — trích xuất và tối ưu CV, gợi ý việc làm, phỏng vấn giọng nói.**
 
 ---
 
