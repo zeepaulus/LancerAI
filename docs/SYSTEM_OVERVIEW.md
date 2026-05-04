@@ -73,7 +73,7 @@ Request từ frontend
 
 ### Tầng 1 — `router/` (Điểm kết nối với frontend)
 
-`router/` là nơi frontend "gõ cửa". Mỗi file trong `router/v1/` tương ứng một nhóm chức năng, khai báo các địa chỉ URL (endpoints) mà frontend gọi tới.
+Mỗi file trong `router/v1/` tương ứng một nhóm chức năng, khai báo các địa chỉ URL (endpoints) mà frontend gọi tới.
 
 ```
 router/
@@ -298,7 +298,7 @@ final_score = 0.20 x (frequency_score)   <- mức độ overlap từ khóa
 
 Đây là chức năng phức tạp nhất, sử dụng WebSocket để truyền dữ liệu audio liên tục hai chiều.
 
-**Khởi tạo phiên:** Frontend gửi `POST /api/v1/interview/sessions` với `cv_id`, chế độ phỏng vấn (`practice` / `mock` / `quick`), thời lượng mong muốn. Backend tạo một bản ghi phiên trong PostgreSQL, trả về `session_id`.
+**Khởi tạo phiên:** Frontend gửi `POST /api/v1/interview/sessions` với `cv_id`, chế độ phỏng vấn (`practice` / `mock` / `quick`), thời lượng mong muốn. Backend tạo một bản ghi trong PostgreSQL, trả về `session_id`.
 
 **Kết nối WebSocket:** Frontend mở `ws://localhost:8000/api/v1/interview/ws?token=<jwt>`. Từ đây, giao tiếp diễn ra real-time.
 
