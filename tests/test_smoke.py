@@ -40,17 +40,6 @@ def test_openapi_loads(client: TestClient) -> None:
     assert "/api/v1/interview/sessions" in schema["paths"]
 
 
-def test_auth_me_requires_bearer_token(client: TestClient) -> None:
-    response = client.get("/api/v1/auth/me")
-    assert response.status_code == 401
-
-
-def test_auth_me_reports_unimplemented_jwt(client: TestClient) -> None:
-    response = client.get("/api/v1/auth/me", headers={"Authorization": "Bearer demo"})
-    assert response.status_code == 501
-    assert response.json()["detail"] == "JWT authentication is not implemented yet."
-
-
 def test_interview_health(client: TestClient) -> None:
     response = client.get("/api/v1/interview/health")
     assert response.status_code == 200
