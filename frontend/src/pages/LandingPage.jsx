@@ -50,10 +50,10 @@ const LandingPage = () => {
                     Giúp sinh viên IT vượt qua vòng lọc CV tự động (ATS) và tự tin đối mặt với các hội đồng phỏng vấn kỹ thuật dồn ép.
                 </p>
                 <div style={styles.buttonGroup}>
-                    <button style={styles.btnLogin} onClick={() => navigate('/auth')}>
+                    <button style={styles.btnLogin} onClick={() => navigate('/login')}>
                         Đăng nhập
                     </button>
-                    <button style={styles.btnSignup} onClick={() => navigate('/auth')}>
+                    <button style={styles.btnSignup} onClick={() => navigate('/signup')}>
                         Đăng ký
                     </button>
                 </div>

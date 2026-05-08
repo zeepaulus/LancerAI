@@ -170,13 +170,17 @@ Frontend được xây dựng bằng **React 18 + Vite 5**, chạy ở port 3000
 frontend/
 ├── src/
 │   ├── pages/              Các trang chính
-│   │   ├── LandingPage.jsx Landing page
-│   │   ├── AuthPage.jsx    Đăng nhập / đăng ký
-│   │   └── MainDashboard.jsx Dashboard chính
+│   │   ├── LandingPage.jsx             Trang hiện ra đầu tiên khi người dùng truy cập lần đầu
+│   │   ├── AuthPage.jsx                Đăng nhập / đăng ký
+│   │   ├── AccountSettingsPage.jsx     Phần dropdown/quản lý tài khoản 
+│   │   ├── AboutUsPage.jsx             Trang giới thiệu
+│   │   ├── ProfilePage.jsx             Phần dropdown/thông tin cá nhân của người dùng
+│   │   └── MainDashboard.jsx           Dashboard chính (sau khi đăng nhập)
 │   ├── features/
 │   │   └── ocr-cv/         Feature: upload và xem kết quả trích xuất CV
 │   ├── components/
 │   │   └── Layout/         Các component layout dùng chung
+│   │   │   └── Navbar.jsx         Thanh điều hướng trong dashboard chính
 │   ├── utils/
 │   │   └── validation.js   Hàm validate dữ liệu form
 │   ├── App.jsx             Định nghĩa routes (react-router-dom)
