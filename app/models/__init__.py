@@ -8,7 +8,9 @@ Import all models here so that:
 from app.models.base import Base
 from app.models.cv_record import CVRecord
 from app.models.interview_session import InterviewSession
+from app.models.interview_transcript import InterviewTranscript
 from app.models.job_listing import JobListing
+from app.models.job_match_result import JobMatchResult
 from app.models.user import User
 
 __all__ = [
@@ -16,5 +18,7 @@ __all__ = [
     "User",
     "CVRecord",
     "JobListing",
+    "JobMatchResult",
     "InterviewSession",
+    "InterviewTranscript",
 ]

@@ -35,7 +35,7 @@ Tài khoản người dùng, thiết kế **multi-tenant ready**.
 | `is_active` | `Boolean` | Soft-disable account |
 | `created_at` / `updated_at` | `DateTime(tz)` | Server-side timestamps |
 
-Relationships: `cv_records` (one-to-many), `interview_sessions` (one-to-many) — lazy `selectin` để tránh N+1.
+Relationships: `cv_records` (one-to-many), `interview_sessions` (one-to-many), `job_matches` (one-to-many) — lazy `selectin` để tránh N+1.
 
 ### `cv_record.py` — Table: `cv_records`
 Lưu dữ liệu CV sau khi trích xuất và tối ưu.
@@ -50,7 +50,7 @@ Lưu dữ liệu CV sau khi trích xuất và tối ưu.
 | `optimized_data` | `JSON` (nullable) | Kết quả từ multi-agent pipeline |
 | `created_at` | `DateTime(tz)` | |
 
-Relationships: `owner` (many-to-one `User`), `interview_sessions` (one-to-many).
+Relationships: `owner` (many-to-one `User`), `interview_sessions` (one-to-many), `job_matches` (one-to-many).
 
 ### `interview_session.py` — Table: `interview_sessions`
 Lưu kết quả một phiên phỏng vấn giọng nói.
@@ -60,6 +60,7 @@ Lưu kết quả một phiên phỏng vấn giọng nói.
 | `id` | `String(36)` PK | UUID |
 | `user_id` | `String(36)` FK → `users.id` | Indexed |
 | `cv_id` | `String(36)` FK → `cv_records.id` | Context CV của phiên |
+| `job_listing_id` | `String(36)` FK → `job_listings.id` (nullable) | Context JD cho mock interview |
 | `mode` | `String(20)` | `practice` \| `mock` \| `quick` |
 | `total_questions` | `Integer` | |
 | `overall_confidence` | `Float` | 0–100 |
@@ -68,6 +69,8 @@ Lưu kết quả một phiên phỏng vấn giọng nói.
 | `improvement_suggestions` | `JSON` | List of actionable suggestions |
 | `started_at` | `DateTime(tz)` | |
 | `completed_at` | `DateTime(tz)` (nullable) | Null nếu session bị abort |
+
+Relationships: `owner` (many-to-one `User`), `cv_record` (many-to-one `CVRecord`), `job_listing` (many-to-one `JobListing`).
 
 ### `job_listing.py` — Table: `job_listings`
 Lưu Job Description data thu thập từ crawler.
@@ -87,6 +90,42 @@ Lưu Job Description data thu thập từ crawler.
 | `created_by` | `String(36)` FK → `users.id` (nullable) | Admin who imported |
 | `crawled_at` | `DateTime(tz)` | |
 
+Relationships: `job_matches` (one-to-many), `interview_sessions` (one-to-many).
+
+### `job_match_result.py` — Table: `job_match_results`
+Lưu kết quả đánh giá (matching score) giữa một CV và một Job Listing từ AI.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `String(36)` PK | UUID |
+| `user_id` | `String(36)` FK → `users.id` | Indexed |
+| `cv_id` | `String(36)` FK → `cv_records.id` | |
+| `job_id` | `String(36)` FK → `job_listings.id` | |
+| `match_score` | `Float` | 0–100 |
+| `matching_rationale` | `JSON` | Giải thích lý do match |
+| `missing_skills` | `JSON` | Các kỹ năng còn thiếu |
+| `status` | `Enum` | `recommended`, `saved`, `applied`, `rejected` |
+| `created_at` / `updated_at` | `DateTime(tz)` | |
+
+Relationships: `owner` (many-to-one `User`), `cv_record` (many-to-one `CVRecord`), `job_listing` (many-to-one `JobListing`).
+
+### `interview_transcript.py` — Table: `interview_transcripts`
+Lưu trữ lịch sử hội thoại (turn-by-turn chat transcript) của phiên phỏng vấn.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `String(36)` PK | UUID |
+| `session_id` | `String(36)` FK → `interview_sessions.id` | Indexed |
+| `role` | `Enum` | `ai`, `human`, `system` |
+| `content` | `Text` | Nội dung chat / text transcript |
+| `audio_url` | `String(500)` (nullable) | S3 path nếu có lưu audio |
+| `created_at` | `DateTime(tz)` | |
+
+Relationships: `session` (many-to-one `InterviewSession`).
+
+## ER Diagram
+![ER Diagram](docs_img/models.png)
+
 ## Technology
 
 | Component | Library / Feature |
@@ -96,3 +135,7 @@ Lưu Job Description data thu thập từ crawler.
 | Schema migration | `Alembic` (migrations generated từ models này) |
 | Primary keys | UUID (`uuid.uuid4()`) — distributed-safe |
 | Timestamps | `DateTime(timezone=True)`, `server_default=func.now()` |
+
+## Ideas for improvements
+
+*   **Theo dõi mức độ sử dụng AI & Credits**: Cài đặt `ai_credits_balance` trong model `User` hoặc tạo bảng `usage_log.py` để theo dõi API tokens (LLM) và số phút âm thanh (ASR/TTS) mà mỗi tenant/người dùng đã tiêu thụ (thương mại hóa SaaS và rate-limiting).

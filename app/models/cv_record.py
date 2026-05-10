@@ -28,3 +28,4 @@ class CVRecord(Base):
 
     owner = relationship("User", back_populates="cv_records")
     interview_sessions = relationship("InterviewSession", back_populates="cv_record", lazy="selectin")
+    job_matches = relationship("JobMatchResult", back_populates="cv_record", lazy="selectin")
