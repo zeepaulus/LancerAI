@@ -78,7 +78,12 @@ def get_tts_connector() -> VoiceTTSConnector:
 @lru_cache(maxsize=1)
 def get_vector_repository() -> VectorRepository:
     s = get_settings()
-    return VectorRepository(host=s.vector_db_host, port=s.vector_db_port, collection_name=s.vector_db_collection)
+    return VectorRepository(
+        host=s.vector_db_host, 
+        port=s.vector_db_port, 
+        collection_name=s.vector_db_collection,
+        api_key=s.vector_db_api_key
+    )
 
 
 # ---------------------------------------------------------------------------

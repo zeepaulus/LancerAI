@@ -35,7 +35,13 @@ Tất cả write operations dùng `session.flush()` thay vì `commit()` — comm
 **Technology:** `SQLAlchemy 2.0+` async API (`AsyncSession`, `select()`, typed `Mapped` columns).
 
 ### `vector_repository.py` — Vector Database
-Abstraction layer cho embedding storage và semantic search.
+Abstraction layer cho embedding storage và semantic search. Hỗ trợ linh hoạt giữa **ChromaDB** và **Qdrant**, cho phép triển khai cả local và cloud dựa trên cấu hình trong file `.env`.
+
+**Quy tắc tự động chọn backend:**
+- **Qdrant Local**: Khi `VECTOR_DB_HOST` là `localhost`.
+- **Qdrant Cloud**: Khi `VECTOR_DB_HOST` chứa `cloud.qdrant.io`.
+- **Chroma Cloud**: Khi `VECTOR_DB_HOST` chứa `api.trychroma.com` hoặc chứa `chroma` kèm giao thức `http`.
+- **Chroma Local**: Các trường hợp còn lại (được coi là đường dẫn thư mục lưu trữ local).
 
 Dùng bởi:
 - **Module 1 (Extraction)**: lưu CV embeddings sau khi trích xuất.
@@ -49,7 +55,7 @@ Dùng bởi:
 | `store_embedding(doc_id, text, embedding, metadata)` | Lưu vector + metadata vào collection |
 | `search_similar(query_embedding, top_k)` | ANN search, trả về top-K kết quả |
 
-**Technology (planned):** ChromaDB hoặc Qdrant. Implementation được chọn ở `core/dependencies.py`; repository interface không thay đổi khi switch vector DB.
+**Technology:** Tự động switch giữa ChromaDB hoặc Qdrant dựa trên cấu hình environment; repository interface không thay đổi giúp hệ thống duy trì tính ổn định.
 
 ### `graph_repository.py` — Knowledge Graph
 Abstraction layer cho Neo4j — quan hệ giữa skills/technologies.
@@ -79,5 +85,5 @@ Dùng bởi:
 | Repository | Backend | Status |
 |---|---|---|
 | `RelationalRepository` | PostgreSQL + SQLAlchemy | Implemented |
-| `VectorRepository` | ChromaDB / Qdrant | Stub — pending |
+| `VectorRepository` | ChromaDB / Qdrant | Implemented |
 | `GraphRepository` | Neo4j | Stub — pending |

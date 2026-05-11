@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     vector_db_host: str = "localhost"
     vector_db_port: int = 8001
     vector_db_collection: str = "cv_embeddings"
+    vector_db_api_key: str = ""
 
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"

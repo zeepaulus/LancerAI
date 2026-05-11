@@ -61,3 +61,6 @@ frontend/.next/
 
 # Documentation build output (source docs are tracked)
 # /docs/build/
+
+# Local ChromaDB
+chroma_db/
