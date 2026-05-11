@@ -145,7 +145,7 @@ core/
 ├── dependencies.py      Wiring: kết nối các service, repo, connector lại với nhau
 ├── llm_connector.py     Giao tiếp với LLM (Ollama local hoặc Groq cloud)
 ├── voice_stt_connector  Nhận diện giọng nói (PhoWhisper)
-├── voice_tts_connector  Chuyển văn bản thành giọng nói (Edge TTS / VieNeu)
+├── voice_tts_connector  Chuyển văn bản thành giọng nói (Edge TTS / Piper local)
 ├── ocr_processor.py     Đọc chữ từ ảnh (PaddleOCR)
 ├── security.py          Hash password, tạo và giải mã JWT token
 ├── logger.py            Logging với UTF-8 (hỗ trợ tiếng Việt)
@@ -383,7 +383,7 @@ flowchart LR
         LLM[Ollama LLM]
         OCR[PyMuPDF / OCR]
         STT[PhoWhisper STT]
-        TTS[Edge TTS / VieNeu]
+        TTS[Edge TTS / Piper]
     end
 
     Frontend -->|POST /auth/login| R_Auth
@@ -427,7 +427,7 @@ Cấu hình được đọc từ file `.env` (backend) và `.env` (frontend).
 | LLM | `LLM_LOCAL_BASE_URL`, `LLM_LOCAL_MODEL` | Địa chỉ và tên model Ollama |
 | LLM cloud | `LLM_CLOUD_API_KEY` | API key Groq (cloud fallback) |
 | STT | `STT_MODEL_ID` | Model STT (mặc định: PhoWhisper-base) |
-| TTS | `TTS_ENGINE`, `TTS_VOICE` | TTS engine (`edge` / `piper` / `vieneu`) |
+| TTS | `TTS_ENGINE`, `TTS_VOICE`, `TTS_MODEL_PATH` | TTS: `edge` (mạng) hoặc `piper` (ONNX cục bộ) |
 
 **Frontend (`.env`):**
 
@@ -439,7 +439,7 @@ Cấu hình được đọc từ file `.env` (backend) và `.env` (frontend).
 
 ## Tài liệu liên quan
 
-- [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — kiến trúc chi tiết, multi-tenancy, SaaS design
+- [`infra/README.md`](../infra/README.md) — Docker Compose tại gốc repo, cổng dịch vụ
 - [`app/README.md`](../app/README.md) — tổng quan backend package
 - [`app/core/README.md`](../app/core/README.md) — infrastructure: settings, DI, connectors
 - [`app/models/README.md`](../app/models/README.md) — database schema

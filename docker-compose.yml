@@ -1,3 +1,4 @@
+# PostgreSQL, Redis, ChromaDB, Neo4j — luồng dev: docker compose up -d rồi chạy backend/frontend local.
 services:
   postgres:
     image: postgres:16-alpine

@@ -31,23 +31,23 @@ dependencies = [
     "langchain-community>=0.3.0",
     "chromadb>=0.5.0",
     # Module 3: Job Matching
-    "sentence-transformers>=3.0.0",
-    "scrapy>=2.11.0",
-    "playwright>=1.48.0",
+    # "sentence-transformers>=3.0.0",  # TODO: uncommit khi matching service được implement
+    # "scrapy>=2.11.0",    # TODO: uncommit khi crawler_worker được implement
+    # "playwright>=1.48.0",  # TODO: uncommit khi crawler_worker được implement
     # Module 4: Voice AI
-    "transformers>=4.41.0",
+    # "transformers>=4.41.0",  # TODO: uncommit khi VoiceSTTConnector được implement
     "edge-tts>=6.1.0",
     "pydub>=0.25.1",
     "httpx>=0.27.0",
     # Document Generation
-    "weasyprint>=62.0",
+    # "weasyprint>=62.0",   # TODO: uncommit khi document_worker được implement
     "python-docx>=1.1.0",
     "websockets>=16.0",
     "soundfile>=0.13.1",
     "numpy>=2.0.0",
     "Pillow>=10.0.0",
-    "vieneu>=2.4.3",
-    "onnxruntime>=1.20.0",
+    # "vieneu>=2.4.3",      # TODO: uncommit khi VoiceTTSConnector (vieneu engine) được implement
+    # "onnxruntime>=1.20.0",  # TODO: phụ thuộc của vieneu/PaddleOCR
 ]
 
 [project.optional-dependencies]

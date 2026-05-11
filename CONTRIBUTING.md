@@ -8,7 +8,7 @@ Tài liệu này mô tả quy trình phát triển, quy ước đặt tên branc
 
 ### Yêu cầu
 
-- Python 3.11+, Node.js 20+, [uv](https://docs.astral.sh/uv/), Docker
+- Python 3.11+, Node.js 18+, [uv](https://docs.astral.sh/uv/), Docker
 
 ### Lần đầu thiết lập
 
@@ -21,10 +21,9 @@ uv sync
 cp .env.example .env
 # Điền DATABASE_URL, AUTH_SECRET_KEY, cấu hình LLM vào .env
 
-# Khởi động hạ tầng (PostgreSQL, Redis, ChromaDB, Neo4j)
 docker compose up -d
 
-# Chạy database migration
+# Migration
 uv run alembic upgrade head
 
 # Khởi động backend
@@ -142,8 +141,8 @@ Tất cả dependency (connector, repository, service) được wiring trong `ap
 
 ### JavaScript / React
 
-- Linter: **eslint** — chạy `npm run lint` trong thư mục `frontend/`.
-- Tránh dùng `any` / implicit types.
+- Chưa có script `lint` / ESLint trong `frontend/package.json`; khi bổ sung cấu hình thì thêm script và ghi vào README module frontend.
+- Ưu tiên kiểu rõ ràng, tránh `any` ngầm định.
 
 ### Testing
 
@@ -159,7 +158,7 @@ uv run pytest --cov=app --cov-report=html
 
 - Unit test nằm trong `tests/` và phản ánh cấu trúc của `app/`.
 - Với service hoặc repository mới, viết ít nhất một test cho happy path và một test cho edge case / lỗi.
-- Integration test dùng docker compose stack. Xem `tests/conftest.py` để biết các shared fixture.
+- Integration test khi có sẽ gắn với stack Compose; hiện chưa có `tests/conftest.py` — thêm fixture chung khi mở rộng test.
 
 ---
 
@@ -186,7 +185,7 @@ uv run mypy app/
 uv run pytest
 
 # Xuất requirements.txt từ uv lock
-uv export --format requirements-txt -o requirements.txt
+uv export --frozen --no-dev --no-hashes --format requirements.txt -o requirements.txt
 
 # Tạo Alembic migration mới
 uv run alembic revision --autogenerate -m "mô tả thay đổi"
