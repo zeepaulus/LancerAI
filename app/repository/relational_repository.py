@@ -13,8 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.base import Base
 
-# Generic model type — must be a SQLAlchemy declarative model
 ModelT = TypeVar("ModelT", bound=Base)
+
+_MAX_PAGE_SIZE = 500  # prevent unbounded table scans
 
 
 class RelationalRepository(Generic[ModelT]):
@@ -23,6 +24,9 @@ class RelationalRepository(Generic[ModelT]):
     Instantiate once per model type:
         user_repo = RelationalRepository(User)
         cv_repo   = RelationalRepository(CVRecord)
+
+    IMPORTANT: This class is stateless — it stores only the model class.
+    Do NOT add session fields; sessions are injected per-call via method args.
     """
 
     def __init__(self, model: type[ModelT]) -> None:
@@ -43,22 +47,26 @@ class RelationalRepository(Generic[ModelT]):
         limit: int = 100,
         offset: int = 0,
     ) -> Sequence[ModelT]:
-        """Fetch all records with pagination."""
-        result = await session.execute(select(self._model).limit(limit).offset(offset))
+        """Fetch records with pagination. Limit is capped at _MAX_PAGE_SIZE."""
+        result = await session.execute(select(self._model).limit(min(limit, _MAX_PAGE_SIZE)).offset(offset))
         return result.scalars().all()
 
     async def filter_by(
         self,
         session: AsyncSession,
+        *,
+        limit: int = 100,
+        offset: int = 0,
         **kwargs: Any,
     ) -> Sequence[ModelT]:
-        """Fetch records matching all given keyword filters (AND logic)."""
+        """Fetch records matching all given keyword filters (AND logic), paginated."""
         stmt = select(self._model)
         for field, value in kwargs.items():
             column = getattr(self._model, field, None)
             if column is None:
                 raise ValueError(f"Model {self._model.__name__} has no column '{field}'")
             stmt = stmt.where(column == value)
+        stmt = stmt.limit(min(limit, _MAX_PAGE_SIZE)).offset(offset)
         result = await session.execute(stmt)
         return result.scalars().all()
 
