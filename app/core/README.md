@@ -1,119 +1,51 @@
-# `app/core/` — Infrastructure Primitives
+Config, DB session, external service connectors, DI providers, logging, and security primitives. No product business logic here.
 
-Package chứa toàn bộ cross-cutting concerns của ứng dụng: configuration, database session, external connectors, DI wiring, logging, và security helpers. Không có business logic ở đây.
+## Principles
 
-## Design Principles
+- Heavy connectors (LLM, ASR, TTS, vector DB) use **lazy initialization** via thread-safe singletons (`app/core/sync_singleton.py`), exposed through providers in `app/core/providers/`.
+- Connector methods are **connector contracts** (`raise NotImplementedError`) until a real implementation is wired. Do not call them directly; always inject via `Depends`.
+- FastAPI `Depends` wires repositories and services at `app/core/providers/services.py` (including `get_interview_pipeline_factory`).
 
-- **Singleton connectors**: các tài nguyên nặng (LLM client, ASR model, TTS engine) được khởi tạo một lần duy nhất qua `@lru_cache`, tránh re-init trên mỗi request.
-- **Lazy initialization**: engine và model chỉ load khi request đầu tiên yêu cầu — app boot không bị block bởi unavailable backends.
-- **Contract-first stubs**: mỗi connector định nghĩa đầy đủ interface trước khi implement để service layer có thể được viết và test độc lập.
-
-## Files
+## File
 
 ### `settings.py`
-Centralized configuration bằng **pydantic-settings**.
-
-- Load từ `.env` file và environment variables (priority: env vars > `.env`).
-- Các nhóm config: Application runtime, Auth/JWT, Persistence (PostgreSQL, Redis, Vector DB, Neo4j), LLM (local Ollama + cloud Groq), Voice (STT + TTS).
-- Expose singleton `settings` và factory `get_settings()` (dùng với FastAPI `Depends`).
-
-```python
-settings.database_url        # postgresql+asyncpg://...
-settings.llm_local_model     # qwen2.5:3b
-settings.stt_model_id        # vinai/PhoWhisper-base
-settings.tts_engine          # edge | piper | vieneu
-```
+`pydantic-settings`: `.env` + biến môi trường. `get_settings()` cache một bản `Settings` trong process (khóa thread-safe).
 
 ### `database.py`
-Async SQLAlchemy engine + session factory.
+Engine async SQLAlchemy + `get_db_session`.
 
-- Tạo `create_async_engine` với `pool_pre_ping=True` (tự detect broken connections).
-- `AsyncSessionLocal` — `async_sessionmaker` với `expire_on_commit=False`.
-- `get_db_session()` — FastAPI dependency generator: yield session → commit → rollback on exception.
-- **Driver**: `asyncpg` cho PostgreSQL.
-
-### `dependencies.py`
-Toàn bộ **Dependency Injection wiring** của ứng dụng theo pattern Controller → Service → Repository.
-
-| Provider | Type | Notes |
-|---|---|---|
-| `get_llm_connector()` | `@lru_cache` singleton | Wires `LLMConnector` từ settings |
-| `get_ocr_processor()` | `@lru_cache` singleton | PaddleOCR stub |
-| `get_stt_connector()` | `@lru_cache` singleton | PhoWhisper ASR stub |
-| `get_tts_connector()` | `@lru_cache` singleton | Edge/Piper/VieNeu TTS stub |
-| `get_vector_repository()` | `@lru_cache` singleton | ChromaDB/Qdrant stub |
-| `get_*_repository()` | `@lru_cache` singleton | Generic `RelationalRepository` per model |
-| `get_*_service()` | Per-request | Receive injected connectors + repos |
-| `get_current_user()` | Per-request | `Authorization: Bearer <jwt>` → `User` |
+### `providers/`
+- `providers/connectors.py` — `get_llm_connector`, `get_ocr_processor`, STT/TTS, vector, graph.
+- `providers/repositories.py` — `get_*_repository` cho từng model.
+- `providers/services.py` — `get_*_service`, `get_template_renderer`, `get_interview_pipeline_factory`.
+- `providers/auth.py` — `get_current_user`.
 
 ### `lifespan.py`
-FastAPI **lifespan context manager** — startup/shutdown hooks.
-
-- Hiện tại: log env và debug flag.
-- Designed để mở rộng: DB connectivity check, connector warm-up, Redis health check.
+Startup: kiểm tra DB, warm-up vector repository (best-effort).
 
 ### `llm_connector.py`
-Unified interface cho **Local + Cloud LLM** inference.
+Ollama / OpenAI-compatible — method hiện stub.
 
-| Method | Description |
-|---|---|
-| `generate(prompt, system, ...)` | One-shot completion |
-| `generate_stream(prompt, ...)` | Token streaming (async generator) |
-| `generate_chat(messages, ...)` | Chat history completion |
-| `generate_chat_stream(messages, ...)` | Streaming chat (dùng cho voice TTS pipeline) |
-
-- **Local backend**: Ollama (`qwen2.5:3b`) via `/api/generate`.
-- **Cloud backend**: Groq / OpenAI-compatible (fallback khi `cloud_api_key` được set).
-- Tất cả methods hiện là stubs (`NotImplementedError`), interface ổn định cho service layer.
-
-### `voice_stt_connector.py`
-Contract cho **Vietnamese ASR** (Speech-to-Text).
-
-- Model: `vinai/PhoWhisper-base` (HuggingFace Transformers pipeline).
-- Input: raw PCM Int16 mono buffer @ 16kHz.
-- Methods: `transcribe(audio_bytes)` và `stream_transcribe(chunk_generator)` (async generator cho WebSocket).
-
-### `voice_tts_connector.py`
-Contract cho **Text-to-Speech** engine.
-
-- Supported engines: `edge` (Microsoft Edge TTS), `piper` (local ONNX), `vieneu` (VieNeu SDK).
-- Output: PCM Int16 mono @ 24kHz.
-- Methods: `synthesize(text)` → `bytes`; `synthesize_stream(text)` → async generator of PCM chunks.
+### `voice_stt_connector.py` / `voice_tts_connector.py`
+STT/TTS — stub.
 
 ### `ocr_processor.py`
-Contract cho **OCR** (Optical Character Recognition).
-
-- Target stack: **PaddleOCR** với `use_angle_cls=True`, languages `["vi", "en"]`.
-- Methods: `extract_text(image_bytes)` → list of `{text, confidence, bbox}`; `extract_text_grouped()` → plain string.
-- Dùng bởi `ExtractionService` khi PDF không extract được text trực tiếp.
+OCR — stub.
 
 ### `security.py`
-Auth primitives — password hashing và JWT helpers.
-
-| Function | Description |
-|---|---|
-| `hash_password(plain)` | bcrypt/argon2 hashing |
-| `verify_password(plain, hashed)` | Constant-time compare |
-| `create_access_token(subject, tenant_id, role)` | Sign JWT với claims: sub, tenant_id, role, exp |
-| `decode_access_token(token)` | Validate và decode; raise on failure |
+bcrypt hash/verify; JWT encode/decode (`HS256`, secret từ settings).
 
 ### `logger.py`
-Production-grade **logging factory**.
+Console UTF-8; file xoay vòng nếu `LOG_TO_FILE` không tắt. Thư mục: `LOG_DIR` hoặc `<project>/logs`.
 
-- Console handler: UTF-8 output với ANSI color codes (critical cho Vietnamese text trên Windows).
-- File handler: `RotatingFileHandler` (10 MB/file, 5 backups), UTF-8 encoding.
-- Deduplication: guard set `_INITIALIZED_LOGGERS` tránh duplicate handlers.
-- Usage: `logger = get_logger(__name__)` từ bất kỳ module nào.
+### `sync_singleton.py`
+Helper `thread_safe_singleton(factory)` cho getter sync.
 
-## Technology
+## Công nghệ
 
-| Component | Library |
-|---|---|
-| Config | `pydantic-settings` |
-| ORM / Async DB | `SQLAlchemy 2.0+`, `asyncpg` |
-| LLM inference | `httpx` (Ollama REST), OpenAI-compatible SDK |
-| ASR | HuggingFace `transformers` (PhoWhisper) |
-| TTS | `edge-tts` / Piper / VieNeu SDK |
-| OCR | `paddleocr` |
-| Auth | `PyJWT`, `bcrypt` / `argon2-cffi` |
-| Logging | Python stdlib `logging` |
+| Thành phần | Gói |
+|------------|-----|
+| Config | pydantic-settings |
+| ORM / DB | SQLAlchemy 2, asyncpg |
+| Auth | PyJWT, bcrypt |
+| Logging | stdlib `logging` |
