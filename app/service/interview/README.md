@@ -15,6 +15,22 @@ Mic PCM (16kHz)
 
 ## Files
 
+### `service.py` — InterviewService (REST Companion)
+
+REST-side orchestrator của Module 4. Không xử lý audio hay conversation — chỉ quản lý session lifecycle qua REST endpoints.
+
+| Method | Description |
+|---|---|
+| `create_session(cv_id, user_id, mode, job_listing_id, duration_minutes)` | Tạo session shell record (status: created), trả về `session_id` |
+| `persist_session(payload)` | Chuyển `InterviewState` hoàn chỉnh → `InterviewSession` row + `InterviewTranscript` rows (PostgreSQL) |
+| `get_report(session_id)` | Assemble `InterviewReportResponse` cho frontend analytics dashboard |
+
+Dependencies: `LLMConnector` (post-hoc scoring), `RelationalRepository[InterviewSession]`.
+
+`InterviewService` không inject STT/TTS — xử lý audio trong `InterviewPipeline`.
+
+---
+
 ### `state.py` — Interview Session State Schema
 
 `InterviewState` (Pydantic `BaseModel`) là shared state của một phiên phỏng vấn.

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from app.core.llm_connector import LLMConnector
 from app.core.voice_stt_connector import VoiceSTTConnector
@@ -37,14 +38,16 @@ class InterviewPipeline:
         llm: LLMConnector,
         stt: VoiceSTTConnector,
         tts: VoiceTTSConnector,
-        send_json: Callable[[dict], Awaitable[None]],
+        send_json: Callable[[dict[str, Any]], Awaitable[None]],
         send_bytes: Callable[[bytes], Awaitable[None]],
+        user_id: str,
     ) -> None:
         self._llm = llm
         self._stt = stt
         self._tts = tts
         self._send_json = send_json
         self._send_bytes = send_bytes
+        self._user_id = user_id
 
         self.state: InterviewState | None = None
         self._active = False
@@ -54,8 +57,8 @@ class InterviewPipeline:
     async def start(
         self,
         job_title: str,
-        cv_data: dict,
-        jd_data: dict | None = None,
+        cv_data: dict[str, Any],
+        jd_data: dict[str, Any] | None = None,
         mode: str = "practice",
         duration_minutes: int = 5,
     ) -> None:
@@ -66,6 +69,6 @@ class InterviewPipeline:
         """Consume one chunk of microphone audio (PCM Int16 mono, 16kHz)."""
         raise NotImplementedError("InterviewPipeline.feed_audio is not implemented yet.")
 
-    async def stop(self) -> dict:
+    async def stop(self) -> dict[str, Any]:
         """Tear down the session and return the final STAR evaluation payload."""
         raise NotImplementedError("InterviewPipeline.stop is not implemented yet.")
