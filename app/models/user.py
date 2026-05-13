@@ -8,13 +8,21 @@ TODO:
     - Move ``role`` to a dedicated permissions table for finer-grained ACL.
 """
 
+import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, func
+from sqlalchemy import Boolean, DateTime, Enum, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+
+class UserRole(str, enum.Enum):  # noqa: UP042
+    """Roles for access control on the platform."""
+
+    USER = "user"
+    ADMIN = "admin"
 
 
 class User(Base):
@@ -27,12 +35,17 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(20), nullable=False, default="user")
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False, default=UserRole.USER)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    cv_records = relationship("CVRecord", back_populates="owner", lazy="selectin")
-    interview_sessions = relationship("InterviewSession", back_populates="owner", lazy="selectin")
+    cv_records = relationship("CVRecord", back_populates="owner", lazy="noload", cascade="all, delete-orphan")
+    interview_sessions = relationship(
+        "InterviewSession", back_populates="owner", lazy="noload", cascade="all, delete-orphan"
+    )
+    job_matches = relationship(
+        "JobMatchResult", back_populates="owner", lazy="noload", cascade="all, delete-orphan"
+    )
