@@ -26,11 +26,13 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Testing
+# Testing & Quality
 .coverage
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+tests/.chromadb_pytest_data/
 
 # AI Model weight files (large binaries — NOT app/models/ Python code)
 /models/
@@ -39,14 +41,23 @@ htmlcov/
 *.safetensors
 *.gguf
 
-# Data
+# Data & local DB artifacts
 data/
 *.db
 *.sqlite3
+test_chroma_*/
+chroma_test_data/
+chroma_data_*/
+localhost/
 
 # Logs
 logs/
 *.log
+
+# Temporary tool output
+mypy_output.txt
+ruff_errors.json
+codeprobe-reports/
 
 # Audio test artifacts
 *.wav
@@ -54,6 +65,7 @@ logs/
 
 # Node (frontend)
 frontend/node_modules/
+frontend/dist/
 frontend/.next/
 
 # Lock files (keep uv.lock, ignore others if present)
@@ -61,3 +73,13 @@ frontend/.next/
 
 # Documentation build output (source docs are tracked)
 # /docs/build/
+
+# Added by code-review-graph
+.code-review-graph/
+
+# Skills lock (managed by agent tooling, not project code)
+skills-lock.json
+
+# Local notes and agent tooling
+.agents/
+mo_ta/

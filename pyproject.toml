@@ -30,6 +30,7 @@ dependencies = [
     "langchain-core>=0.3.0",
     "langchain-community>=0.3.0",
     "chromadb>=0.5.0",
+    "qdrant-client>=1.7.0",
     # Module 3: Job Matching
     # "sentence-transformers>=3.0.0",  # TODO: uncommit khi matching service được implement
     # "scrapy>=2.11.0",    # TODO: uncommit khi crawler_worker được implement
@@ -48,6 +49,9 @@ dependencies = [
     "Pillow>=10.0.0",
     # "vieneu>=2.4.3",      # TODO: uncommit khi VoiceTTSConnector (vieneu engine) được implement
     # "onnxruntime>=1.20.0",  # TODO: phụ thuộc của vieneu/PaddleOCR
+    "bcrypt>=4.2.0",
+    "pyjwt>=2.12.1",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]
@@ -80,6 +84,10 @@ known-first-party = ["app"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: tests requiring external services (Qdrant, ChromaDB HTTP). Run with -m integration.",
+]
+addopts = "-m 'not integration'"
 
 [tool.mypy]
 python_version = "3.11"
