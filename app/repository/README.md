@@ -49,7 +49,11 @@ Dùng bởi:
 | `store_embedding(doc_id, text, embedding, metadata)` | Lưu vector + metadata vào collection |
 | `search_similar(query_embedding, top_k)` | ANN search, trả về top-K kết quả |
 
-**Technology (planned):** ChromaDB hoặc Qdrant. Implementation được chọn ở `core/dependencies.py`; repository interface không thay đổi khi switch vector DB.
+**Technology:** ChromaDB hoặc Qdrant — chọn bằng `Settings.vector_db_backend` + factory `create_vector_repository` (`app/repository/vector_repository.py`). Contract: `BaseVectorRepository`.
+
+### `base_vector_repository.py`
+
+ABC `store_embedding` / `search_similar` — service chỉ import lớp này.
 
 ### `graph_repository.py` — Knowledge Graph
 Abstraction layer cho Neo4j — quan hệ giữa skills/technologies.
@@ -79,5 +83,5 @@ Dùng bởi:
 | Repository | Backend | Status |
 |---|---|---|
 | `RelationalRepository` | PostgreSQL + SQLAlchemy | Implemented |
-| `VectorRepository` | ChromaDB / Qdrant | Stub — pending |
+| `vector_repository` (`BaseVectorRepository`) | ChromaDB / Qdrant | Implemented (backend theo config) |
 | `GraphRepository` | Neo4j | Stub — pending |
