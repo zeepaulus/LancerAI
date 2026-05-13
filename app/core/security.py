@@ -67,4 +67,9 @@ def create_access_token(
 def decode_access_token(token: str) -> dict[str, Any]:
     """Decode and validate ``token``; raise jwt.InvalidTokenError subclass on failure."""
     settings = get_settings()
-    return jwt.decode(token, settings.auth_secret_key, algorithms=[settings.auth_jwt_algorithm], options={"verify_signature": True})
+    return jwt.decode(
+        token,
+        settings.auth_secret_key,
+        algorithms=[settings.auth_jwt_algorithm],
+        options={"verify_signature": True},
+    )

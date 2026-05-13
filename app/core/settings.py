@@ -5,12 +5,18 @@ Grouped by domain to keep the project settings navigable.
 
 NOTE:
     This file is the single settings entrypoint. Extend with env-driven fields
-    as features land; see TODO.md and per-folder READMEs for scope.
+    Extend via env-driven fields; scope tracking: ``TODO.md``, package READMEs under ``app/``.
 """
 
-from functools import lru_cache
+import logging
+import threading
+from pathlib import Path
 
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolve .env relative to the project root (two levels up from this file)
+_ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 
 
 class Settings(BaseSettings):
@@ -24,26 +30,45 @@ class Settings(BaseSettings):
         - Voice (STT + TTS)
     """
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(_ENV_FILE), env_file_encoding="utf-8", extra="ignore")
 
     # --- Application ------------------------------------------------------
     app_env: str = "development"
-    app_debug: bool = True
+    app_debug: bool = False  # Enable only for local development; never staging/prod
     app_host: str = "0.0.0.0"
     app_port: int = 8000
+    allowed_origins: list[str] = []  # Production: ["https://lancerai.com"]
 
     # --- Auth / organization-scoped data ----------------------------------
-    # TODO: replace demo-user fallback with real JWT auth (see app/service/auth_service.py)
-    auth_secret_key: str = "change-me-in-production"
+    # tenant_id is server-assigned (= user_id) until invite/organization flow is implemented.
+    auth_secret_key: str = Field(...)
     auth_jwt_algorithm: str = "HS256"
-    auth_access_token_ttl_minutes: int = 60 * 24
-    demo_user_id: str = "demo-user"
-    demo_user_email: str = "demo@lancerai.local"
-    demo_user_display_name: str = "Demo User"
+    auth_access_token_ttl_minutes: int = 60
+    auth_refresh_token_ttl_days: int = 7
+    auth_allow_weak_secret: bool = False
+
+    # --- Rate limiting -----------------------------------------------------
+    # Only enable when LancerAI sits behind a trusted reverse proxy that sanitizes
+    # ``X-Forwarded-For``. Never set True on direct internet-facing instances.
+    rate_limit_trust_forwarded_for: bool = False
+
+    @model_validator(mode="after")
+    def _validate_secrets(self) -> "Settings":
+        if len(self.auth_secret_key) < 32 and not self.auth_allow_weak_secret:
+            raise ValueError(
+                "AUTH_SECRET_KEY is too short/weak. "
+                "Set AUTH_SECRET_KEY to a strong random value (>= 32 chars), or set "
+                "AUTH_ALLOW_WEAK_SECRET=true for local dev only."
+            )
+        if self.auth_allow_weak_secret and self.app_env == "production":
+            raise ValueError("AUTH_ALLOW_WEAK_SECRET cannot be enabled in production.")
+        return self
 
     # --- Persistence ------------------------------------------------------
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/lancerai"
+    database_url: str = Field(...)
     database_echo: bool = False
+    database_pool_size: int = 20
+    database_max_overflow: int = 10
 
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/1"
@@ -52,10 +77,12 @@ class Settings(BaseSettings):
     vector_db_host: str = "localhost"
     vector_db_port: int = 8001
     vector_db_collection: str = "cv_embeddings"
+    vector_db_api_key: str = ""  # Required for Qdrant Cloud / Chroma Cloud
+    vector_db_backend: str = "chroma"  # "chroma" or "qdrant"
 
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
-    neo4j_password: str = "your-neo4j-password"
+    neo4j_password: str = Field(...)
 
     # --- LLM --------------------------------------------------------------
     llm_local_base_url: str = "http://localhost:11434"
@@ -72,10 +99,25 @@ class Settings(BaseSettings):
     tts_model_path: str = ""
 
 
-@lru_cache(maxsize=1)
+_settings_lock = threading.Lock()
+_settings_instance: Settings | None = None
+
+
 def get_settings() -> Settings:
-    """Return a cached Settings instance."""
-    return Settings()
-
-
-settings = get_settings()
+    """Return a process-wide cached Settings instance (thread-safe, lazy)."""
+    global _settings_instance
+    if _settings_instance is not None:
+        return _settings_instance
+    with _settings_lock:
+        if _settings_instance is None:
+            try:
+                _settings_instance = Settings()  # type: ignore[call-arg]
+            except Exception as e:
+                logging.getLogger(__name__).critical(
+                    "LancerAI settings invalid — fix environment variables "
+                    "(AUTH_SECRET_KEY, APP_ENV, AUTH_ALLOW_WEAK_SECRET, etc.). "
+                    "Detail: %s",
+                    e,
+                )
+                raise
+        return _settings_instance
