@@ -78,8 +78,8 @@ test(matching): thêm unit test cho Hybrid Scoring weights
 1. Đảm bảo `uv run pytest` pass trên máy local trước khi mở PR.
 2. Giữ PR tập trung — mỗi PR chỉ liên quan đến một module hoặc một vấn đề cụ thể.
 3. Cập nhật `README.md` của module tương ứng nếu thay đổi behavior.
-4. Check off các mục đã hoàn thành trong `TODO.md`.
-5. Cần ít nhất một người review trước khi merge.
+4. Cập nhật mục tương ứng trong `TODO.md` khi hoàn thành.
+5. PR cần được review trước khi merge (theo quy ước nhóm).
 
 ---
 
@@ -102,15 +102,15 @@ router/ → service/ → repository/ → models/
 
 ### Dependency injection
 
-Tất cả dependency (connector, repository, service) được wiring trong `app/core/dependencies.py` bằng FastAPI `Depends()`. Không khởi tạo các thành phần này trực tiếp bên trong router hay service function.
+Connector và repository singleton nằm trong `app/core/providers/` (thread-safe lazy init). `app/core/providers/services.py` khai báo `get_*_service`, `get_template_renderer`, và `get_interview_pipeline_factory` với `Depends(...)`. `app/core/providers/auth.py` cung cấp `get_current_user`. Không tạo connector/repo nặng trực tiếp trong router hay trong method service.
 
 ### Thêm tính năng mới
 
 1. Định nghĩa Pydantic schema trong `app/schema/request.py` và `response.py`.
 2. Thêm endpoint vào file `app/router/v1/*.py` tương ứng.
-3. Implement logic trong file `app/service/*.py` tương ứng.
-4. Nếu cần truy cập database, dùng `RelationalRepository` có sẵn — không viết raw SQL.
-5. Wire service mới vào `app/core/dependencies.py`.
+3. Implement logic trong `app/service/<module>/service.py` (hoặc package tương ứng).
+4. Truy cập DB qua `RelationalRepository` / repository đã có — không SQL thô trong router.
+5. Thêm provider trong `app/core/providers/services.py` nếu cần factory đặc biệt (ví dụ: `get_interview_pipeline_factory`).
 6. Viết test trong `tests/`.
 
 ---
@@ -119,13 +119,13 @@ Tất cả dependency (connector, repository, service) được wiring trong `ap
 
 | Module | File chính | Phạm vi |
 |---|---|---|
-| Auth | `app/service/auth_service.py`, `app/core/security.py` | JWT, password hashing, user resolution |
-| CV Extraction (M1) | `app/service/extraction_service.py`, `app/core/ocr_processor.py` | PyMuPDF, PaddleOCR, LLM entity parsing |
-| CV Optimization (M2) | `app/service/agents/`, `app/service/optimization_service.py` | LangGraph, roast/rewrite/audit agent |
-| Job Matching (M3) | `app/service/matching_service.py`, `app/repository/vector_repository.py` | Hybrid Scoring, semantic search |
-| Voice Interview (M4) | `app/service/interview/`, `app/core/voice_*_connector.py` | STT, TTS, LLM streaming, STAR scoring |
+| Auth | `app/service/auth/service.py`, `app/core/security.py`, `app/core/providers/auth.py` | JWT, password hashing, `get_current_user` |
+| CV Extraction (M1) | `app/service/extraction/service.py`, `app/core/ocr_processor.py` | PyMuPDF, OCR, LLM structured output |
+| CV Optimization (M2) | `app/service/optimization/`, `app/service/optimization/template_renderer.py` | LangGraph agents, template render |
+| Job Matching (M3) | `app/service/matching/service.py`, `app/repository/vector_repository.py` | Hybrid scoring, vector search |
+| Voice Interview (M4) | `app/service/interview/`, `app/core/voice_*_connector.py` | STT, TTS, pipeline WebSocket, STAR |
 | Frontend | `frontend/src/` | React + Vite pages, API integration, WebSocket audio |
-| Hạ tầng | `docker-compose.yml`, `infra/`, `migration/` | Docker, Alembic, CI |
+| Hạ tầng | `docker-compose.yml`, `migration/` | Docker, Alembic, CI |
 
 ---
 
@@ -158,7 +158,7 @@ uv run pytest --cov=app --cov-report=html
 
 - Unit test nằm trong `tests/` và phản ánh cấu trúc của `app/`.
 - Với service hoặc repository mới, viết ít nhất một test cho happy path và một test cho edge case / lỗi.
-- Integration test khi có sẽ gắn với stack Compose; hiện chưa có `tests/conftest.py` — thêm fixture chung khi mở rộng test.
+- `tests/conftest.py` cung cấp fixture SQLite async; integration test full stack Compose có thể bổ sung sau.
 
 ---
 
@@ -176,10 +176,10 @@ uv run pytest --cov=app --cov-report=html
 
 ```bash
 # Chạy linter
-uv run ruff check .
+uv run ruff check app tests
 
 # Chạy type checker
-uv run mypy app/
+uv run mypy app tests
 
 # Chạy tests
 uv run pytest

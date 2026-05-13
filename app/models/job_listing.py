@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -13,7 +13,7 @@ from app.models.base import Base
 class JobListing(Base):
     """A crawled job listing from external job boards.
 
-    Admin-managed: `created_by` tracks which admin imported the data.
+    Admin-managed: ``created_by`` tracks which admin imported the data.
     """
 
     __tablename__ = "job_listings"
@@ -30,3 +30,6 @@ class JobListing(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     crawled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    job_matches = relationship("JobMatchResult", back_populates="job_listing", lazy="noload")
+    interview_sessions = relationship("InterviewSession", back_populates="job_listing", lazy="noload")

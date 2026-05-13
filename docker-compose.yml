@@ -32,8 +32,9 @@ services:
       timeout: 5s
       retries: 5
 
+  # Pin to same release line as Python chromadb (see uv.lock). 0.5.x servers break chromadb>=1 HTTP API.
   chromadb:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:1.5.8
     container_name: lancerai-chromadb
     restart: unless-stopped
     ports:

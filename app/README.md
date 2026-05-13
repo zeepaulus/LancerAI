@@ -34,18 +34,18 @@ main.py
 
 | Package | Purpose |
 |---|---|
-| [`core/`](core/README.md) | Infrastructure primitives: settings, DB, connectors, DI |
-| [`models/`](models/README.md) | SQLAlchemy ORM models (PostgreSQL schema) |
+| [`core/`](core/README.md) | Settings, DB, connectors, `providers/`, DI, security |
+| `models/` | SQLAlchemy ORM models (PostgreSQL schema) |
 | [`schema/`](schema/README.md) | Pydantic request / response schemas |
 | [`repository/`](repository/README.md) | Data access layer (relational, vector, graph) |
 | [`router/`](router/README.md) | FastAPI routers — HTTP + WebSocket endpoint declarations |
-| [`service/`](service/README.md) | Business logic layer: services, agents, pipelines |
-| [`workers/`](workers/README.md) | Celery background tasks |
+| [`service/`](service/README.md) | Business logic layer: auth, extraction, optimization, matching, interview |
+| `workers/` | Celery background tasks |
 
 ## Technology
 
 - **FastAPI** (ASGI framework) + **Uvicorn** (server)
 - **pydantic-settings** for environment-driven config
 - **SQLAlchemy 2.0+** async ORM (PostgreSQL via `asyncpg`)
-- **LangGraph** for multi-agent CV optimization pipeline
-- **Celery** + **Redis** for background task queue
+- **LangGraph** for multi-agent CV optimization pipeline (planned — connector contracts ready)
+- **Celery** + **Redis** for background task queue (configured; tasks are stubs)

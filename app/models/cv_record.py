@@ -26,5 +26,6 @@ class CVRecord(Base):
     optimized_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    owner = relationship("User", back_populates="cv_records")
-    interview_sessions = relationship("InterviewSession", back_populates="cv_record", lazy="selectin")
+    owner = relationship("User", back_populates="cv_records", lazy="noload")
+    interview_sessions = relationship("InterviewSession", back_populates="cv_record", lazy="noload")
+    job_matches = relationship("JobMatchResult", back_populates="cv_record", lazy="noload")

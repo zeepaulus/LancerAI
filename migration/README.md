@@ -9,6 +9,4 @@ uv run alembic upgrade head
 uv run alembic history
 ```
 
-Hiện thư mục `migration/alembic/versions/` chưa có revision gốc. Tạo revision
-đầu tiên trước khi chạy `uv run alembic upgrade head`. Sau `autogenerate` luôn rà
-soát diff (đổi tên cột, index, ...).
+Thư mục `migration/alembic/versions/` chứa revision Alembic; sau `autogenerate` cần rà diff (tên index, nullable, …).

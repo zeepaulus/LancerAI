@@ -12,20 +12,30 @@ Usage:
 import codecs
 import logging
 import logging.handlers
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
-_LOG_DIR = "logs"
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB per file
 _BACKUP_COUNT = 5
-_INITIALIZED_LOGGERS: set[str] = set()
 
 # Format strings
 _CONSOLE_FORMAT = (
     "\033[36m%(asctime)s\033[0m | \033[32m%(levelname)-8s\033[0m | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
 )
 _FILE_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(funcName)s:%(lineno)d | %(message)s"
+
+
+def _log_dir_for_files() -> Path | None:
+    """Directory for rotating log files, or None when file logging is disabled."""
+    flag = os.environ.get("LOG_TO_FILE", "true").strip().lower()
+    if flag in ("0", "false", "no"):
+        return None
+    override = os.environ.get("LOG_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path(__file__).resolve().parent.parent.parent / "logs"
 
 
 def get_logger(name: str, console_level: str = "DEBUG", file_level: str = "DEBUG") -> logging.Logger:
@@ -35,17 +45,17 @@ def get_logger(name: str, console_level: str = "DEBUG", file_level: str = "DEBUG
     - UTF-8 console output (critical for Vietnamese text on Windows).
     - Rotating file handler (10MB per file, 5 backups).
     - Color-coded console output for quick visual scanning.
-    - Prevents duplicate handler attachment on repeated calls.
+    - Thread-safe: uses stdlib's logger.handlers to prevent duplicate attachment.
 
     Args:
         name: Logger name, typically `__name__` of the calling module.
         console_level: Minimum log level for console output.
         file_level: Minimum log level for file output.
     """
-    if name in _INITIALIZED_LOGGERS:
-        return logging.getLogger(name)
-
     logger = logging.getLogger(name)
+    if logger.handlers:
+        return logger
+
     logger.setLevel(logging.DEBUG)
     logger.propagate = False
 
@@ -62,9 +72,12 @@ def get_logger(name: str, console_level: str = "DEBUG", file_level: str = "DEBUG
     logger.addHandler(console_handler)
 
     # --- File Handler (Rotating) ---
+    log_dir = _log_dir_for_files()
+    if log_dir is None:
+        return logger
+
     try:
-        log_dir = Path(_LOG_DIR)
-        log_dir.mkdir(exist_ok=True)
+        log_dir.mkdir(parents=True, exist_ok=True)
 
         file_handler = logging.handlers.RotatingFileHandler(
             log_dir / f"{name.replace('.', '_')}.log",
@@ -76,7 +89,6 @@ def get_logger(name: str, console_level: str = "DEBUG", file_level: str = "DEBUG
         file_handler.setFormatter(logging.Formatter(_FILE_FORMAT))
         logger.addHandler(file_handler)
     except Exception as e:
-        logger.warning(f"Could not create file handler: {e}")
+        logger.warning("Could not create file handler: %s", e)
 
-    _INITIALIZED_LOGGERS.add(name)
     return logger

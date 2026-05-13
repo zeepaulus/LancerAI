@@ -1,42 +1,68 @@
-"""Async SQLAlchemy engine + session factory.
+"""Async SQLAlchemy engine + session factory — lazy initialization.
 
-The engine is created lazily so the app can boot when PostgreSQL is not
-reachable yet. Use ``get_db_session`` as a FastAPI dependency.
-
-TODO:
-    - Replace single shared engine with an organization-aware connection pool
-      if each organization needs a separate database.
-    - Add Alembic migration entrypoint hooks.
+Engine is created on first use so the app can boot when PostgreSQL is not
+reachable yet, and test suites can override the DB URL via env vars before
+any import triggers connection.
 """
 
-from collections.abc import AsyncGenerator
+from __future__ import annotations
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+import logging
+from collections.abc import AsyncGenerator
+from functools import lru_cache
+from typing import Any
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.settings import get_settings
 
-_settings = get_settings()
+_logger = logging.getLogger(__name__)
 
-engine = create_async_engine(
-    _settings.database_url,
-    echo=_settings.database_echo,
-    pool_pre_ping=True,
-)
 
-AsyncSessionLocal = async_sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autoflush=False,
-)
+@lru_cache(maxsize=1)
+def _get_engine() -> AsyncEngine:
+    """Create the engine once, lazily, after settings are available."""
+    s = get_settings()
+
+    engine_kwargs: dict[str, Any] = {
+        "echo": s.database_echo,
+        "pool_pre_ping": True,
+    }
+
+    if not s.database_url.startswith("sqlite"):
+        engine_kwargs["pool_size"] = s.database_pool_size
+        engine_kwargs["max_overflow"] = s.database_max_overflow
+
+    return create_async_engine(s.database_url, **engine_kwargs)
+
+
+def get_engine() -> AsyncEngine:
+    """Public accessor for lifespan, migrations, scripts — same lazy singleton."""
+    return _get_engine()
+
+
+def _get_session_factory() -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(
+        bind=_get_engine(),
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+    )
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency that yields an async DB session per request."""
-    async with AsyncSessionLocal() as session:
+    """FastAPI dependency — yields a per-request async DB session.
+
+    TODO(transaction-policy): This dependency auto-commits after successful requests.
+        Prefer migrating write paths to explicit ``session.commit()`` for clearer
+        transaction boundaries once services are audited for partial-failure handling.
+    """
+    async with _get_session_factory()() as session:
         try:
             yield session
             await session.commit()
-        except Exception:
+        except SQLAlchemyError:
+            _logger.exception("DB session error — rolling back", exc_info=True)
             await session.rollback()
             raise
