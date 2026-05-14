@@ -27,7 +27,14 @@ if config.config_file_name is not None:
 # Each model MUST be imported here (or transitively) to be detected.
 # ---------------------------------------------------------------------------
 from app.models.base import Base  # noqa: E402
-from app.models import user, cv_record, job_listing, interview_session  # noqa: F401, E402
+from app.models import (  # noqa: F401, E402
+    user,
+    cv_record,
+    job_listing,
+    job_match_result,
+    interview_session,
+    interview_transcript,
+)
 
 target_metadata = Base.metadata
 

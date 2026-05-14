@@ -8,6 +8,9 @@ from typing import Any
 
 from celery import shared_task  # type: ignore[import-untyped]
 
+# Import the Celery app so @shared_task can find and register with it
+from app.workers.celery_app import celery_app as _celery_app  # noqa: F401
+
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)  # type: ignore[untyped-decorator]
 def crawl_job_listings(self: Any, source: str = "topcv", max_pages: int = 5) -> dict[str, Any]:
@@ -20,4 +23,4 @@ def crawl_job_listings(self: Any, source: str = "topcv", max_pages: int = 5) -> 
 
     TODO: Implement Scrapy/Playwright crawling logic.
     """
-    raise NotImplementedError
+    return {"status": "not_implemented", "source": source, "pages_crawled": 0}

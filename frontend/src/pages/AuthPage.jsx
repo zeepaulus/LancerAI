@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import * as keys from '../config/storageKeys';
+import { login as apiLogin, me as apiMe, signup as apiSignup } from '../api/auth';
 import { validateAuthForm } from '../utils/validation';
 
 import googleLogo from '../assets/Logo/google_logo.png';
@@ -13,18 +15,25 @@ const AuthPage = () => {
     const navigate = useNavigate();
     const location = useLocation(); 
     
-    // Tự động kiểm tra URL
     const isLogin = location.pathname === '/login'; 
     
-    const [formData, setFormData] = useState({ username: '', email: '', usernameOrEmail: '', password: '' });
+    const [formData, setFormData] = useState({
+        username: '',
+        email: '',
+        usernameOrEmail: '',
+        password: ''
+    });
     const [errors, setErrors] = useState({});
+    const [submitting, setSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState('');
 
     const handleInputChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
         setErrors({ ...errors, [e.target.name]: '' });
+        setSubmitError('');
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         const validationErrors = validateAuthForm(isLogin, formData);
         
@@ -33,11 +42,45 @@ const AuthPage = () => {
             return;
         }
 
-        const userJSON = JSON.stringify(formData);
-        localStorage.setItem('mockUserDB', userJSON);
-        console.log("Dữ liệu JSON đã lưu:", userJSON);
+        setSubmitting(true);
+        setSubmitError('');
 
-        navigate('/dashboard');
+        try {
+            if (isLogin) {
+                const identifier = formData.usernameOrEmail.trim();
+                const data = await apiLogin({
+                    identifier,
+                    password: formData.password
+                });
+                if (data?.access_token) {
+                    localStorage.setItem(keys.LANCERAI_ACCESS_TOKEN, data.access_token);
+                }
+                try {
+                    const profile = await apiMe();
+                    localStorage.setItem(keys.LANCERAI_USER_PROFILE, JSON.stringify(profile));
+                } catch {
+                    /** /me có thể 401/501 tùy cấu hình — vẫn cho vào dashboard nếu đã có token */
+                }
+                localStorage.removeItem(keys.LANCERAI_MOCK_USER_LEGACY);
+                navigate('/dashboard');
+            } else {
+                await apiSignup({
+                    email: formData.email.trim(),
+                    password: formData.password,
+                    display_name: formData.username.trim()
+                });
+                localStorage.removeItem(keys.LANCERAI_MOCK_USER_LEGACY);
+                navigate('/login', {
+                    replace: false,
+                    state: { signupOk: true }
+                });
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            setSubmitError(msg);
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const styles = {
@@ -63,7 +106,17 @@ const AuthPage = () => {
         input: { width: '100%', padding: '12px 15px', border: '1px solid #e1e1e1', borderRadius: '8px', fontSize: '15px', outline: 'none', transition: 'border 0.2s', boxSizing: 'border-box' },
         errorText: { color: '#e53e3e', fontSize: '13px', marginTop: '5px', display: 'block' },
         
+        banner: {
+            padding: '10px 12px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            marginBottom: '16px'
+        },
+        bannerOk: { background: '#c6f6d5', color: '#22543d', border: '1px solid #9ae6b4' },
+        bannerErr: { background: '#fed7d7', color: '#822727', border: '1px solid #feb2b2' },
+        
         btnPrimary: { width: '100%', padding: '14px', backgroundColor: '#3182ce', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', transition: 'background 0.2s' },
+        btnDisabled: { opacity: 0.65, cursor: 'not-allowed' },
         
         dividerBox: { display: 'flex', alignItems: 'center', margin: '25px 0' },
         line: { flex: 1, height: '1px', backgroundColor: '#e1e1e1' },
@@ -74,8 +127,11 @@ const AuthPage = () => {
         socialIcon: { width: '24px', height: '24px', objectFit: 'contain' },
         
         footerInfo: { textAlign: 'center', marginTop: '30px', fontSize: '14px', color: '#666' },
-        link: { color: '#3182ce', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'none' }
+        link: { color: '#3182ce', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'none' },
+        helper: { fontSize: '12px', color: '#718096', marginTop: '-8px', marginBottom: '8px' },
     };
+
+    const signupBanner = location.state?.signupOk;
 
     return (
         <div style={styles.wrapper}>
@@ -87,11 +143,21 @@ const AuthPage = () => {
                         {isLogin ? 'Đăng nhập để tiếp tục rèn luyện phỏng vấn' : 'Bắt đầu hành trình chinh phục nhà tuyển dụng'}
                     </p>
                 </div>
-                
+
+                {isLogin && signupBanner && (
+                    <div style={{ ...styles.banner, ...styles.bannerOk }}>
+                        Đăng ký đã được gửi tới backend. Vui lòng đăng nhập (khi backend bật login thật).
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit}>
+                    {submitError ? (
+                        <div style={{ ...styles.banner, ...styles.bannerErr }}>{submitError}</div>
+                    ) : null}
+
                     {isLogin ? (
                         <div style={styles.inputGroup}>
-                            <input style={styles.input} name="usernameOrEmail" placeholder="Email hoặc Tên người dùng" onChange={handleInputChange} />
+                            <input style={styles.input} name="usernameOrEmail" type="text" autoComplete="username" placeholder="Email hoặc Tên người dùng" onChange={handleInputChange} />
                             {errors.usernameOrEmail && <span style={styles.errorText}>{errors.usernameOrEmail}</span>}
                         </div>
                     ) : (
@@ -101,24 +167,28 @@ const AuthPage = () => {
                                 {errors.username && <span style={styles.errorText}>{errors.username}</span>}
                             </div>
                             <div style={styles.inputGroup}>
-                                <input style={styles.input} name="email" type="text" placeholder="Địa chỉ Email" onChange={handleInputChange} />
+                                <input style={styles.input} name="email" type="email" autoComplete="email" placeholder="Địa chỉ Email" onChange={handleInputChange} />
                                 {errors.email && <span style={styles.errorText}>{errors.email}</span>}
                             </div>
                         </>
                     )}
 
                     <div style={styles.inputGroup}>
-                        <input style={styles.input} name="password" type="password" placeholder="Mật khẩu" onChange={handleInputChange} />
+                        <input style={styles.input} name="password" type="password" autoComplete={isLogin ? 'current-password' : 'new-password'} placeholder="Mật khẩu" onChange={handleInputChange} />
                         {errors.password && <span style={styles.errorText}>{errors.password}</span>}
                     </div>
 
                     <button 
-                        type="submit" 
-                        style={styles.btnPrimary}
-                        onMouseOver={(e) => e.target.style.backgroundColor = '#2b6cb0'}
-                        onMouseOut={(e) => e.target.style.backgroundColor = '#3182ce'}
+                        type="submit"
+                        disabled={submitting}
+                        style={{
+                            ...styles.btnPrimary,
+                            ...(submitting ? styles.btnDisabled : {})
+                        }}
+                        onMouseOver={(e) => { if (!submitting) e.target.style.backgroundColor = '#2b6cb0'; }}
+                        onMouseOut={(e) => { if (!submitting) e.target.style.backgroundColor = '#3182ce'; }}
                     >
-                        {isLogin ? 'Đăng nhập' : 'Đăng ký'}
+                        {submitting ? 'Đang xử lý...' : (isLogin ? 'Đăng nhập' : 'Đăng ký')}
                     </button>
                 </form>
 
@@ -129,25 +199,25 @@ const AuthPage = () => {
                 </div>
 
                 <div style={styles.socialGroup}>
-                    <button style={styles.socialBtn} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9f9f9'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff'}>
+                    <button type="button" style={styles.socialBtn} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f9f9f9'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; }}>
                         <img src={googleLogo} alt="Google" style={styles.socialIcon} />
                     </button>
-                    <button style={styles.socialBtn} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9f9f9'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff'}>
+                    <button type="button" style={styles.socialBtn} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f9f9f9'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; }}>
                         <img src={microsoftLogo} alt="Microsoft" style={styles.socialIcon} />
                     </button>
-                    <button style={styles.socialBtn} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9f9f9'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff'}>
+                    <button type="button" style={styles.socialBtn} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f9f9f9'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; }}>
                         <img src={linkedinLogo} alt="LinkedIn" style={styles.socialIcon} />
                     </button>
-                    <button style={styles.socialBtn} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9f9f9'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#fff'}>
+                    <button type="button" style={styles.socialBtn} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f9f9f9'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; }}>
                         <img src={githubLogo} alt="GitHub" style={styles.socialIcon} />
                     </button>
                 </div>
 
                 <div style={styles.footerInfo}>
                     {isLogin ? (
-                        <p>Chưa có tài khoản? <span style={styles.link} onClick={() => { navigate('/signup'); setErrors({}); }}>Đăng ký ngay</span></p>
+                        <p>Chưa có tài khoản? <span style={styles.link} onClick={() => { navigate('/signup'); setErrors({}); setSubmitError(''); }}>Đăng ký ngay</span></p>
                     ) : (
-                        <p>Đã có tài khoản? <span style={styles.link} onClick={() => { navigate('/login'); setErrors({}); }}>Đăng nhập</span></p>
+                        <p>Đã có tài khoản? <span style={styles.link} onClick={() => { navigate('/login'); setErrors({}); setSubmitError(''); }}>Đăng nhập</span></p>
                     )}
                 </div>
             </div>

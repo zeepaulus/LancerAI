@@ -2,7 +2,7 @@
 
 Package định nghĩa toàn bộ **data contracts** cho API surface — request validation (inbound) và response serialization (outbound) — bằng **Pydantic v2**.
 
-Routers import schemas từ đây; service layer không bao giờ trả về raw dict mà phải map sang schema này trước khi respond.
+Routers import schema từ đây; response nên map sang model Pydantic trước khi trả (tránh raw dict lệch contract).
 
 ## Files
 
@@ -12,9 +12,10 @@ Routers import schemas từ đây; service layer không bao giờ trả về raw
 |---|---|---|
 | `AuthSignupRequest` | `POST /auth/signup` | `email`, `password` (min 8), `display_name`, `tenant_id?` |
 | `AuthLoginRequest` | `POST /auth/login` | `email`, `password` |
-| `CVUploadRequest` | `POST /extraction/upload` | `language` (`vi` \| `en`, default `vi`) |
-| `OptimizationRequest` | `POST /optimization/analyze` | `cv_id`, `target_job_title?`, `target_industry`, `mode` (`standard` \| `roast`) |
-| `JobMatchRequest` | `POST /jobs/match` | `cv_id`, `jd_url?` hoặc `jd_text?` |
+| `CVUploadRequest` | `POST /extraction/cvs` (khi wire form metadata) | `language` (`vi` \| `en`, default `vi`) — hiện router chỉ nhận `UploadFile` |
+| `OptimizationRequest` | `POST /optimization/cvs/{cv_id}/optimizations` | `target_job_title?`, `target_industry`, `mode` (`standard` \| `roast`) — `cv_id` is path param |
+| `RenderTemplateRequest` | `POST /optimization/cvs/{cv_id}/render` | `template` — `cv_id` is path param |
+| `JobMatchRequest` | `POST /jobs/matches` | `cv_id`, `jd_url?` hoặc `jd_text?` |
 | `InterviewSessionRequest` | `POST /interview/sessions` | `cv_id`, `mode` (Literal), `focus_area?`, `duration_minutes` (1–60) |
 
 **Validation highlights:**
@@ -37,12 +38,19 @@ Routers import schemas từ đây; service layer không bao giờ trả về raw
 
 `CVExtractionResponse` là "Deep JSON schema" — LLM được prompt để output JSON conform schema này.
 
+#### Module 2 — Optimization
+
+| Schema | Description |
+|---|---|
+| `CVOptimizationResponse` | cv_id, audit_score (0–100), optimized_data |
+| `RenderedCVResponse` | template_name, rendered_data |
+
 #### Module 3 — Job Matching
 
 | Schema | Description |
 |---|---|
 | `SkillGap` | skill_name, impact_level (`critical` \| `important` \| `nice_to_have`), reason |
-| `JobMatchResponse` | match_score (0–100), highlighted_jd, gap_list |
+| `JobMatchResponse` | overall_score (0–100), frequency_score, position_score, semantic_score, improvement_feedback, missing_skills |
 
 #### Module 4 — Interview
 
@@ -50,6 +58,7 @@ Routers import schemas từ đây; service layer không bao giờ trả về raw
 |---|---|
 | `STARScore` | situation, task, action, result (mỗi chiều 0–10) |
 | `InterviewReportResponse` | session_id, overall_confidence, total_questions, star_scores, logic_issues, improvement_suggestions |
+| `InterviewSessionResponse` | session_id, cv_id, mode, status |
 
 ## Technology
 

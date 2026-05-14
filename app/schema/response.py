@@ -1,6 +1,26 @@
 """Pydantic schemas for API response serialization."""
 
+from typing import Any
+
 from pydantic import BaseModel, Field
+
+
+# --- Module 0: Auth ---
+class AuthTokenResponse(BaseModel):
+    """OAuth2 compliant token response."""
+
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserProfileResponse(BaseModel):
+    """User basic info response."""
+
+    id: str
+    email: str
+    display_name: str
+    tenant_id: str
+    role: str
 
 
 # --- Module 1: Extraction ---
@@ -58,6 +78,17 @@ class CVExtractionResponse(BaseModel):
     languages: list[str] = Field(default_factory=list)
 
 
+# --- Module 2: Optimization ---
+class CVOptimizationResponse(BaseModel):
+    """Result of the multi-agent optimization pipeline."""
+
+    cv_id: str
+    audit_score: float = Field(ge=0, le=100, description="Overall ATS score of the optimized CV.")
+    optimized_data: dict[str, Any] = Field(
+        description="Structured CV data mapped to the final JSON schema.",
+    )
+
+
 # --- Module 3: Matching ---
 class SkillGap(BaseModel):
     """A single missing skill with its impact assessment."""
@@ -70,9 +101,23 @@ class SkillGap(BaseModel):
 class JobMatchResponse(BaseModel):
     """Result of CV-JD matching analysis."""
 
-    match_score: float = Field(ge=0, le=100, description="Overall compatibility percentage.")
-    highlighted_jd: str = Field(default="", description="JD text with inline match annotations.")
-    gap_list: list[SkillGap] = Field(default_factory=list, description="Prioritized missing skills.")
+    overall_score: float = Field(ge=0, le=100, description="Overall compatibility percentage.")
+    frequency_score: float = Field(ge=0, le=100, description="Keyword overlap score (TF-IDF).")
+    position_score: float = Field(ge=0, le=100, description="Section weighted score (skills > exp).")
+    semantic_score: float = Field(ge=0, le=100, description="Vector similarity score.")
+    improvement_feedback: str = Field(default="", description="Human-readable LLM feedback.")
+    missing_skills: list[SkillGap] = Field(default_factory=list, description="Prioritized missing skills.")
+
+
+class JobRecommendationResponse(BaseModel):
+    """A recommended job listing based on CV match."""
+
+    job_id: str
+    title: str
+    company: str
+    location: str
+    match_score: float
+    url: str
 
 
 # --- Module 4: Interview ---
@@ -92,3 +137,19 @@ class InterviewReportResponse(BaseModel):
     star_scores: list[STARScore] = Field(default_factory=list)
     logic_issues: list[str] = Field(default_factory=list)
     improvement_suggestions: list[str] = Field(default_factory=list)
+
+
+class RenderedCVResponse(BaseModel):
+    """Result of rendering a CV template."""
+
+    template_name: str
+    rendered_data: dict[str, Any]
+
+
+class InterviewSessionResponse(BaseModel):
+    """Response containing metadata of a created interview session."""
+
+    session_id: str
+    cv_id: str
+    mode: str
+    status: str

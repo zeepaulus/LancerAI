@@ -25,7 +25,7 @@ Backend: FastAPI (Python). Frontend: React + Vite.
 | Database | PostgreSQL, SQLAlchemy 2.0 async, asyncpg |
 | Schema migration | Alembic |
 | Task queue | Celery + Redis |
-| Vector search | ChromaDB |
+| Vector search | ChromaDB hoặc Qdrant (`VECTOR_DB_BACKEND`) |
 | Knowledge graph | Neo4j |
 | AI orchestration | LangGraph, langchain-core, langchain-community |
 | LLM | Ollama (local, mặc định: qwen2.5:3b) / Groq (cloud fallback) |
@@ -39,27 +39,27 @@ Backend: FastAPI (Python). Frontend: React + Vite.
 
 ---
 
-## Trạng thái tính năng
+## Trạng thái tính năng (MVP Baseline)
 
-| Module | Tính năng | Trạng thái |
+| Module | Status | Notes |
 |---|---|---|
-| M0 | Đăng ký / đăng nhập (JWT) | Scaffold — chưa implement |
-| M0 | Auth middleware (`get_current_user`) | Đã implement (chế độ demo) |
-| M1 | Upload CV (PDF / ảnh) | Scaffold — chưa implement |
-| M1 | OCR + LLM extraction có cấu trúc | Scaffold — chưa implement |
-| M2 | LangGraph CV optimization pipeline | Graph đã wiring — các agent là stub |
-| M2 | Render template CV (xuất PDF) | Scaffold — chưa implement |
-| M3 | CV-JD matching (Hybrid Scoring) | Scaffold — chưa implement |
-| M3 | Gợi ý việc làm từ corpus | Scaffold — chưa implement |
-| M4 | Voice interview qua WebSocket | Scaffold — chưa implement |
-| M4 | STAR evaluation và báo cáo | Scaffold — chưa implement |
-| M5 | Job listing crawler (Celery) | Stub only |
-| M5 | PDF/DOCX export worker (Celery) | Stub only |
-| Frontend | UI đăng nhập / đăng ký | Route có — chưa tích hợp API |
-| Frontend | UI upload và xem CV | Chưa có |
-| Frontend | UI phỏng vấn (WebSocket + audio) | Chưa có |
+| Auth (M0) | **Real baseline** | signup/login/me, bcrypt, JWT, ownership checks |
+| CV Extraction (M1) | **MVP mock** | Upload validates + persists CVRecord; returns deterministic structured CV |
+| CV Optimization (M2) | **MVP mock** | Returns deterministic optimized_data with audit_score |
+| Template render (M2) | **MVP mock** | JSON render; PDF endpoint returns 501 (needs WeasyPrint) |
+| Job matching (M3) | **MVP mock** | Deterministic scores + skill gap list; recommendations endpoint returns 501 |
+| Interview REST (M4) | **MVP mock** | Session create + report with STAR scores (deterministic) |
+| Voice WebSocket (M4) | **Stub/planned** | JWT auth validated; audio processing not implemented |
+| LLM/OCR/STT/TTS | **Contract only** | NotImplementedError in connector methods |
+| Background workers (M5) | **Stub only** | Celery app configured; tasks are stubs |
 
-Chi tiết công việc và file tham chiếu: [`TODO.md`](TODO.md).
+### MVP MOCK Policy
+
+- Endpoint chính không trả 501 trong happy path — FE có thể gọi và nhận dữ liệu ngay.
+- Connector/engine thật (`LLMConnector`, `OCRProcessor`, `VoiceSTTConnector`, `VoiceTTSConnector`) giữ `NotImplementedError`.
+- Mock data phải **deterministic**, **đúng schema Pydantic**, và có `TODO` comment rõ.
+- **Ownership check** bắt buộc: mọi endpoint dùng `cv_id`/`session_id` phải verify `user_id` match.
+- Không có demo bypass public.
 
 ---
 
@@ -92,23 +92,24 @@ Chỉnh `.env` theo môi trường (xem [`.env.example`](.env.example)):
 
 | Biến | Mô tả |
 |---|---|
-| `DATABASE_URL` | Connection string đến PostgreSQL |
-| `AUTH_SECRET_KEY` | Khóa ký JWT — thay trước khi đưa lên production |
+| `DATABASE_URL` | Connection string đến PostgreSQL (bắt buộc) |
+| `AUTH_SECRET_KEY` | Khóa ký JWT — thay trước khi đưa lên production (bắt buộc) |
+| `NEO4J_PASSWORD` | Mật khẩu Neo4j (bắt buộc) |
+| `ALLOWED_ORIGINS` | CORS origins cho frontend (mặc định: localhost:3000,5173) |
 | `LLM_LOCAL_BASE_URL` | Ollama endpoint (mặc định: `http://localhost:11434`) |
 | `LLM_LOCAL_MODEL` | Tên model Ollama (mặc định: `qwen2.5:3b`) |
-| `STT_MODEL_ID` | Model ASR (mặc định: `vinai/PhoWhisper-base`) |
-| `TTS_ENGINE` | `edge` hoặc `piper` (`piper` cần `TTS_MODEL_PATH`) |
+| `VECTOR_DB_HOST` | Dùng `http://localhost` (không phải `localhost`) để tránh tạo folder local |
 
 ### 3. Cách 1 — Compose infra + backend/frontend local
 
-`docker-compose.yml` hiện chỉ chạy hạ tầng: PostgreSQL, Redis, ChromaDB, Neo4j. Từ host qua `localhost`: Postgres `5432`, Redis `6379`, Chroma host port `8001` → container `8000` ([`.env.example`](.env.example): `VECTOR_DB_PORT=8001`), Neo4j Bolt `7687`.
+`docker-compose.yml` chạy hạ tầng: PostgreSQL, Redis, ChromaDB, Neo4j.
 
 ```bash
 docker compose up -d
 docker compose ps
 ```
 
-Terminal 1 — backend, tại thư mục gốc repo:
+Terminal 1 — backend:
 
 ```bash
 uv sync
@@ -116,7 +117,7 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Terminal 2 — frontend, tại thư mục `frontend/`:
+Terminal 2 — frontend:
 
 ```bash
 cd frontend
@@ -124,53 +125,10 @@ npm install
 npm run dev
 ```
 
-- API (Swagger): http://localhost:8000/docs  
-- Frontend (Vite): http://localhost:3000  
+- API (Swagger): http://localhost:8000/docs
+- Frontend (Vite): http://localhost:3000
 
-### 4. Cách 2 — Build image backend/frontend rồi chạy container
-
-Chạy hạ tầng trước:
-
-```bash
-docker compose up -d
-```
-
-Build image từ `Dockerfile`:
-
-```bash
-docker build --target backend -t lancerai-backend .
-docker build --target frontend -t lancerai-frontend .
-```
-
-Tên network compose mặc định của repo này là `lancerai_default`; kiểm tra bằng `docker network ls` nếu cần.
-
-PowerShell:
-
-```powershell
-docker rm -f lancerai-backend lancerai-frontend 2>$null
-
-docker run -d --name lancerai-backend --network lancerai_default -p 8000:8000 `
-  -e DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/lancerai `
-  -e REDIS_URL=redis://redis:6379/0 `
-  -e CELERY_BROKER_URL=redis://redis:6379/1 `
-  -e CELERY_RESULT_BACKEND=redis://redis:6379/2 `
-  -e VECTOR_DB_HOST=chromadb `
-  -e VECTOR_DB_PORT=8000 `
-  -e NEO4J_URI=bolt://neo4j:7687 `
-  -e NEO4J_USER=neo4j `
-  -e NEO4J_PASSWORD=your-neo4j-password `
-  lancerai-backend
-
-docker exec lancerai-backend uv run --no-sync alembic upgrade head
-
-docker run -d --name lancerai-frontend --network lancerai_default -p 3000:3000 `
-  -e VITE_API_BASE_URL=http://localhost:8000 `
-  lancerai-frontend
-```
-
-Dừng hai container app: `docker stop lancerai-backend lancerai-frontend`. Infra Compose giữ với `docker compose ...` hoặc gỡ stack với `docker compose down`.
-
-### 5. LLM local (tùy chọn)
+### 4. LLM local (tùy chọn)
 
 ```bash
 ollama pull qwen2.5:3b
@@ -184,10 +142,11 @@ ollama pull qwen2.5:3b
 uv run pytest
 ```
 
-Coverage HTML:
+Quality gates:
 
 ```bash
-uv run pytest --cov=app --cov-report=html
+uv run ruff check app tests     # lint
+uv run mypy app tests            # type check
 ```
 
 ---
@@ -198,34 +157,31 @@ uv run pytest --cov=app --cov-report=html
 lancerai/
 ├── app/                      Backend — FastAPI application
 │   ├── main.py               Entry point: app, middleware, router
-│   ├── core/                 Settings, DB, connector, DI
+│   ├── core/                 Settings, DB, connector, DI, security
 │   ├── models/               SQLAlchemy ORM
 │   ├── schema/               Pydantic request/response
-│   ├── repository/           Data access (PostgreSQL, ChromaDB, Neo4j)
-│   ├── router/v1/            HTTP / WebSocket
-│   ├── service/              Business logic, LangGraph, interview
+│   ├── repository/           Data access (PostgreSQL, ChromaDB/Qdrant, Neo4j)
+│   ├── router/v1/            HTTP / WebSocket endpoints
+│   ├── service/              Business logic
+│   │   ├── auth/             M0 — Auth (real baseline)
+│   │   ├── extraction/       M1 — CV extraction
+│   │   ├── optimization/     M2 — CV Intelligence + LangGraph agents
+│   │   ├── matching/         M3 — Job matching
+│   │   └── interview/        M4 — Interview service + voice pipeline
 │   └── workers/              Celery tasks
 │
 ├── frontend/                 React + Vite SPA
-│   └── src/                  Pages, components, api, config, assets, utils
-│
-├── docs/                     Tổng quan hệ thống
-│   └── SYSTEM_OVERVIEW.md
-│
+├── docs/                     System overview
 ├── migration/                Alembic
-├── tests/                    pytest
-├── infra/                    Ghi chú triển khai (Compose ở gốc repo)
+├── tests/                    pytest (123+ tests)
 ├── Dockerfile                Multi-stage: backend + frontend
 ├── docker-compose.yml        PostgreSQL, Redis, ChromaDB, Neo4j
 ├── pyproject.toml
 ├── uv.lock
-├── requirements.txt          Export từ lockfile (pip)
 ├── .env.example
 ├── TODO.md
 └── CONTRIBUTING.md
 ```
-
-Mỗi thư mục con trong `app/` có `README.md` mô tả phạm vi và thiết kế.
 
 ---
 
@@ -234,25 +190,9 @@ Mỗi thư mục con trong `app/` có `README.md` mô tả phạm vi và thiết
 | Tài liệu | Nội dung |
 |---|---|
 | [`docs/SYSTEM_OVERVIEW.md`](docs/SYSTEM_OVERVIEW.md) | Luồng end-to-end, tính năng, cấu hình |
-| [`infra/README.md`](infra/README.md) | Triển khai Docker Compose, biến môi trường |
 | [`TODO.md`](TODO.md) | Việc cần làm theo module |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Branch, commit, PR, chuẩn code |
 | `app/*/README.md` | Module backend |
-
----
-
-## Biến môi trường
-
-Danh sách đầy đủ: [`.env.example`](.env.example). Nhóm chính:
-
-- **Application** — `APP_ENV`, `APP_DEBUG`, `APP_HOST`, `APP_PORT`
-- **Auth / JWT** — `AUTH_SECRET_KEY`, `AUTH_JWT_ALGORITHM`
-- **Database** — `DATABASE_URL`, `REDIS_URL`, `CELERY_BROKER_URL`
-- **Vector DB** — `VECTOR_DB_HOST`, `VECTOR_DB_PORT`, `VECTOR_DB_COLLECTION`
-- **Graph DB** — `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`
-- **LLM** — `LLM_LOCAL_BASE_URL`, `LLM_LOCAL_MODEL`, `LLM_CLOUD_API_KEY`
-- **Voice STT** — `STT_MODEL_ID`, `STT_DEVICE`
-- **Voice TTS** — `TTS_ENGINE`, `TTS_VOICE`, `TTS_MODEL_PATH`
 
 ---
 

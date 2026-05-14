@@ -9,11 +9,14 @@ Service code is written to this contract; implement bodies when connecting
 Ollama / cloud backends.
 
 TODO:
-    - Implement ``generate`` (one-shot) against Ollama ``/api/generate``.
-    - Implement ``generate_stream`` for token streaming (used by voice TTS).
-    - Implement ``generate_chat`` + ``generate_chat_stream`` for chat history.
-    - Add cloud fallback path keyed off ``cloud_api_key``.
-    - Manage a single ``httpx.AsyncClient`` with proper close().
+    - Initialization: Maintain an internal `httpx.AsyncClient` scoped to the
+      lifecycle of this class. Call `await client.aclose()` in the `close()` method.
+    - `generate` & `generate_chat`: Implement REST calls to Ollama (`/api/generate`
+      or `/api/chat`) or the OpenAI-compatible Cloud provider based on the `use_cloud` flag.
+    - Streaming: Implement asynchronous generators `generate_stream` and
+      `generate_chat_stream` using `httpx` async byte-stream iterators to yield token chunks.
+    - Resilience: Fallback to local Ollama if the cloud provider returns 5xx errors
+      or rate limits, assuming local hardware supports it.
 """
 
 from __future__ import annotations
@@ -45,7 +48,16 @@ class LLMConnector:
         use_cloud: bool = False,
         json_mode: bool = False,
     ) -> str:
-        """Return a single completion for ``prompt``."""
+        """Return a single completion for ``prompt``.
+
+        TODO:
+            - Construct the payload: `{"model": self._local_model, "prompt": prompt,
+              "system": system, "stream": False}`.
+            - If `json_mode` is True, inject JSON formatting requirements into the
+              payload (e.g. `{"format": "json"}` for Ollama).
+            - Dispatch request via `httpx.AsyncClient.post()` to local/cloud endpoint based on `use_cloud`.
+            - Extract and return the raw text completion from the JSON response.
+        """
         raise NotImplementedError("LLMConnector.generate is not implemented yet.")
 
     async def generate_stream(
@@ -54,7 +66,14 @@ class LLMConnector:
         system: str = "",
         use_cloud: bool = False,
     ) -> AsyncGenerator[str, None]:
-        """Yield streamed tokens for ``prompt`` (real-time TTS pipelines)."""
+        """Yield streamed tokens for ``prompt`` (real-time TTS pipelines).
+
+        TODO:
+            - Set `stream: True` in the payload.
+            - Iterate over the `httpx.AsyncClient.stream` response.
+            - Parse each JSON-lines chunk, extracting the delta text token.
+            - `yield` the token sequentially.
+        """
         raise NotImplementedError("LLMConnector.generate_stream is not implemented yet.")
         if False:  # pragma: no cover  - keeps this an async generator
             yield ""
@@ -65,7 +84,13 @@ class LLMConnector:
         use_cloud: bool = False,
         json_mode: bool = False,
     ) -> str:
-        """Return one completion given a chat history."""
+        """Return one completion given a chat history.
+
+        TODO:
+            - Construct the payload according to OpenAI chat format: `{"model": ..., "messages": messages}`.
+            - Set `json_mode` if required.
+            - Post request and parse `response.json()["choices"][0]["message"]["content"]`.
+        """
         raise NotImplementedError("LLMConnector.generate_chat is not implemented yet.")
 
     async def generate_chat_stream(
@@ -73,7 +98,13 @@ class LLMConnector:
         messages: list[dict[str, str]],
         use_cloud: bool = False,
     ) -> AsyncGenerator[str, None]:
-        """Yield streamed tokens given a chat history."""
+        """Yield streamed tokens given a chat history.
+
+        TODO:
+            - Issue request with `stream: True`.
+            - Asynchronously iterate over Server-Sent Events (SSE) or JSON-lines.
+            - Yield the text delta from each chunk.
+        """
         raise NotImplementedError("LLMConnector.generate_chat_stream is not implemented yet.")
         if False:  # pragma: no cover
             yield ""
