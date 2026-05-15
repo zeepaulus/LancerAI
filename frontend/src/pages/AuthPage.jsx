@@ -8,7 +8,6 @@ import googleLogo from '../assets/Logo/google_logo.png';
 import microsoftLogo from '../assets/Logo/microsoft_logo.png';
 import githubLogo from '../assets/Logo/github_logo.png';
 import linkedinLogo from '../assets/Logo/linkedin_logo.png';
-
 import logoImg from '../assets/Logo/lancerai_logo.png'
 
 const AuthPage = () => {

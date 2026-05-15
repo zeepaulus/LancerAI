@@ -17,17 +17,60 @@ const AboutUsPage = () => {
     ];
 
     const styles = {
-        container: { maxWidth: '600px', margin: '40px auto', padding: '0 20px', fontFamily: 'system-ui' },
-        title: { textAlign: 'center', fontSize: '28px', marginBottom: '40px', color: '#2d3748' },
-        card: { display: 'flex', alignItems: 'center', padding: '20px', border: '1px solid #e2e8f0', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', background: 'white' },
-        avatar: { width: '70px', height: '70px', borderRadius: '50%', backgroundColor: '#4a5568', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', marginRight: '20px' },
-        infoBox: { display: 'flex', flexDirection: 'column', gap: '5px' },
-        name: { fontSize: '18px', fontWeight: 'bold', margin: 0 },
-        text: { fontSize: '14px', color: '#4a5568', margin: 0 }
+        container: { 
+            maxWidth: '600px', 
+            margin: '40px auto', 
+            padding: '0 20px', 
+            fontFamily: 'system-ui' 
+        },
+        title: { 
+            textAlign: 'center', 
+            fontSize: '28px', 
+            marginBottom: '40px', 
+            color: 'var(--text-color)' 
+        },
+        card: { 
+            display: 'flex', 
+            alignItems: 'center', 
+            padding: '20px', 
+            border: '1px solid var(--border-color)', 
+            borderRadius: '12px', 
+            marginBottom: '20px', 
+            boxShadow: '0 2px 4px rgba(0,0,0,0.05)', 
+            background: 'var(--nav-bg)' 
+        },
+        avatar: { 
+            width: '70px', 
+            height: '70px', 
+            borderRadius: '50%', 
+            backgroundColor: '#4a5568', 
+            color: 'white', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            fontSize: '24px', 
+            marginRight: '20px' 
+        },
+        infoBox: { 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: '5px' 
+        },
+        name: { 
+            fontSize: '18px', 
+            fontWeight: 'bold', 
+            margin: 0,
+            color: 'var(--text-color)'
+        },
+        text: { 
+            fontSize: '14px', 
+            color: 'var(--text-color)', 
+            margin: 0 
+        }
     };
 
     return (
-        <div style={{backgroundColor: '#f7fafc', minHeight: '100vh'}}>
+        <div style={{minHeight: '100vh'}}>
             <Navbar />
             <div style={styles.container}>
                 <h1 style={styles.title}>Danh sách thành viên</h1>

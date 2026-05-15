@@ -13,9 +13,23 @@ const ProfilePage = () => {
         container: { padding: '40px', maxWidth: '1000px', margin: '0 auto', fontFamily: 'system-ui' },
         header: { display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '40px' },
         avatar: { width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#3182ce', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '30px' },
-        sectionTitle: { fontSize: '20px', borderBottom: '2px solid #e2e8f0', paddingBottom: '10px', marginBottom: '20px', marginTop: '40px' },
-        table: { width: '100%', borderCollapse: 'collapse', textAlign: 'left' },
-        th: { padding: '12px', borderBottom: '2px solid #e2e8f0', background: '#f7fafc' },
+        sectionTitle: { 
+            fontSize: '20px', 
+            borderBottom: '2px solid var(--border-color)', 
+            paddingBottom: '10px', 
+            marginBottom: '20px', 
+            marginTop: '40px' 
+        },
+        table: { 
+            width: '100%', 
+            borderCollapse: 'collapse', 
+            textAlign: 'left' 
+        },
+        th: { 
+            padding: '12px', 
+            borderBottom: '2px solid var(--border-color)', 
+            background: 'var(--border-color)' 
+        },
         td: { padding: '12px', borderBottom: '1px solid #e2e8f0' },
         link: { color: '#3182ce', textDecoration: 'none', fontWeight: 'bold' },
         emptyMsg: { padding: '20px', background: '#fefcbf', color: '#975a16', borderRadius: '8px', textAlign: 'center' },

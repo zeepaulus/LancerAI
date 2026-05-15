@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../../store/ThemeContext';
 
 import * as keys from '../../config/storageKeys';
 import logoImg from '../../assets/Logo/lancerai_logo.png'
@@ -7,7 +8,7 @@ import logoImg from '../../assets/Logo/lancerai_logo.png'
 const Navbar = () => {
     const navigate = useNavigate();
     const [showDropdown, setShowDropdown] = useState(false);
-    const [isDarkMode, setIsDarkMode] = useState(false);
+    const { isDarkMode, toggleDarkMode } = useTheme();
 
     const handleLogout = () => {
         localStorage.removeItem(keys.LANCERAI_ACCESS_TOKEN);
@@ -16,13 +17,20 @@ const Navbar = () => {
         navigate('/');
     };
 
-    const toggleDarkMode = (e) => {
-        e.stopPropagation();
-        setIsDarkMode(!isDarkMode);
+    const handleToggleDarkMode = (e) => {
+        e.stopPropagation(); // Ngăn dropdown bị đóng khi bấm công tắc
+        toggleDarkMode();    // Gọi hàm đổi theme từ ThemeContext
     };
 
     const styles = {
-        nav: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 30px', background: isDarkMode ? '#1a202c' : '#fff', borderBottom: '1px solid #e2e8f0', color: isDarkMode ? '#fff' : '#000' },
+        nav: { 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            padding: '15px 30px', 
+            background: isDarkMode ? '#1a202c' : '#fff', 
+            borderBottom: '1px solid #e2e8f0', 
+            color: isDarkMode ? '#fff' : '#000' },
         logoWrapper: {
             display: 'flex',
             alignItems: 'center',
@@ -71,8 +79,8 @@ const Navbar = () => {
                 <span style={styles.logoText}>LANCER AI</span>
             </div>
             <div style={styles.btnGroup}>
-                <button type="button" style={styles.navBtn}>Phỏng vấn</button>
-                <button type="button" style={styles.navBtn}>Đánh giá CV</button>
+                <button type="button" style={styles.navBtn} onClick={() => navigate('/interview')}>Phỏng vấn</button>
+                <button type="button" style={styles.navBtn} onClick={() => navigate('/cv-upload')}>Đánh giá CV</button>
                 
                 <div>
                     <button type="button" style={styles.avatar} onClick={() => setShowDropdown(!showDropdown)}>👤</button>
@@ -82,7 +90,7 @@ const Navbar = () => {
                             <button type="button" style={styles.dropItem} onClick={() => { navigate('/profile'); setShowDropdown(false); }}>Profile của tôi</button>
                             <button type="button" style={styles.dropItem} onClick={() => { navigate('/settings'); setShowDropdown(false); }}>Quản lý tài khoản</button>
                             
-                            <button type="button" style={styles.dropItem} onClick={toggleDarkMode}>
+                            <button type="button" style={styles.dropItem} onClick={handleToggleDarkMode}>
                                 Chế độ tối
                                 <div style={styles.switchBg}>
                                     <div style={styles.switchDot}></div>

@@ -18,25 +18,125 @@ const AccountSettingsPage = () => {
     }, [showDeleteModal, countdown]);
 
     const styles = {
-        container: { maxWidth: '800px', margin: '40px auto', padding: '0 20px', fontFamily: 'system-ui' },
-        tabHeader: { display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '30px' },
-        tabBtn: (isActive) => ({ padding: '15px 20px', cursor: 'pointer', border: 'none', background: 'none', fontSize: '16px', fontWeight: isActive ? 'bold' : 'normal', color: isActive ? '#3182ce' : '#4a5568', borderBottom: isActive ? '3px solid #3182ce' : '3px solid transparent' }),
+        container: { 
+            maxWidth: '800px', 
+            margin: '40px auto', 
+            padding: '0 20px', 
+            fontFamily: 'system-ui',
+            color: 'var(--text-color)' // Đảm bảo chữ toàn trang đổi màu [cite: 30]
+        },
+        tabHeader: { 
+            display: 'flex', 
+            borderBottom: '1px solid var(--border-color)', // Dùng biến viền [cite: 84]
+            marginBottom: '30px' 
+        },
+        tabBtn: (isActive) => ({ 
+            padding: '15px 20px', 
+            cursor: 'pointer', 
+            border: 'none', 
+            background: 'none', 
+            fontSize: '16px', 
+            fontWeight: isActive ? 'bold' : 'normal', 
+            // Màu xanh chủ đạo giữ nguyên, nhưng màu chữ chưa active dùng biến text
+            color: isActive ? '#3182ce' : 'var(--text-color)', 
+            borderBottom: isActive ? '3px solid #3182ce' : '3px solid transparent',
+            transition: 'all 0.3s ease'
+        }),
         formGroup: { marginBottom: '20px' },
         label: { display: 'block', marginBottom: '8px', fontWeight: '500' },
-        req: { color: 'red' },
-        input: { width: '100%', padding: '10px', border: '1px solid #cbd5e0', borderRadius: '6px' },
-        btnSave: { padding: '10px 20px', background: '#3182ce', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', marginTop: '10px' },
+        req: { color: '#e53e3e' }, // Màu đỏ cảnh báo
+        input: { 
+            width: '100%', 
+            padding: '10px', 
+            // Quan trọng: màu nền input và viền phải đi theo theme
+            background: 'var(--bg-color)', 
+            color: 'var(--text-color)',
+            border: '1px solid var(--border-color)', 
+            borderRadius: '6px',
+            outline: 'none'
+        },
+        btnSave: { 
+            padding: '10px 20px', 
+            background: '#3182ce', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '6px', 
+            cursor: 'pointer', 
+            marginTop: '10px' 
+        },
         pwdWrapper: { position: 'relative' },
-        eyeIcon: { position: 'absolute', right: '10px', top: '10px', cursor: 'pointer' },
+        eyeIcon: { 
+            position: 'absolute', 
+            right: '10px', 
+            top: '10px', 
+            cursor: 'pointer',
+            fontSize: '18px'
+        },
         
         // Modal styles
-        modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-        modalBox: { background: 'white', padding: '30px', borderRadius: '8px', textAlign: 'center', width: '400px' },
-        btnDanger: { background: '#e53e3e', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '6px', cursor: 'pointer' },
-        btnDisabled: { background: '#feb2b2', color: 'white', padding: '10px 20px', border: 'none', borderRadius: '6px', cursor: 'not-allowed' },
-        btnCancel: { background: '#edf2f7', padding: '10px 20px', border: 'none', borderRadius: '6px', cursor: 'pointer', marginLeft: '10px' }
+        modalOverlay: { 
+            position: 'fixed', 
+            top: 0, left: 0, right: 0, bottom: 0, 
+            background: 'rgba(0,0,0,0.7)', // Làm tối nền hơn ở dark mode
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            zIndex: 1000 
+        },
+        modalBox: { 
+            background: 'var(--nav-bg)', // Dùng màu nền phụ cho modal [cite: 82]
+            color: 'var(--text-color)',
+            padding: '30px', 
+            borderRadius: '12px', 
+            textAlign: 'center', 
+            width: '400px',
+            border: '1px solid var(--border-color)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+        },
+        btnDanger: { 
+            background: '#e53e3e', 
+            color: 'white', 
+            padding: '10px 20px', 
+            border: 'none', 
+            borderRadius: '6px', 
+            cursor: 'pointer' 
+        },
+        btnDisabled: { 
+            background: '#feb2b2', 
+            color: '#fff', 
+            padding: '10px 20px', 
+            border: 'none', 
+            borderRadius: '6px', 
+            cursor: 'not-allowed',
+            opacity: 0.6
+        },
+        btnCancel: { 
+            background: 'transparent', 
+            color: 'var(--text-color)',
+            padding: '10px 20px', 
+            border: '1px solid var(--border-color)', 
+            borderRadius: '6px', 
+            cursor: 'pointer', 
+            marginLeft: '10px' 
+        },
+        btnSecondary: {
+            padding: '5px 12px',
+            background: 'var(--nav-bg)',      // Sử dụng nền phụ (hơi xám ở light, hơi đen ở dark)
+            color: 'var(--text-color)',      // Chữ tự đổi trắng/đen
+            border: '1px solid var(--border-color)',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '13px',
+            transition: 'all 0.2s ease'
+        },
+        avatarHint: {
+            fontSize: '12px', 
+            color: 'var(--text-color)', // Để màu chữ mô tả cũng đổi theo theme
+            opacity: 0.7,               // Làm mờ đi một chút cho đẹp
+            marginTop: '5px'
+        }
     };
-
+    
     return (
         <div>
             <Navbar />
@@ -54,8 +154,8 @@ const AccountSettingsPage = () => {
                         <div style={{display: 'flex', gap: '20px', alignItems: 'center', marginBottom: '30px'}}>
                             <div style={{width: '60px', height: '60px', borderRadius: '50%', background: '#ccc'}}></div>
                             <div>
-                                <button style={{padding: '5px 10px'}}>Upload avatar</button>
-                                <p style={{fontSize: '12px', color: '#718096', marginTop: '5px'}}>Max size: 2MB. Formats: JPG, PNG.</p>
+                                <button style={styles.btnSecondary}>Upload avatar</button>
+                                <p style={styles.avatarHint}>Max size: 2MB. Formats: JPG, PNG.</p>
                             </div>
                         </div>
                         <div style={styles.formGroup}><label style={styles.label}>Tên người dùng <span style={styles.req}>*</span></label><input style={styles.input} /></div>
