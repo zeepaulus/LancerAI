@@ -52,6 +52,7 @@ dependencies = [
     "bcrypt>=4.2.0",
     "pyjwt>=2.12.1",
     "slowapi>=0.1.9",
+    "opencv-python-headless>=4.13.0.92",
 ]
 
 [project.optional-dependencies]

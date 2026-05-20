@@ -94,11 +94,12 @@ async def upload_cv(
     service: Annotated[ExtractionService, Depends(get_extraction_service)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user: Annotated[User, Depends(get_current_user)],
+    mock: bool = True,
 ) -> CVExtractionResponse:
     """Upload and parse a CV file.
 
-    MVP MOCK: validates content-type/size, persists a CVRecord with fake
-    extracted_data, returns structured response. Replace with real OCR+LLM.
+    If mock=True (default for MVP), persists a CVRecord with fake extracted_data.
+    If mock=False, calls the real OCR+LLM pipeline.
     """
     allowed_types = {"application/pdf", "image/png", "image/jpeg", "image/webp"}
     if file.content_type not in allowed_types:
@@ -107,33 +108,61 @@ async def upload_cv(
             detail=f"Unsupported file type '{file.content_type}'. Allowed: {sorted(allowed_types)}.",
         )
 
-    # Drain upload with size check
+    # Drain upload with size check and store bytes
     chunk_size = 64 * 1024
-    total = 0
+    file_bytes = bytearray()
     while True:
         chunk = await file.read(chunk_size)
         if not chunk:
             break
-        total += len(chunk)
-        if total > MAX_FILE_SIZE:
+        file_bytes.extend(chunk)
+        if len(file_bytes) > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail=f"File exceeds the {MAX_FILE_SIZE:,}-byte (10 MB) limit.",
             )
 
-    # MVP MOCK: persist record with fake data
-    cv_id = str(uuid.uuid4())
-    record = CVRecord(
-        id=cv_id,
-        user_id=user.id,
-        filename=file.filename or "unknown.pdf",
-        language="vi",
-        extracted_data=_MOCK_EXTRACTED_DATA,
-    )
-    db.add(record)
-    await db.flush()
+    if mock:
+        # MVP MOCK: persist record with fake data
+        cv_id = str(uuid.uuid4())
+        record = CVRecord(
+            id=cv_id,
+            user_id=user.id,
+            filename=file.filename or "unknown.pdf",
+            language="vi",
+            extracted_data=_MOCK_EXTRACTED_DATA,
+        )
+        db.add(record)
+        await db.flush()
+        return _build_extraction_response(cv_id)
 
-    return _build_extraction_response(cv_id)
+    # Real Extraction Pipeline
+    filename = file.filename or "unknown"
+    try:
+        if file.content_type == "application/pdf":
+            return await service.extract_from_pdf(
+                file_bytes=bytes(file_bytes),
+                filename=filename,
+                user_id=user.id,
+                session=db,
+            )
+        else:
+            return await service.extract_from_image(
+                file_bytes=bytes(file_bytes),
+                filename=filename,
+                user_id=user.id,
+                session=db,
+            )
+    except NotImplementedError as e:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=f"Not implemented: {str(e)}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Extraction failed: {str(e)}",
+        )
 
 
 @router.get("/cv/{cv_id}")

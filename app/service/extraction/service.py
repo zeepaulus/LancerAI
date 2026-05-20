@@ -6,24 +6,13 @@ Owns the ingest pipeline:
 All persistence goes through ``cv_repository``; raw text + structured JSON are
 stored on ``CVRecord``. Vector embeddings are pushed to ``vector_repository``
 so later modules (matching, retrieval agent) can run RAG.
-
-TODO:
-    - `extract_from_pdf`: Implement a pipeline using PyMuPDF to extract text layer.
-      If text density is low (e.g., scanned PDF), automatically fallback to `self._ocr`
-      to process images block by block.
-    - `extract_from_image`: Implement a pipeline passing image bytes directly to `self._ocr`
-      (e.g., PaddleOCR) to yield text.
-    - Parsing: Pass the raw extracted text into `self._llm` with a rigorous prompt
-      to output structured JSON matching `CVExtractionResponse`.
-    - Storage: Construct a `CVRecord` with `user_id` tracking tenant boundaries, and
-      persist using `self._cv_repo.add`.
-    - Indexing: Call `self._vector_repo.store_embedding` to index the generated embedding
-      for later semantic search and matching logic.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import json
+import uuid
+from typing import TYPE_CHECKING, Any
 
 from app.core.llm_connector import LLMConnector
 from app.core.ocr_processor import OCRProcessor
@@ -37,7 +26,77 @@ if TYPE_CHECKING:
 
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB upload cap
+MIN_WORDS_DENSITY = 50
 
+SYSTEM_PROMPT = """
+Act as an expert CV (Curriculum Vitae) parser. Your task is to analyze the content of a CV and extract its information into a structured JSON format. The CV may be in Vietnamese or English.
+
+Follow these rules:
+1.  **Identify Sections**: Recognize standard CV sections such as:
+    *   Personal Information (name, contact, links, location)
+    *   Education (degree, major, school, duration, GPA)
+    *   Work Experience (company, title, duration, responsibilities, achievements)
+    *   Projects (project name, role, tech stack, description, impact)
+    *   Skills (technical skills, soft skills, tools, languages)
+    *   Certifications
+    *   Awards
+    *   Other relevant sections
+
+2.  **Extract Data**: For each section, extract the relevant information and map it to the corresponding fields in the JSON schema below.
+    *   Ensure dates are parsed correctly (e.g., "2018 - 2022", "Jan 2020 - May 2021", "Present").
+    *   For descriptions and responsibilities, capture the key points accurately.
+    *   For skills, categorize them appropriately.
+
+3.  **Handle Unclear or Missing Information**: 
+    *   If a field cannot be determined with reasonable confidence, set it to null.
+    *   Do not make up or guess information that is not explicitly present in the text.
+    *   If the entire CV is unclear, ambiguous, or cannot be parsed, return an empty JSON object.
+
+4.  **Output Format**: Return a valid JSON object that strictly adheres to the following schema.
+    *   **language**: Detect the primary language of the CV (e.g., "vi", "en") and set it accordingly.
+    *   **personal_info**: Extract the candidate's personal information.
+        *   **name**: Full name of the candidate.
+        *   **email**: Primary email address.
+        *   **phone**: Phone number (including country code if available).
+        *   **linkedin**: LinkedIn profile URL.
+        *   **github**: GitHub profile URL.
+        *   **location**: Candidate's location (city, country).
+        *   **portfolio**: Portfolio/website URL.
+    *   **education**: A list of educational experiences, ordered chronologically (most recent first).
+        *   **school**: Name of the institution.
+        *   **degree**: Degree obtained (e.g., Bachelor, Master, PhD).
+        *   **major**: Field of study.
+        *   **gpa**: Grade Point Average (if available).
+        *   **period**: Duration of study (e.g., "2018 - 2022").
+        *   **description**: Additional details about the education.
+    *   **experience**: A list of work experiences, ordered chronologically (most recent first).
+        *   **company**: Name of the company.
+        *   **title**: Job title/position.
+        *   **period**: Duration of employment (e.g., "Jan 2020 - May 2021").
+        *   **descriptions**: A list of responsibilities and duties.
+        *   **key_impacts**: A list of significant achievements and impacts.
+        *   **tech_stack**: A list of technologies, tools, and frameworks used.
+    *   **projects**: A list of projects the candidate has worked on, ordered by relevance or recency.
+        *   **name**: Project name.
+        *   **role**: Role in the project.
+        *   **tech_stack**: Technologies and tools used.
+        *   **description**: Brief description of the project.
+        *   **key_impacts**: Key achievements and outcomes.
+        *   **potential_roast_points**: Weaknesses, risks, or areas that might attract scrutiny.
+    *   **skills_matrix**: A structured breakdown of skills.
+        *   **languages**: Programming languages (e.g., ["Python", "JavaScript"]).
+        *   **frameworks**: Frameworks and libraries (e.g., ["React", "Django"]).
+        *   **tools**: Tools and software (e.g., ["Docker", "Git"]).
+        *   **soft_skills**: Soft skills (e.g., ["Communication", "Teamwork"]).
+    *   **certifications**: A list of professional certifications.
+    *   **languages**: A list of languages spoken and proficiency levels.
+
+5.  **Handling Unstructured Text**: If the CV is heavily unstructured or appears to be a scanned document without selectable text, attempt to extract the text as best as possible. However, if the extracted text is fragmented or makes the CV ambiguous, return an empty JSON object.
+
+6.  **Consistency**: Ensure that all information is consistent and accurate based on the provided text. Do not infer information that is not present.
+
+Return only the JSON object, without any additional text, explanations, or markdown formatting.
+"""
 
 class ExtractionService:
     """File-in / structured-CV-out service."""
@@ -54,6 +113,10 @@ class ExtractionService:
         self._vector_repo = vector_repository
         self._cv_repo = cv_repository
 
+    def _generate_mock_embedding(self) -> list[float]:
+        """Generate a mock embedding vector (384 dimensions) for temporary storage."""
+        return [0.1] * 384
+
     async def extract_from_pdf(
         self,
         file_bytes: bytes,
@@ -63,21 +126,86 @@ class ExtractionService:
     ) -> CVExtractionResponse:
         """Extract structured CV data from a PDF upload.
 
-        TODO:
-            - Input Validation: Check `len(file_bytes)` against `MAX_FILE_SIZE`.
-            - Text Extraction: Use PyMuPDF (fitz) to read the PDF. Calculate text density.
-              If density is low, convert pages to images and run `self._ocr`.
-            - LLM Structuring: Feed the aggregate raw text into `self._llm` to map into
-              the `CVExtractionResponse` schema.
-            - Vector Generation: Prompt the LLM or an embedding model to generate an embedding
-              array from the CV's professional summary and skills.
-            - Relational Persistence: Create a new `CVRecord(user_id=user_id, raw_text=...,
-              extracted_data=...)`. Use `self._cv_repo.add` via `session`.
-            - Vector Persistence: Store the embedding array in Qdrant/Chroma via
-              `self._vector_repo.store_embedding(doc_id=cv_record.id)`.
-            - Return the populated `CVRecord` data in dictionary form.
+        Uses PyMuPDF (fitz) to read the PDF. Automatically falls back to OCR
+        if character density on any page is low (e.g., scanned PDF).
         """
-        raise NotImplementedError("ExtractionService.extract_from_pdf is not implemented yet.")
+        # Input Validation
+        if len(file_bytes) > MAX_FILE_SIZE:
+            raise ValueError(f"File size exceeds the limit of {MAX_FILE_SIZE} bytes.")
+
+        import fitz
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        
+        raw_text_parts = []
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            text = page.get_text()
+            
+            # Density Check: if text is short, convert page to image and use OCR
+            if len(text.strip()) < MIN_WORDS_DENSITY:
+                pix = page.get_pixmap()
+                img_bytes = pix.tobytes("png")
+                ocr_text = self._ocr.extract_text_grouped(img_bytes)
+                raw_text_parts.append(ocr_text)
+            else:
+                raw_text_parts.append(text)
+                
+        raw_text = "\n".join(raw_text_parts)
+
+        # LLM Structuring
+        system_prompt = SYSTEM_PROMPT
+        user_prompt = f"Raw CV Text:\n{raw_text}"
+        
+        llm_response = await self._llm.generate(
+            prompt=user_prompt,
+            system=system_prompt,
+            json_mode=True,
+        )
+        
+        extracted_dict = json.loads(llm_response)
+
+        # Relational Persistence
+        cv_id = str(uuid.uuid4())
+        await self._cv_repo.create(
+            session,
+            id=cv_id,
+            user_id=user_id,
+            filename=filename,
+            language="vi",
+            extracted_data=extracted_dict,
+        )
+
+        # Vector Persistence (Using mock embedding for temporary storage)
+        mock_embedding = self._generate_mock_embedding()
+        metadata = {"user_id": user_id, "filename": filename}
+        await self._vector_repo.store_embedding(
+            doc_id=cv_id,
+            text=raw_text,
+            embedding=mock_embedding,
+            metadata=metadata,
+        )
+
+        # Build response schema
+        from app.schema.response import PersonalInfo, Education, Experience, Project, SkillsMatrix
+        
+        personal_info = PersonalInfo(**extracted_dict.get("personal_info", {}))
+        education_list = [Education(**edu) for edu in extracted_dict.get("education", [])]
+        experience_list = [Experience(**exp) for exp in extracted_dict.get("experience", [])]
+        projects_list = [Project(**proj) for proj in extracted_dict.get("projects", [])]
+        skills_matrix = SkillsMatrix(**extracted_dict.get("skills_matrix", {}))
+        certifications = extracted_dict.get("certifications", [])
+        languages = extracted_dict.get("languages", [])
+
+        return CVExtractionResponse(
+            cv_id=cv_id,
+            personal_info=personal_info,
+            education=education_list,
+            experience=experience_list,
+            projects=projects_list,
+            skills_matrix=skills_matrix,
+            certifications=certifications,
+            languages=languages,
+        )
 
     async def get_cv(
         self,
@@ -98,15 +226,67 @@ class ExtractionService:
     ) -> CVExtractionResponse:
         """Extract structured CV data from an image upload.
 
-        TODO:
-            - Input Validation: Check `len(file_bytes)` against `MAX_FILE_SIZE`.
-            - OCR Processing: Process the image bytes directly through
-              `self._ocr.extract_text_grouped` to obtain raw text blocks.
-            - LLM Structuring: Pass the extracted OCR text to `self._llm` to build the required
-              JSON data structure (`CVExtractionResponse`).
-            - Embedding Generation: Create vector embeddings of the CV context for semantic search.
-            - DB Persistence: Save the entity via `self._cv_repo` and index the vector via
-              `self._vector_repo`.
-            - Return the serialized entity representation.
+        Processes the image bytes directly through OCR to yield raw text blocks,
+        maps it to structured JSON via LLM, and persists.
         """
-        raise NotImplementedError("ExtractionService.extract_from_image is not implemented yet.")
+        # Input Validation
+        if len(file_bytes) > MAX_FILE_SIZE:
+            raise ValueError(f"File size exceeds the limit of {MAX_FILE_SIZE} bytes.")
+
+        # OCR Processing
+        raw_text = self._ocr.extract_text_grouped(file_bytes)
+
+        # LLM Structuring
+        system_prompt = SYSTEM_PROMPT
+        user_prompt = f"Raw CV Text:\n{raw_text}"
+        
+        llm_response = await self._llm.generate(
+            prompt=user_prompt,
+            system=system_prompt,
+            json_mode=True,
+        )
+        
+        extracted_dict = json.loads(llm_response)
+
+        # DB Persistence
+        cv_id = str(uuid.uuid4())
+        await self._cv_repo.create(
+            session,
+            id=cv_id,
+            user_id=user_id,
+            filename=filename,
+            language="vi",
+            extracted_data=extracted_dict,
+        )
+
+        # Vector Persistence (Using mock embedding for temporary storage)
+        mock_embedding = self._generate_mock_embedding()
+        metadata = {"user_id": user_id, "filename": filename}
+        await self._vector_repo.store_embedding(
+            doc_id=cv_id,
+            text=raw_text,
+            embedding=mock_embedding,
+            metadata=metadata,
+        )
+
+        # Build response schema
+        from app.schema.response import PersonalInfo, Education, Experience, Project, SkillsMatrix
+        
+        personal_info = PersonalInfo(**extracted_dict.get("personal_info", {}))
+        education_list = [Education(**edu) for edu in extracted_dict.get("education", [])]
+        experience_list = [Experience(**exp) for exp in extracted_dict.get("experience", [])]
+        projects_list = [Project(**proj) for proj in extracted_dict.get("projects", [])]
+        skills_matrix = SkillsMatrix(**extracted_dict.get("skills_matrix", {}))
+        certifications = extracted_dict.get("certifications", [])
+        languages = extracted_dict.get("languages", [])
+
+        return CVExtractionResponse(
+            cv_id=cv_id,
+            personal_info=personal_info,
+            education=education_list,
+            experience=experience_list,
+            projects=projects_list,
+            skills_matrix=skills_matrix,
+            certifications=certifications,
+            languages=languages,
+        )

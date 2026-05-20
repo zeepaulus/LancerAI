@@ -30,7 +30,10 @@ Ollama / OpenAI-compatible — method hiện stub.
 STT/TTS — stub.
 
 ### `ocr_processor.py`
-OCR — stub.
+OCRProcessor — Đã được implement với PaddleOCR.
+- **Lazy Initialization:** PaddleOCR engine chỉ được khởi tạo khi có lời gọi method đầu tiên (`_get_ocr_engine`) nhằm giảm thời gian startup và tiết kiệm bộ nhớ cho các luồng không dùng OCR.
+- **Method `extract_text`:** Nhận image bytes, trả về danh sách các block text kèm bounding box và độ tin cậy.
+- **Method `extract_text_grouped`:** Áp dụng logic gom nhóm theo không gian (spatial sorting: trên xuống, trái sang phải) để nối kết quả thành một string liền mạch theo đúng thứ tự đọc (reading order).
 
 ### `security.py`
 bcrypt hash/verify; JWT encode/decode (`HS256`, secret từ settings).
