@@ -1,9 +1,4 @@
-"""Module 2 — CV analysis and document export.
-
-MVP MOCK:
-    Optimization + render endpoints return deterministic fake data.
-    Replace with LangGraph pipeline + Jinja2/WeasyPrint when implementing.
-"""
+"""Module 2 — CV analysis and document export."""
 
 from typing import Annotated, Any
 
@@ -56,31 +51,24 @@ async def analyze_cv(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> CVOptimizationResponse:
-    """Run the multi-agent CV analysis pipeline.
-
-    MVP MOCK: checks ownership, returns deterministic optimized_data.
-    TODO: replace with LangGraph retrieval/roast/rewrite/audit pipeline.
-    """
-    cv = await _check_cv_ownership(extraction, db, cv_id, user.id)
-
-    # MVP MOCK: deterministic optimized data
-    optimized_data: dict[str, Any] = {
-        **(cv.extracted_data or {}),
-        "_optimization_applied": True,
-        "_target_job_title": body.target_job_title or "General",
-        "_target_industry": body.target_industry,
-        "_mode": body.mode,
-    }
-
-    # Persist optimized_data back to the record
-    cv.optimized_data = optimized_data
-    await db.flush()
-
-    return CVOptimizationResponse(
-        cv_id=cv_id,
-        audit_score=72.5,
-        optimized_data=optimized_data,
-    )
+    """Run the multi-agent CV analysis pipeline (retrieval → roast → rewrite → audit)."""
+    await _check_cv_ownership(extraction, db, cv_id, user.id)
+    try:
+        return await service.analyze_cv(
+            cv_id=cv_id,
+            user_id=user.id,
+            session=db,
+            target_job_title=body.target_job_title or "",
+            target_industry=body.target_industry,
+            mode=body.mode,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Optimization pipeline failed: {exc}",
+        ) from exc
 
 
 @router.post("/cvs/{cv_id}/render")
@@ -94,39 +82,49 @@ async def render_template_cv(
     db: Annotated[AsyncSession, Depends(get_db_session)],
     user: Annotated[User, Depends(get_current_user)],
 ) -> RenderedCVResponse:
-    """Render the optimized CV into a named template (returns JSON).
-
-    MVP MOCK: checks ownership, returns deterministic rendered data.
-    TODO: replace with Jinja2 template rendering via CVTemplateRenderer.
-    """
+    """Render the optimized CV into a named template (returns JSON)."""
     cv = await _check_cv_ownership(extraction, db, cv_id, user.id)
     source = cv.optimized_data or cv.extracted_data or {}
-
-    return RenderedCVResponse(
-        template_name=body.template,
-        rendered_data={
-            "template": body.template,
-            "sections": list(source.keys()),
-            "content": source,
-            "_mock": True,
-        },
-    )
+    try:
+        rendered = await renderer.render_cv(source, body.template)
+        return RenderedCVResponse(template_name=body.template, rendered_data=rendered)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Render failed: {exc}",
+        ) from exc
 
 
 @router.get("/cvs/{cv_id}/pdf")
-@limiter.limit("100/minute")
+@limiter.limit("10/minute")
 async def render_template_pdf(
     request: Request,
     cv_id: str,
-    template: str,
+    extraction: Annotated[ExtractionService, Depends(get_extraction_service)],
     renderer: Annotated[CVTemplateRenderer, Depends(get_template_renderer)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
     user: Annotated[User, Depends(get_current_user)],
+    template: str = "harvard",
 ) -> StreamingResponse:
-    """Stream a downloadable PDF rendered from the optimized CV.
-
-    TODO: Implement with WeasyPrint when template rendering is ready.
-    """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="PDF export is not implemented yet. Use /render for JSON preview.",
-    )
+    """Stream a downloadable PDF rendered from the optimized CV."""
+    cv = await _check_cv_ownership(extraction, db, cv_id, user.id)
+    source = cv.optimized_data or cv.extracted_data or {}
+    try:
+        pdf_bytes = await renderer.render_pdf(source, template)
+        media_type = "application/pdf" if pdf_bytes[:4] == b"%PDF" else "application/json"
+        filename = f"cv_{cv_id[:8]}_{template}.{'pdf' if media_type == 'application/pdf' else 'json'}"
+        import io
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PDF render failed: {exc}",
+        ) from exc

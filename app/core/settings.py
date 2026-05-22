@@ -92,11 +92,20 @@ class Settings(BaseSettings):
     llm_cloud_model: str = "llama-3.1-70b-versatile"
 
     # --- Voice ------------------------------------------------------------
-    stt_model_id: str = "vinai/PhoWhisper-base"
-    stt_device: str = "cpu"
-    tts_engine: str = "edge"  # edge | piper | vieneu
-    tts_voice: str = "vi-VN-HoaiMyNeural"
-    tts_model_path: str = ""
+    # STT — Faster-Whisper
+    stt_model_size: str = "small"                # tiny | base | small | medium
+    stt_compute_type: str = "int8"               # int8 | float16 | float32 — int8 for limited VRAM
+    stt_language: str = "vi"                     # hardcoded Vietnamese — skip detect step
+    stt_device: str = "cpu"                      # cpu | cuda
+
+    # VAD — silero-vad
+    vad_silence_threshold_ms: int = 1300         # ms of silence to flush buffer (1.2–1.5s per spec)
+    vad_min_speech_duration_ms: int = 200        # min ms of speech to consider a turn
+
+    # TTS
+    tts_engine: str = "edge"                     # edge | piper | vieneu
+    tts_voice: str = "vi-VN-HoaiMyNeural"        # Edge voice; VieNeu: "Xuân Vĩnh (Nam - Miền Nam)"
+    tts_model_path: str = ""                     # VieNeu .gguf model path
 
 
 _settings_lock = threading.Lock()

@@ -6,6 +6,7 @@ from app.core.sync_singleton import thread_safe_singleton
 from app.models.cv_record import CVRecord
 from app.models.interview_session import InterviewSession
 from app.models.job_listing import JobListing
+from app.models.job_match_result import JobMatchResult
 from app.models.user import User
 from app.repository.relational_repository import RelationalRepository
 
@@ -26,7 +27,12 @@ def _create_interview_session_repository() -> RelationalRepository[InterviewSess
     return RelationalRepository(InterviewSession)
 
 
+def _create_job_match_repository() -> RelationalRepository[JobMatchResult]:
+    return RelationalRepository(JobMatchResult)
+
+
 get_user_repository = thread_safe_singleton(_create_user_repository)
 get_cv_repository = thread_safe_singleton(_create_cv_repository)
 get_job_repository = thread_safe_singleton(_create_job_repository)
+get_job_match_repository = thread_safe_singleton(_create_job_match_repository)
 get_interview_session_repository = thread_safe_singleton(_create_interview_session_repository)

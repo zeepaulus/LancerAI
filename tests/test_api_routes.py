@@ -11,12 +11,24 @@ from collections.abc import AsyncGenerator, Generator
 from typing import Any
 
 import pytest
+from fastapi import Depends
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.database import get_db_session
 from app.core.providers.auth import get_current_user
+from app.core.providers.repositories import (
+    get_cv_repository,
+    get_interview_session_repository,
+)
+from app.core.providers.services import (
+    get_extraction_service,
+    get_interview_service,
+    get_matching_service,
+    get_optimization_service,
+    get_template_renderer,
+)
 from app.main import app
 from app.models import (  # noqa: F401
     cv_record,
@@ -27,10 +39,233 @@ from app.models import (  # noqa: F401
     user,
 )
 from app.models.base import Base
+from app.schema.response import (
+    CVExtractionResponse,
+    CVOptimizationResponse,
+    InterviewReportResponse,
+    JobMatchResponse,
+    SkillGap,
+    STARScore,
+)
 
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 _test_engine = create_async_engine(_TEST_DB_URL, echo=False)
 _TestSession = async_sessionmaker(bind=_test_engine, class_=AsyncSession, expire_on_commit=False)
+
+
+class MockExtractionService:
+    def __init__(self, cv_repo: Any) -> None:
+        self._cv_repo = cv_repo
+
+    async def extract_from_pdf(
+        self,
+        file_bytes: bytes,
+        filename: str,
+        user_id: str,
+        session: AsyncSession,
+    ) -> CVExtractionResponse:
+        created_cv = await self._cv_repo.create(
+            session,
+            user_id=user_id,
+            filename=filename,
+            language="vi",
+            extracted_data={
+                "personal_info": {
+                    "name": "Nguyễn Văn A",
+                    "email": "test@test.com",
+                    "phone": "123",
+                    "linkedin": "",
+                    "location": "",
+                },
+                "education": [
+                    {
+                        "school": "DH ABC",
+                        "degree": "Bachelor",
+                        "major": "IT",
+                        "gpa": "3.5",
+                        "period": "",
+                    }
+                ],
+                "experience": [
+                    {
+                        "company": "Company A",
+                        "title": "Developer",
+                        "period": "",
+                        "descriptions": ["Dev things"],
+                        "key_impacts": ["Impacts"],
+                        "tech_stack": ["Python"],
+                    }
+                ],
+                "projects": [],
+                "skills_matrix": {
+                    "languages": ["Python"],
+                    "frameworks": [],
+                    "tools": [],
+                    "soft_skills": [],
+                },
+                "certifications": [],
+                "languages": [],
+            },
+        )
+        await session.commit()
+        await session.refresh(created_cv)
+        return CVExtractionResponse(cv_id=created_cv.id, **created_cv.extracted_data)
+
+    async def extract_from_image(
+        self,
+        file_bytes: bytes,
+        filename: str,
+        user_id: str,
+        session: AsyncSession,
+    ) -> CVExtractionResponse:
+        return await self.extract_from_pdf(file_bytes, filename, user_id, session)
+
+    async def get_cv(
+        self,
+        session: AsyncSession,
+        cv_id: str,
+        user_id: str,
+    ) -> Any:
+        results = await self._cv_repo.filter_by(session, id=cv_id, user_id=user_id)
+        return results[0] if results else None
+
+
+def _override_get_extraction_service(
+    cv_repo: Any = Depends(get_cv_repository),  # noqa: B008
+) -> MockExtractionService:
+    return MockExtractionService(cv_repo)
+
+
+class MockOptimizationService:
+    def __init__(self, cv_repo: Any) -> None:
+        self._cv_repo = cv_repo
+
+    async def analyze_cv(
+        self,
+        cv_id: str,
+        user_id: str,
+        session: AsyncSession,
+        target_job_title: str = "",
+        target_industry: str = "technology",
+        mode: str = "standard",
+    ) -> CVOptimizationResponse:
+        results = await self._cv_repo.filter_by(session, id=cv_id, user_id=user_id)
+        if not results:
+            raise ValueError(f"CV '{cv_id}' not found or does not belong to user '{user_id}'")
+        cv_record_obj = results[0]
+        optimized = cv_record_obj.extracted_data or {}
+        await self._cv_repo.update(session, cv_id, optimized_data=optimized)
+        await session.commit()
+        return CVOptimizationResponse(
+            cv_id=cv_id,
+            audit_score=95.0,
+            optimized_data=optimized,
+        )
+
+
+def _override_get_optimization_service(
+    cv_repo: Any = Depends(get_cv_repository),  # noqa: B008
+) -> MockOptimizationService:
+    return MockOptimizationService(cv_repo)
+
+
+class MockMatchingService:
+    async def match_cv_to_jd(
+        self,
+        cv_data: dict[str, Any],
+        jd_text: str,
+        jd_url: str = "",
+    ) -> JobMatchResponse:
+        return JobMatchResponse(
+            overall_score=85.0,
+            frequency_score=80.0,
+            position_score=90.0,
+            semantic_score=85.0,
+            improvement_feedback="CV looks good. Consider adding more details about cloud experience.",
+            missing_skills=[
+                SkillGap(
+                    skill_name="Cloud Architecture",
+                    impact_level="critical",
+                    reason="JD specifically asks for AWS/GCP experience",
+                )
+            ],
+        )
+
+
+def _override_get_matching_service() -> MockMatchingService:
+    return MockMatchingService()
+
+
+class MockInterviewService:
+    def __init__(self, session_repo: Any) -> None:
+        self._sessions = session_repo
+
+    async def create_session(
+        self,
+        session: AsyncSession,
+        cv_id: str,
+        user_id: str,
+        mode: str,
+        job_listing_id: str | None = None,
+        focus_area: str | None = None,
+        duration_minutes: int = 5,
+    ) -> str:
+        record = await self._sessions.create(
+            session,
+            user_id=user_id,
+            cv_id=cv_id,
+            job_listing_id=job_listing_id,
+            mode=mode,
+            total_questions=0,
+            overall_confidence=0.0,
+            star_scores={},
+            logic_issues=[],
+            improvement_suggestions=[],
+        )
+        await session.commit()
+        return str(record.id)
+
+    async def get_report(
+        self,
+        session: AsyncSession,
+        session_id: str,
+    ) -> InterviewReportResponse:
+        record = await self._sessions.get_by_id(session, session_id)
+        if record is None:
+            raise ValueError(f"InterviewSession '{session_id}' not found")
+        return InterviewReportResponse(
+            session_id=session_id,
+            overall_confidence=85.0,
+            total_questions=3,
+            star_scores=[
+                STARScore(situation=8.0, task=8.5, action=9.0, result=8.0),
+                STARScore(situation=7.5, task=8.0, action=8.0, result=8.5),
+            ],
+            logic_issues=["Answered too quickly in part 1"],
+            improvement_suggestions=["Structure your answer more clearly using STAR format"],
+        )
+
+
+def _override_get_interview_service(
+    session_repo: Any = Depends(get_interview_session_repository),  # noqa: B008
+) -> MockInterviewService:
+    return MockInterviewService(session_repo)
+
+
+class MockCVTemplateRenderer:
+    async def render_cv(self, cv_data: dict[str, Any], template: str = "harvard") -> dict[str, Any]:
+        if template not in {"harvard", "modern", "minimal", "creative"}:
+            raise ValueError(f"Unknown template '{template}'")
+        return {"template": template, "rendered_data": cv_data}
+
+    async def render_pdf(self, cv_data: dict[str, Any], template: str = "harvard") -> bytes:
+        return b"%PDF-1.4 mock pdf content"
+
+
+def _override_get_template_renderer() -> MockCVTemplateRenderer:
+    return MockCVTemplateRenderer()
+
+
 
 
 async def _override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -76,6 +311,11 @@ def _setup_test_db() -> Generator[None, None, None]:
 def integration_client() -> Generator[TestClient, None, None]:
     """Test client with test SQLite DB; no auth override (real JWT / auth flow)."""
     app.dependency_overrides[get_db_session] = _override_get_db_session
+    app.dependency_overrides[get_extraction_service] = _override_get_extraction_service
+    app.dependency_overrides[get_optimization_service] = _override_get_optimization_service
+    app.dependency_overrides[get_matching_service] = _override_get_matching_service
+    app.dependency_overrides[get_interview_service] = _override_get_interview_service
+    app.dependency_overrides[get_template_renderer] = _override_get_template_renderer
     client = TestClient(app, raise_server_exceptions=False)
     yield client
     app.dependency_overrides.clear()

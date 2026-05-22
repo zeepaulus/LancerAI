@@ -26,15 +26,15 @@ if config.config_file_name is not None:
 # Import ALL models so Alembic can detect schema changes via autogenerate.
 # Each model MUST be imported here (or transitively) to be detected.
 # ---------------------------------------------------------------------------
-from app.models.base import Base  # noqa: E402
 from app.models import (  # noqa: F401, E402
-    user,
     cv_record,
-    job_listing,
-    job_match_result,
     interview_session,
     interview_transcript,
+    job_listing,
+    job_match_result,
+    user,
 )
+from app.models.base import Base  # noqa: E402
 
 target_metadata = Base.metadata
 

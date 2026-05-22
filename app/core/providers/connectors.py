@@ -32,7 +32,14 @@ def _create_ocr_processor() -> OCRProcessor:
 
 def _create_stt_connector() -> VoiceSTTConnector:
     s = get_settings()
-    return VoiceSTTConnector(model_id=s.stt_model_id, device=s.stt_device)
+    return VoiceSTTConnector(
+        model_size=s.stt_model_size,
+        device=s.stt_device,
+        compute_type=s.stt_compute_type,
+        language=s.stt_language,
+        silence_threshold_ms=s.vad_silence_threshold_ms,
+        min_speech_ms=s.vad_min_speech_duration_ms,
+    )
 
 
 def _create_tts_connector() -> VoiceTTSConnector:

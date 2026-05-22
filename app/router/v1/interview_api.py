@@ -1,13 +1,7 @@
-"""Module 4 — Voice interview and WebSocket.
-
-MVP MOCK:
-    REST endpoints (create session, get report) return deterministic fake data.
-    WebSocket voice pipeline remains stub (requires STT/TTS connectors).
-"""
+"""Module 4 — Voice interview and WebSocket."""
 
 import contextlib
 import logging
-import uuid
 from collections.abc import Callable
 from typing import Annotated, Any
 
@@ -25,7 +19,7 @@ from app.core.providers.services import (
 from app.core.rate_limit import limiter
 from app.models.user import User
 from app.schema.request import InterviewSessionRequest
-from app.schema.response import InterviewReportResponse, InterviewSessionResponse, STARScore
+from app.schema.response import InterviewReportResponse, InterviewSessionResponse
 from app.service.extraction.service import ExtractionService
 from app.service.interview.service import InterviewService
 
@@ -50,32 +44,27 @@ async def create_interview_session(
     extraction: Annotated[ExtractionService, Depends(get_extraction_service)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> InterviewSessionResponse:
-    """Create a new (REST-tracked) interview session shell.
-
-    MVP MOCK: validates cv_id ownership, persists a minimal InterviewSession
-    row for ownership tracking, returns deterministic session metadata.
-    TODO: populate with real data when pipeline is ready.
-    """
-    # Ownership check
+    """Create a new interview session shell."""
     cv = await extraction.get_cv(db, payload.cv_id, user.id)
     if cv is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="CV not found or access denied.",
         )
-
-    # Persist a minimal session shell so GET /report can verify ownership.
-    from app.models.interview_session import InterviewSession
-
-    session_id = str(uuid.uuid4())
-    session_record = InterviewSession(
-        id=session_id,
-        user_id=user.id,
-        cv_id=payload.cv_id,
-        mode=payload.mode,
-    )
-    db.add(session_record)
-    await db.flush()
+    try:
+        session_id = await service.create_session(
+            session=db,
+            cv_id=payload.cv_id,
+            user_id=user.id,
+            mode=payload.mode,
+            job_listing_id=getattr(payload, "job_listing_id", None),
+            duration_minutes=getattr(payload, "duration_minutes", 5),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create session: {exc}",
+        ) from exc
 
     return InterviewSessionResponse(
         session_id=session_id,
@@ -94,12 +83,8 @@ async def get_interview_report(
     service: Annotated[InterviewService, Depends(get_interview_service)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> InterviewReportResponse:
-    """Fetch the final STAR-scored report for a session.
-
-    MVP MOCK: validates session ownership, returns deterministic report.
-    TODO: query real evaluation data from the persisted session.
-    """
-    # Ownership check: session must exist and belong to the calling user
+    """Fetch the final STAR-scored report for a session."""
+    # Ownership check
     from sqlalchemy import select
 
     from app.models.interview_session import InterviewSession
@@ -109,31 +94,20 @@ async def get_interview_report(
         InterviewSession.user_id == user.id,
     )
     result = await db.execute(stmt)
-    session_row = result.scalars().first()
-    if session_row is None:
+    if result.scalars().first() is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Interview session not found or access denied.",
         )
-
-    return InterviewReportResponse(
-        session_id=session_id,
-        overall_confidence=65.0,
-        total_questions=5,
-        star_scores=[
-            STARScore(situation=7.0, task=6.5, action=8.0, result=7.5),
-            STARScore(situation=6.0, task=7.0, action=7.5, result=6.0),
-        ],
-        logic_issues=[
-            "Answer #2 lacked specific metrics.",
-            "Transition between situation and action was unclear in Q3.",
-        ],
-        improvement_suggestions=[
-            "Quantify results with specific numbers.",
-            "Use the STAR framework more explicitly.",
-            "Practice answering behavioral questions under time pressure.",
-        ],
-    )
+    try:
+        return await service.get_report(session=db, session_id=session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve report: {exc}",
+        ) from exc
 
 
 @router.websocket("/ws")
@@ -143,9 +117,14 @@ async def interview_websocket(
 ) -> None:
     """Real-time voice interview channel.
 
-    TODO: implement audio processing when STT/TTS connectors are ready.
+    Frame protocol:
+      - First message (JSON): ``{"token": "<jwt>", "cv_id": "...", "job_title": "...",
+                                 "mode": "practice|mock|quick", "duration_minutes": 5}``
+      - Subsequent binary frames: raw PCM Int16 mono 16 kHz audio chunks.
+      - Server sends JSON events and binary PCM TTS audio.
     """
     await websocket.accept()
+    _pipeline = None
 
     try:
         # Require authentication as the first message
@@ -167,21 +146,45 @@ async def interview_websocket(
     # Initialize pipeline
     _pipeline = pipeline_factory(websocket.send_json, websocket.send_bytes, user_id=user_id)
 
+    # Start the interview session
+    cv_data: dict[str, Any] = auth_data.get("cv_data") or {}
+    jd_data: dict[str, Any] | None = auth_data.get("jd_data")
+    job_title: str = auth_data.get("job_title", "Software Engineer")
+    mode: str = auth_data.get("mode", "practice")
+    duration_minutes: int = int(auth_data.get("duration_minutes", 5))
+
+    try:
+        await _pipeline.start(
+            job_title=job_title,
+            cv_data=cv_data,
+            jd_data=jd_data,
+            mode=mode,
+            duration_minutes=duration_minutes,
+        )
+    except Exception as exc:
+        _logger.error("WS /interview/ws: pipeline.start failed — %s", exc)
+        await websocket.close(code=1011)
+        return
+
     try:
         while True:
             data = await websocket.receive()
             if "bytes" in data:
-                # await pipeline.process_audio(data["bytes"])
-                pass
+                await _pipeline.feed_audio(data["bytes"])
             elif "text" in data:
-                # handle json/text commands
-                pass
+                try:
+                    msg = __import__("json").loads(data["text"])
+                    if msg.get("action") == "stop":
+                        break
+                except Exception:
+                    pass
     except WebSocketDisconnect:
-        _logger.info("WebSocket disconnected")
+        _logger.info("WebSocket disconnected (user=%s)", user_id)
     except Exception as exc:
         _logger.error("WebSocket error: %s", exc)
         with contextlib.suppress(Exception):
             await websocket.close(code=1000)
     finally:
-        with contextlib.suppress(NotImplementedError, Exception):
-            await _pipeline.stop()
+        if _pipeline is not None:
+            with contextlib.suppress(Exception):
+                await _pipeline.stop()

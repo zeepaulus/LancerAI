@@ -32,16 +32,19 @@ dependencies = [
     "chromadb>=0.5.0",
     "qdrant-client>=1.7.0",
     # Module 3: Job Matching
-    # "sentence-transformers>=3.0.0",  # TODO: uncommit khi matching service được implement
-    # "scrapy>=2.11.0",    # TODO: uncommit khi crawler_worker được implement
-    # "playwright>=1.48.0",  # TODO: uncommit khi crawler_worker được implement
+    "sentence-transformers>=3.0.0",
+    "scrapy>=2.11.0",
+    "playwright>=1.48.0",
     # Module 4: Voice AI
-    # "transformers>=4.41.0",  # TODO: uncommit khi VoiceSTTConnector được implement
+    "faster-whisper>=1.0.0",    # STT — CTranslate2 int8 engine (spec requirement)
+    "torch>=2.0.0",             # Required by silero-vad
+    "torchaudio>=2.0.0",        # Audio resampling
+    "silero-vad>=5.0",          # VAD (Voice Activity Detection)
     "edge-tts>=6.1.0",
     "pydub>=0.25.1",
     "httpx>=0.27.0",
     # Document Generation
-    # "weasyprint>=62.0",   # TODO: uncommit khi document_worker được implement
+    "weasyprint>=62.0",
     "python-docx>=1.1.0",
     "websockets>=16.0",
     "soundfile>=0.13.1",
@@ -52,6 +55,7 @@ dependencies = [
     "bcrypt>=4.2.0",
     "pyjwt>=2.12.1",
     "slowapi>=0.1.9",
+    "neo4j>=5.0.0",
 ]
 
 [project.optional-dependencies]

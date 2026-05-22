@@ -1,7 +1,7 @@
 """add_job_match_result_and_interview_transcript
 
 Revision ID: 3048af82dd00
-Revises: 
+Revises:
 Create Date: 2026-05-11 23:10:18.356617
 
 """
