@@ -60,7 +60,7 @@ Cung cấp benchmark ngành và các từ khóa ATS quan trọng nhất cho vị
         raw = await llm.generate(
             prompt,
             system=_RETRIEVAL_SYSTEM,
-            use_cloud=bool(llm._cloud_api_key),
+            use_cloud=llm.has_cloud,
             json_mode=True,
         )
         raw = raw.strip()

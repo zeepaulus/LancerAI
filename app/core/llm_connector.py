@@ -44,6 +44,15 @@ class LLMConnector:
         self._client = httpx.AsyncClient(timeout=_TIMEOUT)
 
     # ------------------------------------------------------------------
+    # Public properties
+    # ------------------------------------------------------------------
+
+    @property
+    def has_cloud(self) -> bool:
+        """True when a cloud API key is configured."""
+        return bool(self._cloud_api_key)
+
+    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
