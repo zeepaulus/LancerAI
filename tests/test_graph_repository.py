@@ -43,7 +43,7 @@ async def test_get_related_skills_success() -> None:
 @pytest.mark.asyncio
 async def test_get_related_skills_invalid_depth() -> None:
     repo = GraphRepository("bolt://localhost:7687", "neo4j", "password", driver=MagicMock())
-    with pytest.raises(ValueError, match="depth must be a positive integer"):
+    with pytest.raises(ValueError, match="depth must be an integer between 1 and 5"):
         await repo.get_related_skills("Python", depth=0)
 
 
