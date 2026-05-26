@@ -105,7 +105,7 @@ class OptimizationService:
         improvement_score: float = final_state.get("overall_improvement_score", 0.0)
 
         # Convert to 0-100 audit_score (spec uses percentage)
-        audit_score = round(improvement_score * 100, 1)
+        audit_score = round(min(100.0, max(0.0, improvement_score * 100)), 1)
 
         # 5. Persist optimized data back to CVRecord
         await self._cv_repo.update(session, cv_id, optimized_data=optimized_cv)
