@@ -439,20 +439,17 @@ def crawl_job_listings(self: Any, source: str = "topcv", max_pages: int = 5) -> 
     try:
         def _run_async_helper(coro: Any) -> Any:
             try:
-                loop = asyncio.get_event_loop()
+                asyncio.get_running_loop()
             except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop = asyncio.get_event_loop()
+                # No loop running — safe to use asyncio.run()
+                return asyncio.run(coro)
 
-            if loop.is_running():
-                from concurrent.futures import ThreadPoolExecutor
+            # Loop already running (e.g., inside Celery with gevent) — use thread
+            from concurrent.futures import ThreadPoolExecutor
 
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(asyncio.run, coro)
-                    return future.result()
-            else:
-                return loop.run_until_complete(coro)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
 
         jobs_added, jobs_skipped = _run_async_helper(_async_save_job_listings(jobs))
     except Exception as exc:
