@@ -45,6 +45,7 @@ def test_crawler_worker_flow(
 
     # Arrange: Mock session and DB queries
     mock_session = AsyncMock()
+    mock_session.add = MagicMock()  # .add() is synchronous in SQLAlchemy
     mock_session_maker = MagicMock()
     mock_session_maker.return_value.__aenter__.return_value = mock_session
     mock_get_session_factory.return_value = mock_session_maker
