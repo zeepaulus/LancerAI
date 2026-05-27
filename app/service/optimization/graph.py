@@ -31,7 +31,7 @@ def _make_node(
     graph_repo: GraphRepository | None = None,
 ) -> Any:
     async def node(state: CVOptimizationState) -> dict[str, Any]:
-        if agent_fn.__name__ == "retrieval_agent":
+        if agent_fn is retrieval_agent:
             return await agent_fn(state, llm, graph_repo)
         return await agent_fn(state, llm)
 

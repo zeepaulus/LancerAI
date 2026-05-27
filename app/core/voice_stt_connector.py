@@ -235,7 +235,19 @@ class VoiceSTTConnector:
             ) from exc
 
     # ------------------------------------------------------------------
-    # Public API
+    # Public API — VAD
+    # ------------------------------------------------------------------
+
+    def check_vad(self, chunk_float32: np.ndarray) -> bool:
+        """Feed one audio chunk to VAD; return True when silence threshold crossed (sentence ready)."""
+        return self._vad.update(chunk_float32)
+
+    def reset_vad(self) -> None:
+        """Reset VAD accumulated speech/silence counters."""
+        self._vad.reset()
+
+    # ------------------------------------------------------------------
+    # Public API — Transcription
     # ------------------------------------------------------------------
 
     async def transcribe(self, audio_bytes: bytes, sample_rate: int = SAMPLE_RATE) -> str:
@@ -253,7 +265,7 @@ class VoiceSTTConnector:
             Stripped transcription string (empty string if nothing detected).
         """
         self._ensure_whisper()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._transcribe_sync, audio_bytes, sample_rate)
 
     def _transcribe_sync(self, audio_bytes: bytes, sample_rate: int) -> str:

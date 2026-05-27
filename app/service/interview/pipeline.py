@@ -177,11 +177,11 @@ class InterviewPipeline:
             import numpy as np
             window_f32 = np.frombuffer(window_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
-            if self._stt._vad.update(window_f32):
+            if self._stt.check_vad(window_f32):
                 # Silence threshold crossed — snapshot and queue for STT
                 snapshot = bytearray(self._audio_buffer)
                 self._audio_buffer.clear()
-                self._stt._vad.reset()
+                self._stt.reset_vad()
                 await self._process_user_turn(bytes(snapshot))
                 break
 
@@ -252,7 +252,7 @@ class InterviewPipeline:
 
         try:
             async for token in self._llm.generate_chat_stream(
-                self.state.to_llm_messages(), use_cloud=bool(self._llm._cloud_api_key)
+                self.state.to_llm_messages(), use_cloud=self._llm.has_cloud
             ):
                 if self._abort_tts.is_set() or self._phase == SessionPhase.STOPPED:
                     break

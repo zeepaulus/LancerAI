@@ -72,7 +72,7 @@ Phân tích điểm yếu của CV và trả về JSON:"""
         raw = await llm.generate(
             prompt,
             system=_ROAST_SYSTEM,
-            use_cloud=bool(llm._cloud_api_key),
+            use_cloud=llm.has_cloud,
             json_mode=True,
         )
         raw = raw.strip()

@@ -117,7 +117,7 @@ Trả về JSON với cùng schema nhưng thứ tự section phù hợp với te
         raw = await self._llm.generate(
             prompt,
             system=_RENDER_SYSTEM,
-            use_cloud=bool(self._llm._cloud_api_key),
+            use_cloud=self._llm.has_cloud,
             json_mode=True,
         )
         raw = raw.strip()
@@ -144,7 +144,7 @@ Trả về JSON với cùng schema nhưng thứ tự section phù hợp với te
         html_content = _build_html(rendered, template)
 
         try:
-            from weasyprint import HTML  # type: ignore[import-not-found]
+            from weasyprint import HTML  # type: ignore[import-untyped]
 
             pdf_bytes: bytes = HTML(string=html_content).write_pdf()
             logger.info("[TemplateRenderer] PDF generated via WeasyPrint (%d bytes)", len(pdf_bytes))
