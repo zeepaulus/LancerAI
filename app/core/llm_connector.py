@@ -76,6 +76,19 @@ class LLMConnector:
 
         self._client = httpx.AsyncClient(timeout=_TIMEOUT)
 
+    # ------------------------------------------------------------------
+    # Public properties
+    # ------------------------------------------------------------------
+
+    @property
+    def has_cloud(self) -> bool:
+        """True when a cloud API key is configured."""
+        return bool(self._cloud_api_key)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
     def _resolve_nvidia(self, use_cloud: bool, use_nvidia: bool) -> tuple[bool, bool]:
         """Auto-promote to NVIDIA if nvidia key is set and cloud key is empty/placeholder."""
         if use_nvidia:
@@ -88,6 +101,7 @@ class LLMConnector:
             return False, True
             
         return use_cloud, use_nvidia
+
 
     def _chat_url(self, use_cloud: bool, use_nvidia: bool = False) -> str:
         if use_nvidia:

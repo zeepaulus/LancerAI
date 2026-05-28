@@ -92,7 +92,7 @@ async def question_node(state: InterviewState, llm: LLMConnector) -> dict[str, A
         question = await llm.generate(
             prompt,
             system=_QUESTION_SYSTEM,
-            use_cloud=bool(llm._cloud_api_key),
+            use_cloud=llm.has_cloud,
         )
         return {"current_question": question.strip()}
     except Exception as exc:
@@ -128,7 +128,7 @@ Vị trí ứng tuyển: {state.job_title}
         raw = await llm.generate(
             prompt,
             system=_EVALUATE_SYSTEM,
-            use_cloud=bool(llm._cloud_api_key),
+            use_cloud=llm.has_cloud,
             json_mode=True,
         )
 
@@ -154,7 +154,7 @@ Vị trí ứng tuyển: {state.job_title}
         return {"star_scores": [score]}
 
     except (json.JSONDecodeError, KeyError, ValueError) as exc:
-        logger.error("[evaluate_node] JSON parse failed: %s — raw=%r", exc, raw[:200] if "raw" in dir() else "")
+        logger.error("[evaluate_node] JSON parse failed: %s — raw=%r", exc, raw[:200])
         return {}
     except Exception as exc:
         logger.error("[evaluate_node] Failed: %s", exc)
@@ -197,7 +197,7 @@ Tổng kết phiên phỏng vấn:"""
         raw = await llm.generate(
             prompt,
             system=_WRAP_UP_SYSTEM,
-            use_cloud=bool(llm._cloud_api_key),
+            use_cloud=llm.has_cloud,
             json_mode=True,
         )
 

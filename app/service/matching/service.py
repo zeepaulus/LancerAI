@@ -18,6 +18,7 @@ import re
 from typing import Any
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.llm_connector import LLMConnector
 from app.models.job_match_result import JobMatchResult, MatchStatus
@@ -201,7 +202,7 @@ class MatchingService:
 
     async def save_job(
         self,
-        session: Any,
+        session: AsyncSession,
         user_id: str,
         cv_id: str,
         job_id: str,
@@ -222,7 +223,7 @@ class MatchingService:
 
     async def update_match_status(
         self,
-        session: Any,
+        session: AsyncSession,
         match_result_id: str,
         user_id: str,
         status: str,
@@ -258,7 +259,8 @@ class MatchingService:
             self._llm.embed(jd_text[:2000]),
         )
         if not cv_embed or not jd_embed or len(cv_embed) != len(jd_embed):
-            return 0.5  # neutral fallback when embedding unavailable
+            logger.warning("[Matching] Embedding unavailable or dimension mismatch — semantic score defaulting to 0.0")
+            return 0.0  # fail-safe: no free points when embedding is broken
         return _cosine_similarity(cv_embed, jd_embed)
 
     async def _llm_feedback(
@@ -283,7 +285,7 @@ Phân tích kỹ năng còn thiếu và đưa ra phản hồi cải thiện:"""
             raw = await self._llm.generate(
                 prompt,
                 system=_MATCH_SYSTEM,
-                use_cloud=bool(self._llm._cloud_api_key),
+                use_cloud=self._llm.has_cloud,
                 json_mode=True,
             )
             raw = raw.strip()
@@ -408,8 +410,14 @@ async def _fetch_jd_from_url(url: str) -> str:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(url, follow_redirects=True)
             resp.raise_for_status()
-            # Strip HTML tags with a simple regex (no extra dep)
-            text = re.sub(r"<[^>]+>", " ", resp.text)
+            # Use BeautifulSoup for correct HTML→text (handles script/style/entities)
+            from bs4 import BeautifulSoup  # noqa: PLC0415
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            # Remove script and style blocks entirely
+            for tag in soup(["script", "style"]):
+                tag.decompose()
+            text = soup.get_text(separator=" ")
             text = re.sub(r"\s+", " ", text).strip()
             return text[:8000]
     except httpx.RequestError as exc:

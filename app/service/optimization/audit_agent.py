@@ -87,7 +87,7 @@ Kiểm tra tính trung thực và trả về JSON:"""
         raw = await llm.generate(
             prompt,
             system=_AUDIT_SYSTEM,
-            use_cloud=bool(llm._cloud_api_key),
+            use_cloud=llm.has_cloud,
             json_mode=True,
         )
         from app.core.json_extractor import clean_and_parse_json
@@ -117,11 +117,25 @@ Kiểm tra tính trung thực và trả về JSON:"""
                 approved_sections.append(section)
 
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        logger.warning("[audit_agent] JSON parse failed (%s) — auto-approving all rewrites", exc)
-        approved_sections = list(rewritten_sections)
+        logger.warning("[audit_agent] JSON parse failed (%s) — falling back to raw CV (no rewrites applied)", exc)
+        return {
+            "audit_flags": [],
+            "audit_passed": False,
+            "optimized_cv": raw_cv,
+            "overall_improvement_score": 0.0,
+            "pipeline_complete": True,
+            "current_step": "audit_done",
+        }
     except Exception as exc:
-        logger.error("[audit_agent] LLM call failed (%s) — auto-approving all rewrites", exc)
-        approved_sections = list(rewritten_sections)
+        logger.error("[audit_agent] LLM call failed (%s) — falling back to raw CV (no rewrites applied)", exc)
+        return {
+            "audit_flags": [],
+            "audit_passed": False,
+            "optimized_cv": raw_cv,
+            "overall_improvement_score": 0.0,
+            "pipeline_complete": True,
+            "current_step": "audit_done",
+        }
 
     # Build optimized_cv by applying approved rewrites to raw_cv
     optimized_cv = _apply_rewrites(raw_cv, approved_sections)
@@ -129,6 +143,7 @@ Kiểm tra tính trung thực và trả về JSON:"""
     # Compute overall improvement score (average of approved sections)
     if approved_sections:
         overall_score = sum(s.improvement_score for s in approved_sections) / len(approved_sections)
+        overall_score = min(1.0, max(0.0, overall_score))
     else:
         overall_score = 0.0
 
@@ -180,10 +195,7 @@ def _set_nested(obj: Any, path: str, value: str) -> None:
         ``experience[0].key_impacts[0]`` → obj["experience"][0]["key_impacts"][0] = value
         ``skills_matrix.languages``       → obj["skills_matrix"]["languages"] = value
     """
-    import re
 
-    re.split(r"\.|\[(\d+)\]", path)
-    # re.split with a capture group inserts None/'' for non-matching splits
     parts: list[str | int] = []
     for raw_tok in path.replace("]", "").split("."):
         if "[" in raw_tok:

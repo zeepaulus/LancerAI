@@ -117,7 +117,7 @@ Trả về JSON với cùng schema nhưng thứ tự section phù hợp với te
         raw = await self._llm.generate(
             prompt,
             system=_RENDER_SYSTEM,
-            use_cloud=bool(self._llm._cloud_api_key),
+            use_cloud=self._llm.has_cloud,
             json_mode=True,
         )
         raw = raw.strip()

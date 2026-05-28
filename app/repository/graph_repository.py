@@ -46,8 +46,8 @@ class GraphRepository:
             logger.warning("Neo4j driver is not initialized. get_related_skills returning empty list.")
             return []
 
-        if not isinstance(depth, int) or depth < 1:
-            raise ValueError("depth must be a positive integer")
+        if not isinstance(depth, int) or depth < 1 or depth > 5:
+            raise ValueError("depth must be an integer between 1 and 5")
 
         query = (
             f"MATCH p = (s {{name: $skill_name}})-[*1..{depth}]-(o) "
