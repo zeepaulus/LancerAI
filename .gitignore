@@ -83,3 +83,7 @@ skills-lock.json
 # Local notes and agent tooling
 .agents/
 mo_ta/
+
+# Test CV and OCR files
+*.pdf
+cv_test_image.png
