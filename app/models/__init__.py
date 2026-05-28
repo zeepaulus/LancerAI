@@ -11,6 +11,7 @@ from app.models.interview_session import InterviewSession
 from app.models.interview_transcript import InterviewTranscript
 from app.models.job_listing import JobListing
 from app.models.job_match_result import JobMatchResult, MatchStatus
+from app.models.llm_cache import LLMResponseCache
 from app.models.user import User, UserRole
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "MatchStatus",
     "InterviewSession",
     "InterviewTranscript",
+    "LLMResponseCache",
 ]

@@ -30,7 +30,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB upload cap
 
 # Minimum characters per page before we consider it a "text-layer" PDF.
 # Below this threshold we assume the page is scanned and run OCR.
-_MIN_TEXT_DENSITY = 50
+_MIN_TEXT_DENSITY = 5
 
 _CV_EXTRACTION_SYSTEM = """Bạn là chuyên gia phân tích CV tuyển dụng.
 Nhiệm vụ: Trích xuất thông tin từ CV và trả về JSON HỢP LỆ theo schema sau.
@@ -54,13 +54,9 @@ def _build_extraction_prompt(raw_text: str) -> str:
 
 def _parse_extraction_response(raw: str, cv_id: str) -> CVExtractionResponse:
     """Parse LLM JSON output into CVExtractionResponse, with a safe fallback."""
-    raw = raw.strip()
-    # Strip markdown code fences if present
-    if raw.startswith("```"):
-        lines = raw.split("\n")
-        raw = "\n".join(lines[1:]).rstrip("`").strip()
     try:
-        data: dict[str, Any] = json.loads(raw)
+        from app.core.json_extractor import clean_and_parse_json
+        data: dict[str, Any] = clean_and_parse_json(raw)
         return CVExtractionResponse(cv_id=cv_id, **data)
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         logger.warning("[Extraction] LLM JSON parse failed (%s) — returning empty schema", exc)

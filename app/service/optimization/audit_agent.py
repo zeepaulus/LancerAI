@@ -90,11 +90,8 @@ Kiểm tra tính trung thực và trả về JSON:"""
             use_cloud=bool(llm._cloud_api_key),
             json_mode=True,
         )
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = "\n".join(raw.split("\n")[1:]).rstrip("`").strip()
-
-        data: dict[str, Any] = json.loads(raw)
+        from app.core.json_extractor import clean_and_parse_json
+        data: dict[str, Any] = clean_and_parse_json(raw)
         verdicts_raw: list[dict[str, Any]] = data.get("verdicts", [])
 
         # Map field → RewrittenSection for quick lookup

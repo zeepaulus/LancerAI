@@ -52,6 +52,7 @@ class OCRProcessor:
             self._ocr = PaddleOCR(
                 use_angle_cls=self._use_angle_cls,
                 lang=lang,
+                enable_mkldnn=False,
             )
             logger.info("[OCR] PaddleOCR ready")
         except ImportError as exc:
@@ -90,9 +91,28 @@ class OCRProcessor:
             pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
             img = np.array(pil_img)[:, :, ::-1]  # RGB → BGR
 
-        raw = self._ocr.ocr(img, cls=self._use_angle_cls)
+        try:
+            raw = self._ocr.ocr(img, cls=self._use_angle_cls)
+        except TypeError:
+            raw = self._ocr.ocr(img)
         if not raw or raw[0] is None:
             return []
+
+        if raw and isinstance(raw[0], dict):
+            dict_data = raw[0]
+            texts = dict_data.get("rec_texts", [])
+            scores = dict_data.get("rec_scores", [])
+            polys = dict_data.get("dt_polys") or dict_data.get("rec_polys") or dict_data.get("rec_boxes", [])
+            
+            classic_list = []
+            for i in range(len(texts)):
+                text = texts[i]
+                score = scores[i] if i < len(scores) else 1.0
+                poly = polys[i] if i < len(polys) else [[0, 0], [0, 0], [0, 0], [0, 0]]
+                if hasattr(poly, "tolist"):
+                    poly = poly.tolist()
+                classic_list.append([poly, (text, score)])
+            raw = [classic_list]
 
         results: list[dict[str, Any]] = []
         for line in raw[0]:

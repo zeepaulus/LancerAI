@@ -63,11 +63,8 @@ Cung cấp benchmark ngành và các từ khóa ATS quan trọng nhất cho vị
             use_cloud=bool(llm._cloud_api_key),
             json_mode=True,
         )
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = "\n".join(raw.split("\n")[1:]).rstrip("`").strip()
-
-        data: dict[str, Any] = json.loads(raw)
+        from app.core.json_extractor import clean_and_parse_json
+        data: dict[str, Any] = clean_and_parse_json(raw)
 
         # Build keyword_frequency_map from all skill/keyword lists
         keyword_frequency_map: dict[str, int] = {}

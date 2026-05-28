@@ -23,6 +23,11 @@ def _create_llm_connector() -> LLMConnector:
         cloud_base_url=s.llm_cloud_base_url,
         cloud_api_key=s.llm_cloud_api_key,
         cloud_model=s.llm_cloud_model,
+        nvidia_base_url=s.llm_nvidia_base_url,
+        nvidia_api_key=s.llm_nvidia_api_key,
+        nvidia_model=s.llm_nvidia_model,
+        nvidia_max_tokens=s.llm_nvidia_max_tokens,
+        nvidia_enable_thinking=s.llm_nvidia_enable_thinking,
     )
 
 

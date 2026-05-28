@@ -91,6 +91,17 @@ class Settings(BaseSettings):
     llm_cloud_base_url: str = "https://api.groq.com/openai/v1"
     llm_cloud_model: str = "llama-3.1-70b-versatile"
 
+    # NVIDIA NIM API (primary cloud LLM)
+    llm_nvidia_api_key: str = ""
+    llm_nvidia_base_url: str = "https://integrate.api.nvidia.com"
+    llm_nvidia_model: str = "google/gemma-4-31b-it"
+    llm_nvidia_max_tokens: int = 16384
+    llm_nvidia_enable_thinking: bool = True
+
+    # LLM Semantic Cache
+    llm_cache_enabled: bool = True
+    llm_cache_similarity_threshold: float = 0.92  # cosine similarity >= this = cache HIT
+
     # --- Voice ------------------------------------------------------------
     # STT — Faster-Whisper
     stt_model_size: str = "small"                # tiny | base | small | medium

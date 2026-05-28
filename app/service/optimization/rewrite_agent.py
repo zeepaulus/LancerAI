@@ -88,11 +88,8 @@ Viết lại các đoạn trên theo công thức XYZ/STAR. Trả về JSON:"""
             use_cloud=bool(llm._cloud_api_key),
             json_mode=True,
         )
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = "\n".join(raw.split("\n")[1:]).rstrip("`").strip()
-
-        data: dict[str, Any] = json.loads(raw)
+        from app.core.json_extractor import clean_and_parse_json
+        data: dict[str, Any] = clean_and_parse_json(raw)
         rewrites_raw: list[dict[str, Any]] = data.get("rewrites", [])
 
         rewritten_sections: list[RewrittenSection] = []

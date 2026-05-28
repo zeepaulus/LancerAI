@@ -50,7 +50,7 @@ class GraphRepository:
             raise ValueError("depth must be a positive integer")
 
         query = (
-            f"MATCH (s {{name: $skill_name}})-[p*1..{depth}]-(o) "
+            f"MATCH p = (s {{name: $skill_name}})-[*1..{depth}]-(o) "
             "WHERE o.name IS NOT NULL AND o <> s "
             "WITH o, min(length(p)) AS dist "
             "RETURN o.name AS name, dist AS distance "

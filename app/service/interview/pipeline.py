@@ -46,9 +46,16 @@ def _split_sentence(text: str) -> tuple[str, str]:
 
     Returns (sentence, remainder). If no boundary found, returns ("", text).
     """
-    parts = _SENTENCE_BOUNDARY.split(text, maxsplit=1)
-    if len(parts) >= 2 and len(parts[0].strip()) >= _MIN_SENTENCE_CHARS:
-        return parts[0].strip(), parts[1]
+    matches = list(_SENTENCE_BOUNDARY.finditer(text))
+    if not matches:
+        return "", text
+
+    for match in matches:
+        end_idx = match.end()
+        prefix = text[:end_idx].strip()
+        if len(prefix) >= _MIN_SENTENCE_CHARS:
+            remainder = text[end_idx:]
+            return prefix, remainder
     return "", text
 
 
@@ -295,6 +302,7 @@ class InterviewPipeline:
 
     async def _speak_sentence(self, sentence: str) -> None:
         """Synthesise one sentence and stream its PCM chunks to the client."""
+        logger.info("[Pipeline] Speaking sentence: %r", sentence)
         try:
             async for pcm_chunk in self._tts.synthesize_stream(sentence):
                 if self._abort_tts.is_set():

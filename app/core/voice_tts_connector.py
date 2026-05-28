@@ -103,11 +103,15 @@ class VoiceTTSConnector:
         except ImportError as exc:
             raise RuntimeError("edge-tts not installed. Run: uv add edge-tts") from exc
 
-        communicate = edge_tts.Communicate(text, voice)
-        mp3_buffer = io.BytesIO()
-        async for msg_type, payload in communicate.stream():
-            if msg_type == "audio" and isinstance(payload, bytes):
-                mp3_buffer.write(payload)
+        try:
+            communicate = edge_tts.Communicate(text, voice)
+            mp3_buffer = io.BytesIO()
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio" and isinstance(chunk["data"], bytes):
+                    mp3_buffer.write(chunk["data"])
+        except Exception as exc:
+            logger.warning("[TTS] edge-tts communicate.stream failed: %s", exc)
+            raise
 
         mp3_data = mp3_buffer.getvalue()
         if not mp3_data:

@@ -143,8 +143,21 @@ async def interview_websocket(
         await websocket.close(code=1008)
         return
 
+    # Wrap send functions to handle disconnects gracefully without raising RuntimeError
+    async def safe_send_json(data: dict[str, Any]) -> None:
+        try:
+            await websocket.send_json(data)
+        except Exception as e:
+            _logger.debug("WS send_json failed (client disconnected): %s", e)
+
+    async def safe_send_bytes(data: bytes) -> None:
+        try:
+            await websocket.send_bytes(data)
+        except Exception as e:
+            _logger.debug("WS send_bytes failed (client disconnected): %s", e)
+
     # Initialize pipeline
-    _pipeline = pipeline_factory(websocket.send_json, websocket.send_bytes, user_id=user_id)
+    _pipeline = pipeline_factory(safe_send_json, safe_send_bytes, user_id=user_id)
 
     # Start the interview session
     cv_data: dict[str, Any] = auth_data.get("cv_data") or {}
