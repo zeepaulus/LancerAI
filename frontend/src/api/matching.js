@@ -1,4 +1,4 @@
-import { JOB_MATCH_PATH } from './paths';
+import { JOB_MATCH_PATH, jobRecommendationsPath } from './paths';
 import { apiJson } from './http';
 
 /**
@@ -12,4 +12,15 @@ export function matchCV(payload) {
         method: 'POST',
         body: payload,
     });
+}
+
+/**
+ * Get ranked job recommendations based on CV.
+ * Matches GET /api/v1/jobs/recommendations/{cv_id}?limit=...
+ * @param {string} cvId
+ * @param {number} limit
+ * @returns {Promise<object[]>} JobRecommendationResponse[]
+ */
+export function getRecommendations(cvId, limit = 10) {
+    return apiJson(jobRecommendationsPath(cvId, limit), { method: 'GET' });
 }

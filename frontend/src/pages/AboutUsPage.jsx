@@ -16,80 +16,73 @@ const AboutUsPage = () => {
         { id: 5, name: 'Nguyễn Việt Hùng', mssv: '23122032', role: 'AI Engineer (RAG, CoT & prompt engineering)', img: member5 }
     ];
 
-    const styles = {
-        container: { 
-            maxWidth: '600px', 
-            margin: '40px auto', 
-            padding: '0 20px', 
-            fontFamily: 'system-ui' 
-        },
-        title: { 
-            textAlign: 'center', 
-            fontSize: '28px', 
-            marginBottom: '40px', 
-            color: 'var(--text-color)' 
-        },
-        card: { 
-            display: 'flex', 
-            alignItems: 'center', 
-            padding: '20px', 
-            border: '1px solid var(--border-color)', 
-            borderRadius: '12px', 
-            marginBottom: '20px', 
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)', 
-            background: 'var(--nav-bg)' 
-        },
-        avatar: { 
-            width: '70px', 
-            height: '70px', 
-            borderRadius: '50%', 
-            backgroundColor: '#4a5568', 
-            color: 'white', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            fontSize: '24px', 
-            marginRight: '20px' 
-        },
-        infoBox: { 
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: '5px' 
-        },
-        name: { 
-            fontSize: '18px', 
-            fontWeight: 'bold', 
-            margin: 0,
-            color: 'var(--text-color)'
-        },
-        text: { 
-            fontSize: '14px', 
-            color: 'var(--text-color)', 
-            margin: 0 
-        }
-    };
-
     return (
-        <div style={{minHeight: '100vh'}}>
+        <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
             <Navbar />
             <div style={styles.container}>
-                <h1 style={styles.title}>Danh sách thành viên</h1>
+                <p className="caption-uppercase" style={{textAlign: 'center', color: 'var(--muted)', marginBottom: 'var(--sp-sm)'}}>
+                    ĐỘI NGŨ PHÁT TRIỂN
+                </p>
+                <h1 className="display-lg" style={styles.title}>Danh sách thành viên</h1>
                 
-                {teamMembers.map(member => (
-                    <div key={member.id} style={styles.card}>
-                        {/* Thay thế khung tròn văn bản bằng thẻ img */}
-                        <img src={member.img} alt={member.name} style={styles.avatar} />
-                        <div style={styles.infoBox}>
-                            <p style={styles.name}>{member.name}</p>
-                            <p style={styles.text}><strong>MSSV:</strong> {member.mssv}</p>
-                            <p style={styles.text}><strong>Vai trò:</strong> {member.role}</p>
+                <div style={styles.grid}>
+                    {teamMembers.map(member => (
+                        <div key={member.id} className="card" style={styles.memberCard}>
+                            <img src={member.img} alt={member.name} style={styles.avatar} />
+                            <div style={styles.infoBox}>
+                                <h3 className="title-sm" style={{marginBottom: 'var(--sp-xxs)'}}>{member.name}</h3>
+                                <span className="badge-pill" style={{marginBottom: 'var(--sp-xs)', fontSize: '10px'}}>
+                                    MSSV: {member.mssv}
+                                </span>
+                                <p style={styles.role}>{member.role}</p>
+                            </div>
                         </div>
-                    </div>
-                ))}
-
+                    ))}
+                </div>
             </div>
         </div>
     );
+};
+
+const styles = {
+    container: {
+        maxWidth: '700px',
+        margin: '0 auto',
+        padding: 'var(--sp-xl) var(--sp-lg) var(--sp-section)',
+    },
+    title: {
+        textAlign: 'center',
+        marginBottom: 'var(--sp-xxl)',
+    },
+    grid: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--sp-base)',
+    },
+    memberCard: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--sp-lg)',
+        padding: 'var(--sp-lg)',
+    },
+    avatar: {
+        width: '64px',
+        height: '64px',
+        borderRadius: 'var(--rounded-full)',
+        objectFit: 'cover',
+        border: '2px solid var(--hairline)',
+        flexShrink: 0,
+    },
+    infoBox: {
+        display: 'flex',
+        flexDirection: 'column',
+    },
+    role: {
+        fontSize: '13px',
+        color: 'var(--muted)',
+        lineHeight: 1.5,
+        letterSpacing: '0.15px',
+    },
 };
 
 export default AboutUsPage;

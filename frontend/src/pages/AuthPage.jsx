@@ -82,110 +82,71 @@ const AuthPage = () => {
         }
     };
 
-    const styles = {
-        wrapper: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f4f7f6', fontFamily: 'system-ui, sans-serif' },
-        card: { width: '100%', maxWidth: '400px', backgroundColor: '#fff', padding: '40px', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)' },
-        title: { fontSize: '24px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '8px' },
-        subtitle: { fontSize: '14px', color: '#666' },
-        
-        header: {
-            textAlign: 'center',
-            marginBottom: '30px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center'
-        },
-        authLogo: {
-            width: '60px',
-            height: 'auto',
-            marginBottom: '15px'
-        },
-
-        inputGroup: { marginBottom: '15px' },
-        input: { width: '100%', padding: '12px 15px', border: '1px solid #e1e1e1', borderRadius: '8px', fontSize: '15px', outline: 'none', transition: 'border 0.2s', boxSizing: 'border-box' },
-        errorText: { color: '#e53e3e', fontSize: '13px', marginTop: '5px', display: 'block' },
-        
-        banner: {
-            padding: '10px 12px',
-            borderRadius: '8px',
-            fontSize: '14px',
-            marginBottom: '16px'
-        },
-        bannerOk: { background: '#c6f6d5', color: '#22543d', border: '1px solid #9ae6b4' },
-        bannerErr: { background: '#fed7d7', color: '#822727', border: '1px solid #feb2b2' },
-        
-        btnPrimary: { width: '100%', padding: '14px', backgroundColor: '#3182ce', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', transition: 'background 0.2s' },
-        btnDisabled: { opacity: 0.65, cursor: 'not-allowed' },
-        
-        dividerBox: { display: 'flex', alignItems: 'center', margin: '25px 0' },
-        line: { flex: 1, height: '1px', backgroundColor: '#e1e1e1' },
-        dividerText: { padding: '0 15px', color: '#888', fontSize: '14px' },
-        
-        socialGroup: { display: 'flex', justifyContent: 'center', gap: '20px' },
-        socialBtn: { width: '50px', height: '50px', borderRadius: '50%', backgroundColor: '#fff', border: '1px solid #e1e1e1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 5px rgba(0,0,0,0.02)' },
-        socialIcon: { width: '24px', height: '24px', objectFit: 'contain' },
-        
-        footerInfo: { textAlign: 'center', marginTop: '30px', fontSize: '14px', color: '#666' },
-        link: { color: '#3182ce', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'none' },
-        helper: { fontSize: '12px', color: '#718096', marginTop: '-8px', marginBottom: '8px' },
-    };
-
     const signupBanner = location.state?.signupOk;
+
+    const socials = [
+        { src: googleLogo, alt: 'Google' },
+        { src: microsoftLogo, alt: 'Microsoft' },
+        { src: linkedinLogo, alt: 'LinkedIn' },
+        { src: githubLogo, alt: 'GitHub' },
+    ];
 
     return (
         <div style={styles.wrapper}>
+            {/* Subtle background orbs */}
+            <div className="gradient-orb gradient-orb--lavender" style={{width: '500px', height: '500px', top: '-150px', right: '-100px', opacity: 0.2}}></div>
+            <div className="gradient-orb gradient-orb--mint" style={{width: '400px', height: '400px', bottom: '-100px', left: '-80px', opacity: 0.15}}></div>
+
             <div style={styles.card}>
                 <div style={styles.header}>
                     <img src={logoImg} alt="Logo" style={styles.authLogo} />
-                    <h2 style={styles.title}>{isLogin ? 'Chào mừng trở lại' : 'Tạo tài khoản mới'}</h2>
+                    <h2 className="display-sm" style={{marginBottom: 'var(--sp-xs)'}}>
+                        {isLogin ? 'Chào mừng trở lại' : 'Tạo tài khoản mới'}
+                    </h2>
                     <p style={styles.subtitle}>
                         {isLogin ? 'Đăng nhập để tiếp tục rèn luyện phỏng vấn' : 'Bắt đầu hành trình chinh phục nhà tuyển dụng'}
                     </p>
                 </div>
 
                 {isLogin && signupBanner && (
-                    <div style={{ ...styles.banner, ...styles.bannerOk }}>
-                        Đăng ký đã được gửi tới backend. Vui lòng đăng nhập (khi backend bật login thật).
+                    <div style={styles.bannerOk}>
+                        Đăng ký đã được gửi tới backend. Vui lòng đăng nhập.
                     </div>
                 )}
 
                 <form onSubmit={handleSubmit}>
                     {submitError ? (
-                        <div style={{ ...styles.banner, ...styles.bannerErr }}>{submitError}</div>
+                        <div style={styles.bannerErr}>{submitError}</div>
                     ) : null}
 
                     {isLogin ? (
                         <div style={styles.inputGroup}>
-                            <input style={styles.input} name="usernameOrEmail" type="text" autoComplete="username" placeholder="Email hoặc Tên người dùng" onChange={handleInputChange} />
+                            <input className="text-input" name="usernameOrEmail" type="text" autoComplete="username" placeholder="Email hoặc Tên người dùng" onChange={handleInputChange} />
                             {errors.usernameOrEmail && <span style={styles.errorText}>{errors.usernameOrEmail}</span>}
                         </div>
                     ) : (
                         <>
                             <div style={styles.inputGroup}>
-                                <input style={styles.input} name="username" placeholder="Tên tài khoản (Chữ & Số)" onChange={handleInputChange} />
+                                <input className="text-input" name="username" placeholder="Tên tài khoản (Chữ & Số)" onChange={handleInputChange} />
                                 {errors.username && <span style={styles.errorText}>{errors.username}</span>}
                             </div>
                             <div style={styles.inputGroup}>
-                                <input style={styles.input} name="email" type="email" autoComplete="email" placeholder="Địa chỉ Email" onChange={handleInputChange} />
+                                <input className="text-input" name="email" type="email" autoComplete="email" placeholder="Địa chỉ Email" onChange={handleInputChange} />
                                 {errors.email && <span style={styles.errorText}>{errors.email}</span>}
                             </div>
                         </>
                     )}
 
                     <div style={styles.inputGroup}>
-                        <input style={styles.input} name="password" type="password" autoComplete={isLogin ? 'current-password' : 'new-password'} placeholder="Mật khẩu" onChange={handleInputChange} />
+                        <input className="text-input" name="password" type="password" autoComplete={isLogin ? 'current-password' : 'new-password'} placeholder="Mật khẩu" onChange={handleInputChange} />
                         {errors.password && <span style={styles.errorText}>{errors.password}</span>}
                     </div>
 
                     <button 
                         type="submit"
                         disabled={submitting}
-                        style={{
-                            ...styles.btnPrimary,
-                            ...(submitting ? styles.btnDisabled : {})
-                        }}
-                        onMouseOver={(e) => { if (!submitting) e.target.style.backgroundColor = '#2b6cb0'; }}
-                        onMouseOut={(e) => { if (!submitting) e.target.style.backgroundColor = '#3182ce'; }}
+                        className="btn-primary"
+                        style={{width: '100%', marginTop: 'var(--sp-sm)', height: '44px', fontSize: '16px'}}
                     >
                         {submitting ? 'Đang xử lý...' : (isLogin ? 'Đăng nhập' : 'Đăng ký')}
                     </button>
@@ -198,18 +159,11 @@ const AuthPage = () => {
                 </div>
 
                 <div style={styles.socialGroup}>
-                    <button type="button" style={styles.socialBtn} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f9f9f9'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; }}>
-                        <img src={googleLogo} alt="Google" style={styles.socialIcon} />
-                    </button>
-                    <button type="button" style={styles.socialBtn} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f9f9f9'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; }}>
-                        <img src={microsoftLogo} alt="Microsoft" style={styles.socialIcon} />
-                    </button>
-                    <button type="button" style={styles.socialBtn} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f9f9f9'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; }}>
-                        <img src={linkedinLogo} alt="LinkedIn" style={styles.socialIcon} />
-                    </button>
-                    <button type="button" style={styles.socialBtn} onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#f9f9f9'; }} onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#fff'; }}>
-                        <img src={githubLogo} alt="GitHub" style={styles.socialIcon} />
-                    </button>
+                    {socials.map(s => (
+                        <button key={s.alt} type="button" style={styles.socialBtn}>
+                            <img src={s.src} alt={s.alt} style={styles.socialIcon} />
+                        </button>
+                    ))}
                 </div>
 
                 <div style={styles.footerInfo}>
@@ -222,6 +176,127 @@ const AuthPage = () => {
             </div>
         </div>
     );
+};
+
+const styles = {
+    wrapper: {
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'var(--canvas)',
+        fontFamily: 'var(--font-body)',
+        padding: 'var(--sp-lg)',
+        position: 'relative',
+        overflow: 'hidden',
+    },
+    card: {
+        width: '100%',
+        maxWidth: '420px',
+        backgroundColor: 'var(--surface-card)',
+        padding: '40px',
+        borderRadius: 'var(--rounded-xl)',
+        border: '1px solid var(--hairline)',
+        boxShadow: 'var(--shadow-soft)',
+        position: 'relative',
+        zIndex: 1,
+    },
+    header: {
+        textAlign: 'center',
+        marginBottom: 'var(--sp-xl)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+    },
+    authLogo: {
+        width: '48px',
+        height: 'auto',
+        marginBottom: 'var(--sp-base)',
+    },
+    subtitle: {
+        fontSize: '14px',
+        color: 'var(--muted)',
+        letterSpacing: '0.15px',
+    },
+    inputGroup: {
+        marginBottom: 'var(--sp-base)',
+    },
+    errorText: {
+        color: 'var(--semantic-error)',
+        fontSize: '13px',
+        marginTop: 'var(--sp-xxs)',
+        display: 'block',
+    },
+    bannerOk: {
+        padding: 'var(--sp-sm) var(--sp-base)',
+        borderRadius: 'var(--rounded-md)',
+        fontSize: '14px',
+        marginBottom: 'var(--sp-base)',
+        backgroundColor: '#dcfce7',
+        color: '#166534',
+        border: '1px solid #bbf7d0',
+    },
+    bannerErr: {
+        padding: 'var(--sp-sm) var(--sp-base)',
+        borderRadius: 'var(--rounded-md)',
+        fontSize: '14px',
+        marginBottom: 'var(--sp-base)',
+        backgroundColor: '#fef2f2',
+        color: '#991b1b',
+        border: '1px solid #fecaca',
+    },
+    dividerBox: {
+        display: 'flex',
+        alignItems: 'center',
+        margin: 'var(--sp-xl) 0',
+    },
+    line: {
+        flex: 1,
+        height: '1px',
+        backgroundColor: 'var(--hairline)',
+    },
+    dividerText: {
+        padding: '0 var(--sp-base)',
+        color: 'var(--muted-soft)',
+        fontSize: '13px',
+        whiteSpace: 'nowrap',
+    },
+    socialGroup: {
+        display: 'flex',
+        justifyContent: 'center',
+        gap: 'var(--sp-base)',
+    },
+    socialBtn: {
+        width: '48px',
+        height: '48px',
+        borderRadius: 'var(--rounded-full)',
+        backgroundColor: 'var(--surface-strong)',
+        border: '1px solid var(--hairline)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        transition: 'all var(--transition-fast)',
+        padding: 0,
+    },
+    socialIcon: {
+        width: '20px',
+        height: '20px',
+        objectFit: 'contain',
+    },
+    footerInfo: {
+        textAlign: 'center',
+        marginTop: 'var(--sp-xl)',
+        fontSize: '14px',
+        color: 'var(--muted)',
+    },
+    link: {
+        color: 'var(--ink)',
+        fontWeight: 500,
+        cursor: 'pointer',
+        textDecoration: 'underline',
+        textUnderlineOffset: '2px',
+    },
 };
 
 export default AuthPage;

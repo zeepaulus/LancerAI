@@ -5,53 +5,96 @@ import Navbar from '../components/Layout/Navbar';
 const InterviewPage = () => {
     const navigate = useNavigate();
 
-    // Dữ liệu giả lập
     const history = [
         { id: 1, title: 'Phỏng vấn Frontend Developer', date: '24/10/2023', score: 85 },
         { id: 2, title: 'Phỏng vấn Backend Node.js', date: '20/10/2023', score: 72 },
         { id: 3, title: 'Phỏng vấn Hành vi (Behavioral)', date: '15/10/2023', score: 90 },
     ];
 
-    const styles = {
-        secondTitle: { margin: '0 0 24px 0', fontSize: '18px' }, 
-        container: { maxWidth: '800px', margin: '40px auto', padding: '0 20px', fontFamily: 'system-ui', color: 'var(--text-color)' },
-        header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
-        btnStart: { background: '#3182ce', color: 'white', padding: '12px 24px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' },
-        cardList: { display: 'flex', flexDirection: 'column', gap: '15px' },
-        historyCard: { background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', transition: 'all 0.2s' },
-        scoreBadge: (score) => ({ background: score >= 80 ? '#48bb78' : '#ecc94b', color: score >= 80 ? 'white' : 'black', padding: '5px 12px', borderRadius: '20px', fontWeight: 'bold', fontSize: '14px' })
-    };
+    const getScoreStyle = (score) => ({
+        backgroundColor: score >= 80 ? 'var(--gradient-mint)' : 'var(--gradient-peach)',
+        color: 'var(--ink)',
+    });
 
     return (
-        <div>
+        <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
             <Navbar />
             <div style={styles.container}>
                 <div style={styles.header}>
-                    <h2>Phỏng vấn AI</h2>
-                    <button style={styles.btnStart} onClick={() => navigate('/chat')}>+ Bắt đầu phỏng vấn</button>
+                    <div>
+                        <h2 className="display-sm">Phỏng vấn AI</h2>
+                    </div>
+                    <button className="btn-primary" onClick={() => navigate('/chat')}>
+                        + Bắt đầu phỏng vấn
+                    </button>
                 </div>
 
-                <h3 style={styles.secondTitle}>Lịch sử phỏng vấn</h3>
+                <p className="caption-uppercase" style={styles.sectionLabel}>LỊCH SỬ PHỎNG VẤN</p>
                 <div style={styles.cardList}>
                     {history.map(item => (
                         <div 
                             key={item.id} 
-                            style={styles.historyCard} 
-                            onClick={() => navigate('/chat')} // Nhấn vào lịch sử cũng mở giao diện Chat
-                            onMouseOver={(e) => e.currentTarget.style.borderColor = '#3182ce'}
-                            onMouseOut={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                            className="card"
+                            style={styles.historyCard}
+                            onClick={() => navigate('/chat')}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.borderColor = 'var(--hairline-strong)';
+                                e.currentTarget.style.boxShadow = 'var(--shadow-soft)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.borderColor = 'var(--hairline)';
+                                e.currentTarget.style.boxShadow = 'none';
+                            }}
                         >
                             <div>
-                                <h4 style={{ margin: '0 0 8px 0' }}>{item.title}</h4>
-                                <span style={{ fontSize: '14px', color: 'var(--text-color)', opacity: 0.7 }}>Ngày: {item.date}</span>
+                                <h4 className="title-sm" style={{margin: '0 0 var(--sp-xs) 0'}}>{item.title}</h4>
+                                <span style={styles.dateBadge}>Ngày: {item.date}</span>
                             </div>
-                            <div style={styles.scoreBadge(item.score)}>{item.score} Điểm</div>
+                            <span className="badge-pill" style={getScoreStyle(item.score)}>
+                                {item.score} Điểm
+                            </span>
                         </div>
                     ))}
                 </div>
             </div>
         </div>
     );
+};
+
+const styles = {
+    container: {
+        maxWidth: '800px',
+        margin: '0 auto',
+        padding: 'var(--sp-xl) var(--sp-lg)',
+    },
+    header: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 'var(--sp-xl)',
+    },
+    sectionLabel: {
+        color: 'var(--muted)',
+        marginBottom: 'var(--sp-base)',
+        letterSpacing: '0.96px',
+    },
+    cardList: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--sp-sm)',
+    },
+    historyCard: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        cursor: 'pointer',
+        transition: 'all var(--transition-base)',
+    },
+    dateBadge: {
+        fontSize: '13px',
+        color: 'var(--muted)',
+        letterSpacing: '0.15px',
+    },
 };
 
 export default InterviewPage;

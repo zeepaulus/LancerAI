@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../store/ThemeContext';
 
@@ -9,6 +9,7 @@ const Navbar = () => {
     const navigate = useNavigate();
     const [showDropdown, setShowDropdown] = useState(false);
     const { isDarkMode, toggleDarkMode } = useTheme();
+    const dropdownRef = useRef(null);
 
     const handleLogout = () => {
         localStorage.removeItem(keys.LANCERAI_ACCESS_TOKEN);
@@ -22,89 +23,211 @@ const Navbar = () => {
         toggleDarkMode();    // Gọi hàm đổi theme từ ThemeContext
     };
 
-    const styles = {
-        nav: { 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            padding: '15px 30px', 
-            background: isDarkMode ? '#1a202c' : '#fff', 
-            borderBottom: '1px solid #e2e8f0', 
-            color: isDarkMode ? '#fff' : '#000' },
-        logoWrapper: {
-            display: 'flex',
-            alignItems: 'center',
-            cursor: 'pointer',
-            gap: '10px'
-        },
-        logoIcon: {
-            height: '35px',
-            width: 'auto',
-            objectFit: 'contain' 
-        },
-        logoText: {
-            fontWeight: 'bold',
-            fontSize: '18px',
-            color: '#3182ce',
-            letterSpacing: '1px'
-        },
-        avatarBtn: { 
-            width: '40px', 
-            height: '40px', 
-            borderRadius: '50%', 
-            overflow: 'hidden',
-            border: '2px solid #e2e8f0',
-            cursor: 'pointer',
-            padding: 0
-        },
-        avatarImg: {
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover'
-        },
-        btnGroup: { display: 'flex', gap: '20px', alignItems: 'center' },
-        navBtn: { background: 'none', border: 'none', fontSize: '16px', fontWeight: '500', cursor: 'pointer', color: isDarkMode ? '#cbd5e0' : '#4a5568' },
-        avatar: { width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#cbd5e0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: 'none', fontSize: '20px' },
-        dropdown: { position: 'absolute', right: '30px', top: '70px', background: isDarkMode ? '#2d3748' : 'white', border: '1px solid #e2e8f0', borderRadius: '8px', width: '220px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', overflow: 'hidden', zIndex: 100 },
-        dropItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '12px 20px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', color: isDarkMode ? '#fff' : '#4a5568', fontSize: '15px', borderBottom: '1px solid #edf2f7' },
-        switchBg: { width: '40px', height: '22px', borderRadius: '11px', background: isDarkMode ? '#3182ce' : '#cbd5e0', position: 'relative', transition: '0.3s' },
-        switchDot: { width: '18px', height: '18px', borderRadius: '50%', background: 'white', position: 'absolute', top: '2px', left: isDarkMode ? '20px' : '2px', transition: '0.3s' }
-        
-    };
+    // Close dropdown on outside click
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                setShowDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     return (
         <nav style={styles.nav}>
             <div style={styles.logoWrapper} onClick={() => navigate('/dashboard')}>
-                <img src={logoImg} alt="AI Mock Interview Logo" style={styles.logoIcon} />
+                <img src={logoImg} alt="LancerAI Logo" style={styles.logoIcon} />
                 <span style={styles.logoText}>LANCER AI</span>
             </div>
+
             <div style={styles.btnGroup}>
-                <button type="button" style={styles.navBtn} onClick={() => navigate('/interview')}>Phỏng vấn</button>
-                <button type="button" style={styles.navBtn} onClick={() => navigate('/cv-upload')}>Đánh giá CV</button>
+                <button
+                    type="button"
+                    style={styles.navBtn}
+                    onClick={() => navigate('/interview')}
+                    onMouseEnter={(e) => e.target.style.color = 'var(--ink)'}
+                    onMouseLeave={(e) => e.target.style.color = 'var(--muted)'}
+                >
+                    Phỏng vấn
+                </button>
+                <button
+                    type="button"
+                    style={styles.navBtn}
+                    onClick={() => navigate('/cv-upload')}
+                    onMouseEnter={(e) => e.target.style.color = 'var(--ink)'}
+                    onMouseLeave={(e) => e.target.style.color = 'var(--muted)'}
+                >
+                    Đánh giá CV
+                </button>
                 
-                <div>
-                    <button type="button" style={styles.avatar} onClick={() => setShowDropdown(!showDropdown)}>👤</button>
+                <div ref={dropdownRef} style={{ position: 'relative' }}>
+                    <button
+                        type="button"
+                        style={styles.avatarBtn}
+                        onClick={() => setShowDropdown(!showDropdown)}
+                    >
+                        👤
+                    </button>
                     
                     {showDropdown && (
                         <div style={styles.dropdown}>
-                            <button type="button" style={styles.dropItem} onClick={() => { navigate('/profile'); setShowDropdown(false); }}>Profile của tôi</button>
-                            <button type="button" style={styles.dropItem} onClick={() => { navigate('/settings'); setShowDropdown(false); }}>Quản lý tài khoản</button>
+                            <button type="button" style={styles.dropItem} onClick={() => { navigate('/profile'); setShowDropdown(false); }}>
+                                <span>Profile của tôi</span>
+                                <span style={styles.dropIcon}>→</span>
+                            </button>
+                            <button type="button" style={styles.dropItem} onClick={() => { navigate('/settings'); setShowDropdown(false); }}>
+                                <span>Quản lý tài khoản</span>
+                                <span style={styles.dropIcon}>→</span>
+                            </button>
                             
                             <button type="button" style={styles.dropItem} onClick={handleToggleDarkMode}>
-                                Chế độ tối
-                                <div style={styles.switchBg}>
-                                    <div style={styles.switchDot}></div>
+                                <span>Chế độ tối</span>
+                                <div style={styles.switchBg(isDarkMode)}>
+                                    <div style={styles.switchDot(isDarkMode)}></div>
                                 </div>
                             </button>
 
-                            <button type="button" style={styles.dropItem} onClick={() => { navigate('/about'); setShowDropdown(false); }}>Về chúng tôi</button>
-                            <button type="button" style={{ ...styles.dropItem, color: '#e53e3e', borderBottom: 'none' }} onClick={handleLogout}>Đăng xuất</button>
+                            <button type="button" style={styles.dropItem} onClick={() => { navigate('/about'); setShowDropdown(false); }}>
+                                <span>Về chúng tôi</span>
+                                <span style={styles.dropIcon}>→</span>
+                            </button>
+
+                            <div style={styles.dropDivider}></div>
+
+                            <button type="button" style={{...styles.dropItem, color: 'var(--semantic-error)'}} onClick={handleLogout}>
+                                <span>Đăng xuất</span>
+                            </button>
                         </div>
                     )}
                 </div>
             </div>
         </nav>
     );
+};
+
+const styles = {
+    nav: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '0 var(--sp-xl)',
+        height: 'var(--nav-height)',
+        backgroundColor: 'var(--canvas)',
+        borderBottom: '1px solid var(--hairline)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 50,
+        backdropFilter: 'blur(8px)',
+        transition: 'background-color var(--transition-base)',
+    },
+    logoWrapper: {
+        display: 'flex',
+        alignItems: 'center',
+        cursor: 'pointer',
+        gap: 'var(--sp-sm)',
+    },
+    logoIcon: {
+        height: '32px',
+        width: 'auto',
+        objectFit: 'contain',
+    },
+    logoText: {
+        fontFamily: 'var(--font-body)',
+        fontWeight: 600,
+        fontSize: '15px',
+        color: 'var(--ink)',
+        letterSpacing: '1.5px',
+    },
+    btnGroup: {
+        display: 'flex',
+        gap: 'var(--sp-lg)',
+        alignItems: 'center',
+    },
+    navBtn: {
+        background: 'none',
+        border: 'none',
+        fontFamily: 'var(--font-body)',
+        fontSize: '15px',
+        fontWeight: 500,
+        lineHeight: 1.4,
+        cursor: 'pointer',
+        color: 'var(--muted)',
+        transition: 'color var(--transition-fast)',
+        padding: 'var(--sp-xs) var(--sp-sm)',
+    },
+    avatarBtn: {
+        width: '36px',
+        height: '36px',
+        borderRadius: 'var(--rounded-full)',
+        backgroundColor: 'var(--surface-strong)',
+        border: '1px solid var(--hairline)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        fontSize: '16px',
+        transition: 'border-color var(--transition-fast)',
+    },
+    dropdown: {
+        position: 'absolute',
+        right: 0,
+        top: 'calc(100% + var(--sp-xs))',
+        backgroundColor: 'var(--surface-card)',
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--rounded-xl)',
+        width: '240px',
+        boxShadow: 'var(--shadow-dropdown)',
+        overflow: 'hidden',
+        zIndex: 100,
+        padding: 'var(--sp-xs) 0',
+    },
+    dropItem: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        padding: 'var(--sp-sm) var(--sp-base)',
+        background: 'none',
+        border: 'none',
+        textAlign: 'left',
+        cursor: 'pointer',
+        color: 'var(--body)',
+        fontFamily: 'var(--font-body)',
+        fontSize: '14px',
+        fontWeight: 400,
+        lineHeight: 1.5,
+        transition: 'background-color var(--transition-fast)',
+    },
+    dropIcon: {
+        color: 'var(--muted-soft)',
+        fontSize: '12px',
+    },
+    dropDivider: {
+        height: '1px',
+        backgroundColor: 'var(--hairline)',
+        margin: 'var(--sp-xs) 0',
+    },
+    switchBg: (isDark) => ({
+        width: '36px',
+        height: '20px',
+        borderRadius: 'var(--rounded-pill)',
+        backgroundColor: isDark ? 'var(--ink)' : 'var(--hairline-strong)',
+        position: 'relative',
+        transition: 'background-color var(--transition-base)',
+        flexShrink: 0,
+    }),
+    switchDot: (isDark) => ({
+        width: '16px',
+        height: '16px',
+        borderRadius: 'var(--rounded-full)',
+        backgroundColor: isDark ? 'var(--canvas)' : '#ffffff',
+        position: 'absolute',
+        top: '2px',
+        left: isDark ? '18px' : '2px',
+        transition: 'left var(--transition-base)',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    }),
 };
 
 export default Navbar;
