@@ -189,6 +189,10 @@ async def interview_websocket(
                     msg = __import__("json").loads(data["text"])
                     if msg.get("action") == "stop":
                         break
+                    elif msg.get("type") == "text_answer":
+                        content = msg.get("content", "").strip()
+                        if content:
+                            await _pipeline.process_text_turn(content)
                 except Exception:
                     pass
     except WebSocketDisconnect:

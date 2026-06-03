@@ -244,6 +244,24 @@ class InterviewPipeline:
         await self._send_json({"event": "phase_change", "phase": SessionPhase.SPEAKING})
         await self._generate_and_speak()
 
+    async def process_text_turn(self, text: str) -> None:
+        """Nhận text trực tiếp từ client (bỏ qua STT), rồi LLM → TTS."""
+        if self.state is None or not text.strip():
+            return
+
+        self._phase = SessionPhase.PROCESSING
+        await self._send_json({"event": "phase_change", "phase": SessionPhase.PROCESSING})
+
+        self.state.latest_transcript = text
+        self.state.chat_history.append(ChatMessage(role="user", content=text))
+        self.state.turns.append(InterviewTurn(role="candidate", content=text))
+
+        await self._send_json({"event": "transcript", "text": text})
+
+        self._phase = SessionPhase.SPEAKING
+        await self._send_json({"event": "phase_change", "phase": SessionPhase.SPEAKING})
+        await self._generate_and_speak()
+        
     # ------------------------------------------------------------------
     # Internal: LLM → sentence chunking → TTS streaming
     # ------------------------------------------------------------------
