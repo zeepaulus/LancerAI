@@ -14,6 +14,7 @@ export function optimizeCV(cvId, opts = {}) {
     return apiJson(optimizationAnalyzePath(cvId), {
         method: 'POST',
         body: { ...opts },
+        timeoutMs: 300_000,
     });
 }
 

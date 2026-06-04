@@ -1,17 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../components/Layout/Navbar';
+import { getReport } from '../api/interview';
 
 /**
  * InterviewReportPage — STAR-scored interview report.
- * Receives report data via location.state.
+ * Fetches report from API using sessionId from location.state.
  */
 const InterviewReportPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const report = location.state?.report;
+    const sessionId = location.state?.sessionId;
 
-    if (!report) {
+    const [report, setReport] = useState(location.state?.report || null);
+    const [loading, setLoading] = useState(!report && !!sessionId);
+    const [fetchError, setFetchError] = useState('');
+
+    useEffect(() => {
+        if (report || !sessionId) return;
+        setLoading(true);
+        getReport(sessionId)
+            .then(data => { setReport(data); setLoading(false); })
+            .catch(err => {
+                setFetchError(err?.message || 'Không thể tải báo cáo. Vui lòng thử lại.');
+                setLoading(false);
+            });
+    }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    if (!sessionId && !report) {
         return (
             <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
                 <Navbar />
@@ -20,6 +36,38 @@ const InterviewReportPage = () => {
                         <p className="title-md">Không tìm thấy báo cáo</p>
                         <p style={{color: 'var(--muted)', marginBottom: 'var(--sp-lg)'}}>Vui lòng hoàn thành một buổi phỏng vấn trước.</p>
                         <button className="btn-primary" onClick={() => navigate('/interview')}>Về trang Phỏng vấn</button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (loading) {
+        return (
+            <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
+                <Navbar />
+                <div style={styles.container}>
+                    <div style={{textAlign: 'center', padding: 'var(--sp-section) 0'}}>
+                        <div style={styles.spinner} />
+                        <p style={{color: 'var(--muted)', marginTop: 'var(--sp-lg)'}}>Đang tải kết quả phỏng vấn...</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (fetchError || !report) {
+        return (
+            <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
+                <Navbar />
+                <div style={styles.container}>
+                    <div style={{textAlign: 'center', padding: 'var(--sp-section) 0'}}>
+                        <p className="title-md">⚠️ Không tải được báo cáo</p>
+                        <p style={{color: 'var(--muted)', marginBottom: 'var(--sp-lg)'}}>{fetchError || 'Buổi phỏng vấn chưa hoàn thành hoặc chưa có kết quả.'}</p>
+                        <div style={{display: 'flex', gap: 'var(--sp-sm)', justifyContent: 'center'}}>
+                            <button className="btn-primary" onClick={() => { setFetchError(''); setLoading(true); getReport(sessionId).then(d => { setReport(d); setLoading(false); }).catch(e => { setFetchError(e?.message || 'Lỗi.'); setLoading(false); }); }}>Thử lại</button>
+                            <button className="btn-outline" onClick={() => navigate('/interview')}>Về trang Phỏng vấn</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -57,20 +105,20 @@ const InterviewReportPage = () => {
                 <p className="caption-uppercase" style={{color: 'var(--muted)', marginBottom: 'var(--sp-xs)'}}>BÁO CÁO PHỎNG VẤN</p>
                 <h1 className="display-sm" style={{marginBottom: 'var(--sp-xxs)'}}>Kết quả đánh giá</h1>
                 <p style={{color: 'var(--muted)', fontSize: '13px', marginBottom: 'var(--sp-xl)'}}>
-                    Session: <code style={{backgroundColor: 'var(--surface-strong)', padding: '2px 6px', borderRadius: 'var(--rounded-xs)', fontSize: '11px'}}>{session_id}</code>
+                    Session: <code style={{backgroundColor: 'var(--surface-strong)', padding: '2px 6px', borderRadius: 'var(--rounded-xs)', fontSize: '11px'}}>{session_id || sessionId}</code>
                 </p>
 
                 {/* Confidence Score */}
                 <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)', textAlign: 'center'}}>
                     <p className="caption-uppercase" style={{color: 'var(--muted)', marginBottom: 'var(--sp-sm)'}}>ĐỘ TỰ TIN TỔNG THỂ</p>
                     <div style={{fontSize: '56px', fontWeight: 300, fontFamily: 'var(--font-display)', color: 'var(--ink)'}}>
-                        {Math.round(overall_confidence)}
+                        {Math.round(overall_confidence ?? 0)}
                         <span style={{fontSize: '20px', color: 'var(--muted)'}}>/100</span>
                     </div>
                     <div style={{...styles.progressBar, marginTop: 'var(--sp-sm)', maxWidth: '300px', marginLeft: 'auto', marginRight: 'auto'}}>
-                        <div style={{height: '100%', width: `${overall_confidence}%`, backgroundColor: getConfidenceColor(overall_confidence), borderRadius: 'var(--rounded-pill)', transition: 'width 0.5s ease'}}></div>
+                        <div style={{height: '100%', width: `${overall_confidence ?? 0}%`, backgroundColor: getConfidenceColor(overall_confidence ?? 0), borderRadius: 'var(--rounded-pill)', transition: 'width 0.5s ease'}}></div>
                     </div>
-                    <p style={{color: 'var(--muted)', fontSize: '13px', marginTop: 'var(--sp-sm)'}}>Tổng câu hỏi: {total_questions}</p>
+                    <p style={{color: 'var(--muted)', fontSize: '13px', marginTop: 'var(--sp-sm)'}}>Tổng câu hỏi: {total_questions ?? 0}</p>
                 </div>
 
                 {/* STAR Scores */}
@@ -141,6 +189,14 @@ const styles = {
         justifyContent: 'center', fontWeight: 600, fontSize: '14px', color: 'var(--ink)', flexShrink: 0,
     },
     issueList: { paddingLeft: 'var(--sp-lg)', color: 'var(--body)', fontSize: '14px', lineHeight: 1.8 },
+    spinner: {
+        width: '32px', height: '32px',
+        border: '3px solid var(--hairline)',
+        borderTop: '3px solid var(--ink)',
+        borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite',
+        margin: '0 auto',
+    },
 };
 
 export default InterviewReportPage;

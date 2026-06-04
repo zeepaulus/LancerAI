@@ -145,25 +145,105 @@ const CVOptimizationPage = () => {
                 {/* Results */}
                 {result && (
                     <>
-                        {/* Score Card */}
-                        <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)', textAlign: 'center'}}>
-                            <p className="caption-uppercase" style={{color: 'var(--muted)', marginBottom: 'var(--sp-sm)'}}>ĐIỂM ATS</p>
-                            <div style={styles.scoreCircle}>
-                                <svg viewBox="0 0 120 120" style={{width: '140px', height: '140px', transform: 'rotate(-90deg)'}}>
-                                    <circle cx="60" cy="60" r="52" fill="none" stroke="var(--hairline)" strokeWidth="8" />
-                                    <circle cx="60" cy="60" r="52" fill="none"
-                                        stroke={result.audit_score >= 70 ? 'var(--gradient-mint)' : result.audit_score >= 40 ? 'var(--gradient-peach)' : 'var(--gradient-rose)'}
-                                        strokeWidth="8"
-                                        strokeDasharray={`${2 * Math.PI * 52 * (result.audit_score / 100)} ${2 * Math.PI * 52}`}
-                                        strokeLinecap="round"
-                                    />
-                                </svg>
-                                <div style={styles.scoreLabel}>
-                                    <span style={{fontSize: '36px', fontWeight: 300, fontFamily: 'var(--font-display)', color: 'var(--ink)'}}>{Math.round(result.audit_score)}</span>
-                                    <span style={{fontSize: '14px', color: 'var(--muted)'}}>/100</span>
+                        {/* Score & Summary Card */}
+                        <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
+                            <div style={styles.resultGrid}>
+                                <div style={{textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
+                                    <p className="caption-uppercase" style={{color: 'var(--muted)', marginBottom: 'var(--sp-sm)'}}>ĐIỂM ATS</p>
+                                    <div style={styles.scoreCircle}>
+                                        <svg viewBox="0 0 120 120" style={{width: '140px', height: '140px', transform: 'rotate(-90deg)'}}>
+                                            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--hairline)" strokeWidth="8" />
+                                            <circle cx="60" cy="60" r="52" fill="none"
+                                                stroke={result.audit_score >= 70 ? 'var(--gradient-mint)' : result.audit_score >= 40 ? 'var(--gradient-peach)' : 'var(--gradient-rose)'}
+                                                strokeWidth="8"
+                                                strokeDasharray={`${2 * Math.PI * 52 * (result.audit_score / 100)} ${2 * Math.PI * 52}`}
+                                                strokeLinecap="round"
+                                            />
+                                        </svg>
+                                        <div style={styles.scoreLabel}>
+                                            <span style={{fontSize: '36px', fontWeight: 300, fontFamily: 'var(--font-display)', color: 'var(--ink)'}}>{Math.round(result.audit_score)}</span>
+                                            <span style={{fontSize: '14px', color: 'var(--muted)'}}>/100</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style={{display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: '1 1 350px'}}>
+                                    <h3 className="title-md" style={{marginBottom: 'var(--sp-xs)', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                                        {mode === 'roast' ? '🔥 Nhận xét phê bình (Roast Summary)' : '📋 Đánh giá tổng quan'}
+                                    </h3>
+                                    <p style={{color: 'var(--ink)', fontSize: '15px', lineHeight: '1.6', fontStyle: mode === 'roast' ? 'italic' : 'normal', margin: 0}}>
+                                        {result.roast_summary || 'CV đã được phân tích thành công. Dưới đây là các điểm cần cải thiện để tối ưu điểm số ATS.'}
+                                    </p>
                                 </div>
                             </div>
                         </div>
+
+                        {/* Roast Issues Section */}
+                        {result.roast_issues && result.roast_issues.length > 0 && (
+                            <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
+                                <h3 className="title-md" style={{marginBottom: 'var(--sp-base)', borderBottom: '1px solid var(--hairline)', paddingBottom: '8px'}}>
+                                    🔍 Các lỗi và điểm yếu cần khắc phục ({result.roast_issues.length})
+                                </h3>
+                                <div style={{display: 'flex', flexDirection: 'column', gap: 'var(--sp-base)'}}>
+                                    {result.roast_issues.map((issue, idx) => {
+                                        const sev = getSeverityColor(issue.severity);
+                                        return (
+                                            <div key={idx} style={styles.issueItem}>
+                                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '8px'}}>
+                                                    <div style={{display: 'flex', gap: '6px', flexWrap: 'wrap'}}>
+                                                        <span style={{...styles.badge, backgroundColor: sev.bg, color: sev.color}}>
+                                                            {issue.severity.toUpperCase()}
+                                                        </span>
+                                                        <span style={{...styles.badge, backgroundColor: 'var(--canvas)', color: 'var(--muted)', border: '1px solid var(--hairline)'}}>
+                                                            {getIssueTypeLabel(issue.issue_type)}
+                                                        </span>
+                                                    </div>
+                                                    <span style={{fontSize: '12px', color: 'var(--muted)'}}>Phần: {issue.field}</span>
+                                                </div>
+                                                <div style={{marginBottom: '6px'}}>
+                                                    <span style={{fontSize: '13px', color: 'var(--muted)', fontWeight: 500}}>Văn bản gốc:</span>
+                                                    <p style={styles.originalTextQuote}>"{issue.original_text}"</p>
+                                                </div>
+                                                <div>
+                                                    <span style={{fontSize: '13px', color: 'var(--muted)', fontWeight: 500}}>Giải thích & Gợi ý cải thiện:</span>
+                                                    <p style={{fontSize: '14px', color: 'var(--ink)', margin: '4px 0 0 0', lineHeight: '1.5'}}>{issue.explanation}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Rewritten Sections Section */}
+                        {result.rewritten_sections && result.rewritten_sections.length > 0 && (
+                            <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
+                                <h3 className="title-md" style={{marginBottom: 'var(--sp-base)', borderBottom: '1px solid var(--hairline)', paddingBottom: '8px'}}>
+                                    ✨ Đề xuất viết lại theo chuẩn Google XYZ
+                                </h3>
+                                <div style={{display: 'flex', flexDirection: 'column', gap: 'var(--sp-lg)'}}>
+                                    {result.rewritten_sections.map((sec, idx) => (
+                                        <div key={idx} style={styles.rewriteItem}>
+                                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                                                <span style={{fontSize: '12px', color: 'var(--muted)'}}>Vị trí: {sec.field}</span>
+                                                <span style={{...styles.badge, backgroundColor: 'var(--gradient-mint)', color: '#2e7d32'}}>
+                                                    Điểm cải thiện: +{Math.round(sec.improvement_score * 100)}%
+                                                </span>
+                                            </div>
+                                            <div style={styles.rewriteComparisonGrid}>
+                                                <div style={styles.rewriteColOriginal}>
+                                                    <span style={styles.rewriteColLabel}>Bản gốc:</span>
+                                                    <p style={{margin: 0, fontSize: '14px', color: '#ef6c00'}}>"{sec.original}"</p>
+                                                </div>
+                                                <div style={styles.rewriteColOptimized}>
+                                                    <span style={styles.rewriteColLabel}>Đề xuất tối ưu (Công thức {sec.formula_used.toUpperCase()}):</span>
+                                                    <p style={{margin: 0, fontSize: '14px', color: '#2e7d32', fontWeight: 500}}>"{sec.rewritten}"</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Export Buttons */}
                         <div className="card" style={{padding: 'var(--sp-lg)', marginBottom: 'var(--sp-lg)'}}>
@@ -193,6 +273,26 @@ const CVOptimizationPage = () => {
     );
 };
 
+const getSeverityColor = (severity) => {
+    switch (severity) {
+        case 'critical': return { bg: '#ffebee', color: '#c62828' };
+        case 'high': return { bg: '#fff3e0', color: '#ef6c00' };
+        case 'medium': return { bg: '#fffde7', color: '#ef6c00' }; // dark yellow/orange for readability
+        case 'low': default: return { bg: '#e8f5e9', color: '#2e7d32' };
+    }
+};
+
+const getIssueTypeLabel = (type) => {
+    switch (type) {
+        case 'vague_claim': return 'Tuyên bố mơ hồ';
+        case 'buzzword': return 'Từ sáo rỗng (Buzzword)';
+        case 'missing_metric': return 'Thiếu chỉ số đo lường';
+        case 'weak_verb': return 'Động từ hành động yếu';
+        case 'generic_statement': return 'Mô tả chung chung';
+        default: return type;
+    }
+};
+
 const styles = {
     container: { maxWidth: '800px', margin: '0 auto', padding: 'var(--sp-xl) var(--sp-lg)' },
     formRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-base)', marginBottom: 'var(--sp-base)' },
@@ -210,6 +310,15 @@ const styles = {
     },
     scoreCircle: { position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
     scoreLabel: { position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' },
+    resultGrid: { display: 'flex', flexDirection: 'row', gap: 'var(--sp-xl)', alignItems: 'center', flexWrap: 'wrap' },
+    issueItem: { borderLeft: '4px solid var(--hairline-strong)', paddingLeft: 'var(--sp-base)', paddingBottom: 'var(--sp-xs)' },
+    originalTextQuote: { margin: '4px 0 0 0', padding: '6px 12px', backgroundColor: 'rgba(0,0,0,0.02)', borderLeft: '3px solid var(--hairline-strong)', fontSize: '13.5px', color: '#555', fontStyle: 'italic' },
+    badge: { fontSize: '11px', fontWeight: 600, padding: '3px 8px', borderRadius: '4px', letterSpacing: '0.5px' },
+    rewriteItem: { border: '1px solid var(--hairline)', borderRadius: '8px', padding: 'var(--sp-base)' },
+    rewriteComparisonGrid: { display: 'flex', flexDirection: 'row', gap: 'var(--sp-base)', marginTop: '8px', flexWrap: 'wrap', width: '100%' },
+    rewriteColOriginal: { flex: '1 1 300px', backgroundColor: 'rgba(239, 108, 0, 0.05)', border: '1px dashed rgba(239, 108, 0, 0.2)', padding: '10px', borderRadius: '6px' },
+    rewriteColOptimized: { flex: '1 1 300px', backgroundColor: 'rgba(46, 125, 50, 0.05)', border: '1px dashed rgba(46, 125, 50, 0.2)', padding: '10px', borderRadius: '6px' },
+    rewriteColLabel: { fontSize: '11px', fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: '4px' },
 };
 
 export default CVOptimizationPage;

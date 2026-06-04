@@ -23,3 +23,12 @@ export function createSession(payload) {
 export function getReport(sessionId) {
     return apiJson(interviewReportPath(sessionId), { method: 'GET' });
 }
+
+/**
+ * Get all interview sessions for the current user.
+ * Matches GET /api/v1/interview/sessions
+ * @returns {Promise<Array>} List of InterviewReportResponse
+ */
+export function getSessions() {
+    return apiJson(INTERVIEW_SESSIONS_PATH, { method: 'GET' });
+}

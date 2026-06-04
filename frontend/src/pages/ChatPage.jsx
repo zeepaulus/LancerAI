@@ -794,6 +794,8 @@ const ChatPage = () => {
             ws.send(JSON.stringify({
                 token, cv_id: cvId, cv_data: extractionData,
                 job_title: `${position}${level ? ' (' + level + ')' : ''}`,
+                focus_area: `${industry} — ${position} — ${level}`,
+                session_id: sessionId,
                 mode, duration_minutes: 20,
             }));
         };

@@ -81,6 +81,7 @@ class OptimizationService:
                 or extracted_data.get("personal_info", {}).get("title", "Software Engineer")
             ),
             "target_industry": target_industry,
+            "mode": mode,  # "standard" | "roast"
             # Initialise append-only lists to empty so reducers don't crash
             "roast_issues": [],
             "inquiry_questions": [],
@@ -122,4 +123,13 @@ class OptimizationService:
             cv_id=cv_id,
             audit_score=audit_score,
             optimized_data=optimized_cv,
+            roast_summary=final_state.get("roast_summary"),
+            roast_issues=[
+                issue.model_dump() if hasattr(issue, "model_dump") else dict(issue)
+                for issue in final_state.get("roast_issues", [])
+            ] if final_state.get("roast_issues") is not None else None,
+            rewritten_sections=[
+                sec.model_dump() if hasattr(sec, "model_dump") else dict(sec)
+                for sec in final_state.get("rewritten_sections", [])
+            ] if final_state.get("rewritten_sections") is not None else None,
         )

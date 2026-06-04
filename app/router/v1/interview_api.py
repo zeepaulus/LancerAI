@@ -19,7 +19,7 @@ from app.core.providers.services import (
 from app.core.rate_limit import limiter
 from app.models.user import User
 from app.schema.request import InterviewSessionRequest
-from app.schema.response import InterviewReportResponse, InterviewSessionResponse
+from app.schema.response import InterviewReportResponse, InterviewSessionResponse, STARScore
 from app.service.extraction.service import ExtractionService
 from app.service.interview.service import InterviewService
 
@@ -58,6 +58,7 @@ async def create_interview_session(
             user_id=user.id,
             mode=payload.mode,
             job_listing_id=getattr(payload, "job_listing_id", None),
+            focus_area=payload.focus_area,
             duration_minutes=getattr(payload, "duration_minutes", 5),
         )
     except Exception as exc:
@@ -72,6 +73,57 @@ async def create_interview_session(
         mode=payload.mode,
         status="created",
     )
+
+
+@router.get("/sessions", response_model=list[InterviewReportResponse])
+@limiter.limit("100/minute")
+async def list_interview_sessions(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[InterviewService, Depends(get_interview_service)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[InterviewReportResponse]:
+    """List all interview sessions with reports for the authenticated user."""
+    try:
+        sessions = await service.list_sessions(db, user.id)
+        reports = []
+        for record in sessions:
+            # Parse STAR scores
+            star_scores_list = []
+            stored_scores = record.star_scores or {}
+            for score_dict in stored_scores.get("scores", []):
+                try:
+                    star_scores_list.append(
+                        STARScore(
+                            situation=float(score_dict.get("situation_score", 0)),
+                            task=float(score_dict.get("task_score", 0)),
+                            action=float(score_dict.get("action_score", 0)),
+                            result=float(score_dict.get("result_score", 0)),
+                        )
+                    )
+                except Exception:
+                    pass
+
+            reports.append(
+                InterviewReportResponse(
+                    session_id=str(record.id),
+                    overall_confidence=float(record.overall_confidence or 0.0),
+                    total_questions=int(record.total_questions or 0),
+                    star_scores=star_scores_list,
+                    logic_issues=list(record.logic_issues or []),
+                    improvement_suggestions=list(record.improvement_suggestions or []),
+                    created_at=record.started_at.isoformat() if record.started_at else None,
+                    title=stored_scores.get("title", "Phỏng vấn AI"),
+                    focus_area=stored_scores.get("focus_area"),
+                    status="incomplete" if (record.completed_at is None or record.total_questions == 0) else "completed",
+                )
+            )
+        return reports
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list sessions: {exc}",
+        ) from exc
 
 
 @router.get("/sessions/{session_id}/report")
@@ -114,6 +166,8 @@ async def get_interview_report(
 async def interview_websocket(
     websocket: WebSocket,
     pipeline_factory: Annotated[Callable[..., Any], Depends(get_interview_pipeline_factory)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[InterviewService, Depends(get_interview_service)],
 ) -> None:
     """Real-time voice interview channel.
 
@@ -165,6 +219,8 @@ async def interview_websocket(
     job_title: str = auth_data.get("job_title", "Software Engineer")
     mode: str = auth_data.get("mode", "practice")
     duration_minutes: int = int(auth_data.get("duration_minutes", 5))
+    session_id: str | None = auth_data.get("session_id")
+    focus_area: str | None = auth_data.get("focus_area")
 
     try:
         await _pipeline.start(
@@ -173,6 +229,8 @@ async def interview_websocket(
             jd_data=jd_data,
             mode=mode,
             duration_minutes=duration_minutes,
+            session_id=session_id,
+            focus_area=focus_area,
         )
     except Exception as exc:
         _logger.error("WS /interview/ws: pipeline.start failed — %s", exc)
@@ -204,4 +262,6 @@ async def interview_websocket(
     finally:
         if _pipeline is not None:
             with contextlib.suppress(Exception):
-                await _pipeline.stop()
+                evaluation = await _pipeline.stop()
+                if evaluation and _pipeline.state:
+                    await service.persist_session(db, evaluation)

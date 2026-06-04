@@ -20,7 +20,7 @@ from app.service.optimization.state import CVOptimizationState, RoastIssue
 
 logger = logging.getLogger(__name__)
 
-_ROAST_SYSTEM = """Bạn là chuyên gia tư vấn CV và tuyển dụng người Việt.
+_ROAST_SYSTEM_STANDARD = """Bạn là chuyên gia tư vấn CV và tuyển dụng người Việt.
 Nhiệm vụ: Phân tích CV và chỉ ra các điểm yếu dưới góc nhìn của recruiter / ATS.
 
 Trả về JSON hợp lệ (không thêm markdown):
@@ -39,9 +39,33 @@ Trả về JSON hợp lệ (không thêm markdown):
 }
 
 Quy tắc:
-- Chỉ phê bình những điểm THỰC SỰ có vấn đề — không bịa ra lỗi.
+- Chỉ phê bình những điểm THỰC SỰ có vấn đề — không bỏa ra lỗi.
 - Ưu tiên phát hiện: thiếu số liệu cụ thể, động từ yếu (phụ trách, tham gia), tuyên bố mơ hồ.
 - Tối đa 10 issue, tập trung vào critical và high severity."""
+
+_ROAST_SYSTEM_ROAST = """Bạn là một recruiter kỳ tiếnh, không ngại nói thẳng, đang "roast" CV theo phong cách hài hước nhưng chuyên nghiệp.
+Nhiệm vụ: Chỉ ra TẤT CẢ những gì yếu, nhạt, sáo rỗng, thiếu thông tin trong CV này.
+
+Trả về JSON hợp lệ (không thêm markdown):
+{
+  "issues": [
+    {
+      "field": "experience[0].key_impacts",
+      "severity": "critical|high|medium|low",
+      "issue_type": "vague_claim|buzzword|missing_metric|weak_verb|generic_statement",
+      "original_text": "Đoạn văn bản gốc cụ thể bị lỗi",
+      "explanation": "Phê bình thẳng thắn và hài hước tại sao đây là vấn đề — như recruiter thật sự nghĩ trong đầu",
+      "needs_clarification": false
+    }
+  ],
+  "summary": "Tóm tắt roast thẳng thắn 3-5 câu về CV này — không ngại nói thật"
+}
+
+Quy tắc:
+- Không có giới hạn số lượng issue — hãy chỉ ra TẤT CẢ.
+- Tóm tắt (summary) phải thẳng thắn, hài hước nhưng vẫn chuyên nghiệp.
+- Chỉ phê những gì THỰC SỰ có trong CV — không bịa.
+- Dùng giọng thật lòng, không sáo rỗng — như bạn bè nhận xét CV cho nhau."""
 
 
 async def roast_agent(state: CVOptimizationState, llm: LLMConnector) -> dict[str, Any]:
@@ -49,15 +73,25 @@ async def roast_agent(state: CVOptimizationState, llm: LLMConnector) -> dict[str
 
     Analyses the CV against industry benchmarks and returns a list of
     ``RoastIssue`` records plus a plain-text summary.
+
+    In ``roast`` mode the prompt is more aggressive and unlimited;
+    in ``standard`` mode it is capped at 10 critical/high issues.
     """
     raw_cv = state.get("raw_cv_data", {})
     benchmarks = state.get("industry_benchmarks", {})
     job_title = state.get("target_job_title", "")
+    mode = state.get("mode", "standard")
+
+    # Choose prompt based on mode
+    system_prompt = _ROAST_SYSTEM_ROAST if mode == "roast" else _ROAST_SYSTEM_STANDARD
 
     cv_text = json.dumps(raw_cv, ensure_ascii=False)[:4000]
     benchmark_text = json.dumps(benchmarks, ensure_ascii=False)[:1500]
 
+    mode_note = "[CHẾT ĐỘ ROAST: hãy phê bình thẳng thắn, hài hước, không giới hạn]" if mode == "roast" else ""
+
     prompt = f"""## Vị trí ứng tuyển: {job_title}
+{mode_note}
 
 ## Benchmark ngành
 {benchmark_text}
@@ -71,7 +105,7 @@ Phân tích điểm yếu của CV và trả về JSON:"""
     try:
         raw = await llm.generate(
             prompt,
-            system=_ROAST_SYSTEM,
+            system=system_prompt,
             use_cloud=llm.has_cloud,
             json_mode=True,
         )
@@ -83,13 +117,62 @@ Phân tích điểm yếu của CV và trả về JSON:"""
         roast_issues: list[RoastIssue] = []
         inquiry_needed = False
         for item in issues_raw:
+            if not isinstance(item, dict):
+                logger.warning("[roast_agent] Skipping non-dict issue item: %s", item)
+                continue
             try:
+                # Ensure field is string
+                item["field"] = str(item.get("field", ""))
+
+                # Ensure explanation is string
+                item["explanation"] = str(item.get("explanation", ""))
+
+                # Ensure needs_clarification is bool
+                item["needs_clarification"] = bool(item.get("needs_clarification", False))
+
+                # Normalize original_text
+                ot = item.get("original_text")
+                if isinstance(ot, list):
+                    item["original_text"] = ", ".join(str(x) for x in ot)
+                elif ot is None:
+                    item["original_text"] = ""
+                else:
+                    item["original_text"] = str(ot)
+
+                # Normalize severity
+                sev = str(item.get("severity", "")).lower()
+                if "critical" in sev:
+                    item["severity"] = "critical"
+                elif "high" in sev:
+                    item["severity"] = "high"
+                elif "medium" in sev:
+                    item["severity"] = "medium"
+                elif "low" in sev:
+                    item["severity"] = "low"
+                else:
+                    item["severity"] = "medium"
+
+                # Normalize issue_type
+                it = str(item.get("issue_type", "")).lower()
+                if "vague" in it or "claim" in it:
+                    item["issue_type"] = "vague_claim"
+                elif "buzz" in it or "word" in it:
+                    item["issue_type"] = "buzzword"
+                elif "metric" in it or "number" in it:
+                    item["issue_type"] = "missing_metric"
+                elif "verb" in it or "action" in it:
+                    item["issue_type"] = "weak_verb"
+                elif "generic" in it or "statement" in it:
+                    item["issue_type"] = "generic_statement"
+                else:
+                    item["issue_type"] = "vague_claim"
+
                 issue = RoastIssue(**item)
                 roast_issues.append(issue)
                 if issue.needs_clarification:
                     inquiry_needed = True
             except Exception as parse_exc:
-                logger.debug("[roast_agent] Skipping malformed issue: %s", parse_exc)
+                logger.warning("[roast_agent] Skipping malformed issue: %s. Item was: %s", parse_exc, item)
 
         logger.info("[roast_agent] Found %d issues (inquiry_needed=%s)", len(roast_issues), inquiry_needed)
         return {

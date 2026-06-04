@@ -53,14 +53,25 @@ async def audit_agent(state: CVOptimizationState, llm: LLMConnector) -> dict[str
     """
     rewritten_sections: list[RewrittenSection] = state.get("rewritten_sections", [])
     raw_cv = state.get("raw_cv_data", {})
+    roast_issues = state.get("roast_issues", [])
+
+    severity_penalties = {
+        "critical": 15.0,
+        "high": 10.0,
+        "medium": 5.0,
+        "low": 2.0
+    }
 
     if not rewritten_sections:
         logger.info("[audit_agent] No rewrites to audit — passing through raw CV")
+        optimized_penalty = sum(severity_penalties.get(issue.severity, 5.0) for issue in roast_issues)
+        optimized_score = max(0.0, min(100.0, 100.0 - optimized_penalty))
+        overall_score = optimized_score / 100.0
         return {
             "audit_flags": [],
             "audit_passed": True,
             "optimized_cv": raw_cv,
-            "overall_improvement_score": 0.0,
+            "overall_improvement_score": round(overall_score, 3),
             "pipeline_complete": True,
             "current_step": "audit_done",
         }
@@ -98,7 +109,27 @@ Kiểm tra tính trung thực và trả về JSON:"""
         section_map = {s.field: s for s in rewritten_sections}
 
         for item in verdicts_raw:
+            if not isinstance(item, dict):
+                logger.warning("[audit_agent] Skipping non-dict verdict item: %s", item)
+                continue
             try:
+                # Ensure fields are string
+                item["field"] = str(item.get("field", ""))
+                item["rewritten_text"] = str(item.get("rewritten_text", ""))
+                item["original_text"] = str(item.get("original_text", ""))
+                item["issue"] = str(item.get("issue", ""))
+
+                # Normalize verdict
+                verd = str(item.get("verdict", "")).lower()
+                if "approve" in verd:
+                    item["verdict"] = "approved"
+                elif "revision" in verd or "revise" in verd:
+                    item["verdict"] = "needs_revision"
+                elif "reject" in verd:
+                    item["verdict"] = "rejected"
+                else:
+                    item["verdict"] = "needs_revision"
+
                 flag = AuditFlag(**item)
                 verdict = flag.verdict
                 if verdict == "approved":
@@ -108,7 +139,7 @@ Kiểm tra tính trung thực và trả về JSON:"""
                 else:
                     audit_flags.append(flag)
             except Exception as parse_exc:
-                logger.debug("[audit_agent] Skipping malformed verdict: %s", parse_exc)
+                logger.warning("[audit_agent] Skipping malformed verdict: %s. Item was: %s", parse_exc, item)
 
         # For rewrites that didn't get a verdict, auto-approve them
         audited_fields = {item.get("field") for item in verdicts_raw}
@@ -118,21 +149,27 @@ Kiểm tra tính trung thực và trả về JSON:"""
 
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         logger.warning("[audit_agent] JSON parse failed (%s) — falling back to raw CV (no rewrites applied)", exc)
+        optimized_penalty = sum(severity_penalties.get(issue.severity, 5.0) for issue in roast_issues)
+        optimized_score = max(0.0, min(100.0, 100.0 - optimized_penalty))
+        overall_score = optimized_score / 100.0
         return {
             "audit_flags": [],
             "audit_passed": False,
             "optimized_cv": raw_cv,
-            "overall_improvement_score": 0.0,
+            "overall_improvement_score": round(overall_score, 3),
             "pipeline_complete": True,
             "current_step": "audit_done",
         }
     except Exception as exc:
         logger.error("[audit_agent] LLM call failed (%s) — falling back to raw CV (no rewrites applied)", exc)
+        optimized_penalty = sum(severity_penalties.get(issue.severity, 5.0) for issue in roast_issues)
+        optimized_score = max(0.0, min(100.0, 100.0 - optimized_penalty))
+        overall_score = optimized_score / 100.0
         return {
             "audit_flags": [],
             "audit_passed": False,
             "optimized_cv": raw_cv,
-            "overall_improvement_score": 0.0,
+            "overall_improvement_score": round(overall_score, 3),
             "pipeline_complete": True,
             "current_step": "audit_done",
         }
@@ -140,19 +177,34 @@ Kiểm tra tính trung thực và trả về JSON:"""
     # Build optimized_cv by applying approved rewrites to raw_cv
     optimized_cv = _apply_rewrites(raw_cv, approved_sections)
 
-    # Compute overall improvement score (average of approved sections)
-    if approved_sections:
-        overall_score = sum(s.improvement_score for s in approved_sections) / len(approved_sections)
-        overall_score = min(1.0, max(0.0, overall_score))
-    else:
-        overall_score = 0.0
+    # Calculate penalties for roast issues
+    roast_issues = state.get("roast_issues", [])
+    severity_penalties = {
+        "critical": 15.0,
+        "high": 10.0,
+        "medium": 5.0,
+        "low": 2.0
+    }
+    
+    # Identify which fields have approved rewrites
+    approved_fields = {sec.field for sec in approved_sections}
+    
+    # Calculate remaining penalties
+    optimized_penalty = 0.0
+    for issue in roast_issues:
+        if issue.field not in approved_fields:
+            optimized_penalty += severity_penalties.get(issue.severity, 5.0)
+            
+    # Calculate optimized score (out of 100.0)
+    optimized_score = max(0.0, min(100.0, 100.0 - optimized_penalty))
+    overall_score = optimized_score / 100.0
 
     audit_passed = len(audit_flags) == 0
     logger.info(
         "[audit_agent] Approved=%d Flagged=%d Score=%.2f",
         len(approved_sections),
         len(audit_flags),
-        overall_score,
+        optimized_score,
     )
 
     return {

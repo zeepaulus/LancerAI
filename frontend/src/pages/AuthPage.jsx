@@ -26,6 +26,18 @@ const AuthPage = () => {
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
 
+    // Reset form when switching between Login and Signup
+    React.useEffect(() => {
+        setFormData({
+            username: '',
+            email: '',
+            usernameOrEmail: '',
+            password: ''
+        });
+        setErrors({});
+        setSubmitError('');
+    }, [isLogin]);
+
     const handleInputChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
         setErrors({ ...errors, [e.target.name]: '' });
@@ -110,7 +122,7 @@ const AuthPage = () => {
 
                 {isLogin && signupBanner && (
                     <div style={styles.bannerOk}>
-                        Đăng ký đã được gửi tới backend. Vui lòng đăng nhập.
+                        🎉 Đăng ký thành công! Vui lòng đăng nhập để bắt đầu.
                     </div>
                 )}
 
@@ -121,24 +133,24 @@ const AuthPage = () => {
 
                     {isLogin ? (
                         <div style={styles.inputGroup}>
-                            <input className="text-input" name="usernameOrEmail" type="text" autoComplete="username" placeholder="Email hoặc Tên người dùng" onChange={handleInputChange} />
+                            <input className="text-input" name="usernameOrEmail" type="text" autoComplete="username" placeholder="Email hoặc Tên người dùng" value={formData.usernameOrEmail} onChange={handleInputChange} />
                             {errors.usernameOrEmail && <span style={styles.errorText}>{errors.usernameOrEmail}</span>}
                         </div>
                     ) : (
                         <>
                             <div style={styles.inputGroup}>
-                                <input className="text-input" name="username" placeholder="Tên tài khoản (Chữ & Số)" onChange={handleInputChange} />
+                                <input className="text-input" name="username" placeholder="Tên tài khoản (Chữ & Số)" value={formData.username} onChange={handleInputChange} />
                                 {errors.username && <span style={styles.errorText}>{errors.username}</span>}
                             </div>
                             <div style={styles.inputGroup}>
-                                <input className="text-input" name="email" type="email" autoComplete="email" placeholder="Địa chỉ Email" onChange={handleInputChange} />
+                                <input className="text-input" name="email" type="email" autoComplete="email" placeholder="Địa chỉ Email" value={formData.email} onChange={handleInputChange} />
                                 {errors.email && <span style={styles.errorText}>{errors.email}</span>}
                             </div>
                         </>
                     )}
 
                     <div style={styles.inputGroup}>
-                        <input className="text-input" name="password" type="password" autoComplete={isLogin ? 'current-password' : 'new-password'} placeholder="Mật khẩu" onChange={handleInputChange} />
+                        <input className="text-input" name="password" type="password" autoComplete={isLogin ? 'current-password' : 'new-password'} placeholder="Mật khẩu" value={formData.password} onChange={handleInputChange} />
                         {errors.password && <span style={styles.errorText}>{errors.password}</span>}
                     </div>
 

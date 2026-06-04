@@ -65,28 +65,33 @@ def _build_system_prompt(
     jd_data: dict[str, Any] | None,
     mode: str,
     duration_minutes: int,
+    focus_area: str | None = None,
 ) -> str:
     """Compose the Vietnamese interviewer system prompt."""
     cv_summary = cv_data.get("summary", "") or cv_data.get("raw_text", "")[:800]
     jd_summary = ""
     if jd_data:
         jd_summary = jd_data.get("description", "") or jd_data.get("raw_text", "")[:600]
+    # Max questions per mode
+    max_q = {"quick": 4, "practice": 7, "mock": 10}.get(mode, 7)
 
     mode_instruction = {
         "practice": "Phỏng vấn luyện tập — thân thiện, khuyến khích, đưa gợi ý nhỏ sau mỗi câu.",
         "mock": "Phỏng vấn thử thực chiến — chuyên nghiệp, đánh giá nghiêm túc, không gợi ý.",
-        "quick": "Phỏng vấn nhanh — hỏi 3-4 câu trọng tâm, ngắn gọn, tập trung kỹ năng cốt lõi.",
+        "quick": "Phỏng vấn nhanh — hỏi đúng 3-4 câu trọng tâm, ngắn gọn, tập trung kỹ năng cốt lõi.",
     }.get(mode, "Phỏng vấn tiêu chuẩn.")
+
+    focus_area_instruction = f"\n## Chủ đề & Trình độ trọng tâm:\n- {focus_area}\n" if focus_area else ""
 
     return f"""Bạn là một chuyên gia phỏng vấn tuyển dụng người Việt, \
 đang phỏng vấn ứng viên cho vị trí **{job_title}**.
-
+{focus_area_instruction}
 ## Phong cách
 - Nói bằng tiếng Việt tự nhiên, lịch sự, chuyên nghiệp.
 - Hỏi một câu tại một thời điểm. Không liệt kê nhiều câu cùng lúc.
-- Câu trả lời ngắn gọn (1-2 câu) khi nhận xét hoặc chuyển chủ đề.
+- Câu nhận xét/chuyển chủ đề ngắn gọn (1-2 câu).
 - Chế độ: {mode_instruction}
-- Thời lượng phỏng vấn: {duration_minutes} phút.
+- Thời lượng phỏng vấn: {duration_minutes} phút. Tối đa **{max_q} câu hỏi**.
 
 ## Thông tin ứng viên (CV)
 {cv_summary if cv_summary else "(Chưa có thông tin CV)"}
@@ -98,9 +103,13 @@ def _build_system_prompt(
 1. Bắt đầu bằng lời chào ngắn và câu hỏi giới thiệu bản thân.
 2. Đặt các câu hỏi STAR (Tình huống, Nhiệm vụ, Hành động, Kết quả).
 3. Lắng nghe và đặt câu hỏi tiếp nối nếu câu trả lời chưa rõ.
-4. Khi hết thời gian, thông báo kết thúc lịch sự.
+4. **QUAN TRỌNG:** Khi đạt đủ số câu hỏi hoặc sắp hết thời gian (được thông báo trong tin nhắn [SYSTEM]), hãy nói lời tổng kết lịch sự và KẾT THÚC phỏng vấn (đừng hỏi thêm câu nào nữa).
 
 Hãy bắt đầu phỏng vấn ngay bây giờ."""
+
+
+# Max questions per mode (used by pipeline to auto-end)
+_MAX_QUESTIONS: dict[str, int] = {"quick": 4, "practice": 7, "mock": 10}
 
 
 class InterviewPipeline:
@@ -125,6 +134,7 @@ class InterviewPipeline:
         self.state: InterviewState | None = None
         self._phase = SessionPhase.STOPPED
         self._abort_tts = asyncio.Event()
+        self._candidate_turn_count: int = 0  # Track how many candidate turns
 
         # Raw PCM audio buffer (bytes) accumulated during LISTENING phase
         self._audio_buffer: bytearray = bytearray()
@@ -142,10 +152,15 @@ class InterviewPipeline:
         jd_data: dict[str, Any] | None = None,
         mode: str = "practice",
         duration_minutes: int = 5,
+        session_id: str | None = None,
+        focus_area: str | None = None,
     ) -> None:
         """Initialise the session and emit the interviewer's first greeting."""
-        session_id = str(uuid.uuid4())
-        system_prompt = _build_system_prompt(job_title, cv_data, jd_data, mode, duration_minutes)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+        system_prompt = _build_system_prompt(
+            job_title, cv_data, jd_data, mode, duration_minutes, focus_area=focus_area
+        )
 
         self.state = InterviewState(
             session_id=session_id,
@@ -236,6 +251,7 @@ class InterviewPipeline:
         self.state.latest_transcript = transcript
         self.state.chat_history.append(ChatMessage(role="user", content=transcript))
         self.state.turns.append(InterviewTurn(role="candidate", content=transcript))
+        self._candidate_turn_count += 1
 
         await self._send_json({"event": "transcript", "text": transcript})
 
@@ -255,6 +271,7 @@ class InterviewPipeline:
         self.state.latest_transcript = text
         self.state.chat_history.append(ChatMessage(role="user", content=text))
         self.state.turns.append(InterviewTurn(role="candidate", content=text))
+        self._candidate_turn_count += 1
 
         await self._send_json({"event": "transcript", "text": text})
 
@@ -266,10 +283,43 @@ class InterviewPipeline:
     # Internal: LLM → sentence chunking → TTS streaming
     # ------------------------------------------------------------------
 
+    def _inject_context_message(self) -> None:
+        """Inject a system message with remaining time + question count into chat history."""
+        if self.state is None:
+            return
+        mode = self.state.interview_mode
+        max_q = _MAX_QUESTIONS.get(mode, 7)
+        remaining_sec = self.state.get_remaining_seconds()
+        remaining_min = round(remaining_sec / 60, 1)
+        answered = self._candidate_turn_count
+        remaining_q = max(0, max_q - answered)
+
+        if remaining_q <= 1 or remaining_min <= 1:
+            hint = (
+                f"[SYSTEM] Phỏng vấn sắp kết thúc: đã hỏi {answered}/{max_q} câu, "
+                f"còn {remaining_min} phút. Hãy hỏi câu CUỐI CÙNG (nếu cần) rồi tổng kết và kết thúc lịch sự."
+            )
+        else:
+            hint = (
+                f"[SYSTEM] Tiến độ: đã hỏi {answered}/{max_q} câu, còn khoảng {remaining_min} phút."
+            )
+        self.state.chat_history.append(ChatMessage(role="system", content=hint))
+
+    def _is_interview_over(self) -> bool:
+        """Check if the interview should end (time up OR question limit reached)."""
+        if self.state is None:
+            return False
+        mode = self.state.interview_mode
+        max_q = _MAX_QUESTIONS.get(mode, 7)
+        return self.state.is_time_up() or self._candidate_turn_count >= max_q
+
     async def _generate_and_speak(self) -> None:
         """Stream LLM tokens, chunk into sentences, synthesise + send PCM."""
         if self.state is None:
             return
+
+        # Inject context (time + question count) before each LLM call
+        self._inject_context_message()
 
         self._abort_tts.clear()
         full_response: list[str] = []
@@ -310,8 +360,13 @@ class InterviewPipeline:
                 )
                 await self._send_json({"event": "assistant_text", "text": assistant_content})
 
-            # Check time-based wrap-up
-            if self.state and self.state.is_time_up() and self._phase != SessionPhase.STOPPED:
+            # Check time-based OR question-limit wrap-up
+            if self.state and self._is_interview_over() and self._phase != SessionPhase.STOPPED:
+                logger.info(
+                    "[Pipeline] Interview over — turns=%d time_up=%s",
+                    self._candidate_turn_count,
+                    self.state.is_time_up(),
+                )
                 await self._send_json({"event": "time_up"})
                 await self.stop()
             else:

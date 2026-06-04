@@ -71,6 +71,14 @@ class InterviewService:
           2. Flush to DB (generates UUID).
           3. Return the generated session_id.
         """
+        title = "Phỏng vấn AI"
+        if focus_area:
+            parts = focus_area.split("—")
+            if len(parts) >= 2:
+                title = f"{parts[1].strip()} ({parts[2].strip() if len(parts) > 2 else mode})"
+            else:
+                title = focus_area
+
         record = await self._sessions.create(
             session,
             user_id=user_id,
@@ -79,7 +87,12 @@ class InterviewService:
             mode=mode,
             total_questions=0,
             overall_confidence=0.0,
-            star_scores={},
+            star_scores={
+                "title": title,
+                "focus_area": focus_area,
+                "scores": [],
+                "final_feedback": "",
+            },
             logic_issues=[],
             improvement_suggestions=[],
         )
@@ -129,12 +142,22 @@ class InterviewService:
         strengths: list[str] = payload.get("strengths", [])
         improvements: list[str] = payload.get("improvements", [])
 
+        # Get title and focus_area from existing star_scores to merge
+        existing_star_scores = record.star_scores or {}
+        title = existing_star_scores.get("title", "Phỏng vấn AI")
+        focus_area = existing_star_scores.get("focus_area")
+
         await self._sessions.update(
             session,
             session_id,
             total_questions=len(star_scores_raw),
             overall_confidence=overall_confidence,
-            star_scores={"scores": star_scores_raw, "final_feedback": payload.get("final_feedback", "")},
+            star_scores={
+                "title": title,
+                "focus_area": focus_area,
+                "scores": star_scores_raw,
+                "final_feedback": payload.get("final_feedback", ""),
+            },
             logic_issues=[],
             improvement_suggestions=strengths + improvements,
             completed_at=datetime.now(UTC),
@@ -211,4 +234,25 @@ class InterviewService:
             star_scores=star_scores_list,
             logic_issues=list(record.logic_issues or []),
             improvement_suggestions=list(record.improvement_suggestions or []),
+            created_at=record.started_at.isoformat() if record.started_at else None,
+            title=stored_scores.get("title", "Phỏng vấn AI"),
+            focus_area=stored_scores.get("focus_area"),
+            status="incomplete" if (record.completed_at is None or record.total_questions == 0) else "completed",
         )
+
+    async def list_sessions(
+        self,
+        session: AsyncSession,
+        user_id: str,
+    ) -> list[InterviewSession]:
+        """Fetch all interview sessions belonging to the user, ordered by started_at desc."""
+        from sqlalchemy import select
+        from app.models.interview_session import InterviewSession
+
+        stmt = (
+            select(InterviewSession)
+            .where(InterviewSession.user_id == user_id)
+            .order_by(InterviewSession.started_at.desc())
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())

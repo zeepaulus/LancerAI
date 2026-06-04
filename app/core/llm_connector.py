@@ -142,7 +142,7 @@ class LLMConnector:
             "messages": messages,
             "stream": stream,
         }
-        if json_mode and not use_nvidia:
+        if json_mode:
             payload["response_format"] = {"type": "json_object"}
         if use_nvidia:
             payload["max_tokens"] = self._nvidia_max_tokens
@@ -247,7 +247,11 @@ class LLMConnector:
             )
             resp.raise_for_status()
             data = resp.json()
-            return typing.cast(str, data["choices"][0]["message"]["content"])
+            choice = data["choices"][0]
+            content = choice["message"]["content"]
+            finish_reason = choice.get("finish_reason")
+            logger.info("[LLM] Response received: len=%d, finish_reason=%s", len(content), finish_reason)
+            return typing.cast(str, content)
         except httpx.HTTPStatusError as exc:
             logger.error("[LLM] HTTP error %s — %s", exc.response.status_code, exc.response.text[:200])
             raise

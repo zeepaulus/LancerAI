@@ -10,7 +10,7 @@ export const AUTH_ME_PATH = '/api/v1/auth/me';
 
 // Extraction
 export const EXTRACTION_UPLOAD_PATH = '/api/v1/extraction/cvs';
-export const extractionCvPath = (cvId) => `/api/v1/extraction/cv/${cvId}`;
+export const extractionCvPath = (cvId) => `/api/v1/extraction/cvs/${cvId}`;
 
 // Optimization
 export const optimizationAnalyzePath = (cvId) => `/api/v1/optimization/cvs/${cvId}/optimizations`;

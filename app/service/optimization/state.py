@@ -82,6 +82,7 @@ class CVOptimizationState(TypedDict, total=False):
     raw_cv_data: dict[str, Any]
     target_job_title: str
     target_industry: str
+    mode: str  # "standard" | "roast" — controls roast agent aggressiveness
 
     # --- Retrieval Agent outputs ---
     industry_benchmarks: dict[str, Any]

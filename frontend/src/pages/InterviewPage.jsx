@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Layout/Navbar';
-import { createSession } from '../api/interview';
+import { createSession, getSessions } from '../api/interview';
 import { uploadCV } from '../api/extraction';
 import * as keys from '../config/storageKeys';
 
@@ -78,12 +78,21 @@ const InterviewPage = () => {
     const openModal  = () => { resetForm(); setShowModal(true); };
     const closeModal = () => { setShowModal(false); resetForm(); };
 
-    // Đọc history từ localStorage mỗi khi trang được render
+    // Load history from DB on mount
     useEffect(() => {
-        const raw = localStorage.getItem('lancerai_interview_history');
-        if (raw) {
-            try { setHistory(JSON.parse(raw)); } catch { /* ignore */ }
-        }
+        let active = true;
+        setHistoryLoading(true);
+        getSessions()
+            .then(data => {
+                if (active) setHistory(data);
+            })
+            .catch(err => {
+                console.error("Lỗi khi tải lịch sử phỏng vấn:", err);
+            })
+            .finally(() => {
+                if (active) setHistoryLoading(false);
+            });
+        return () => { active = false; };
     }, []);
 
     // ── CV drag-drop ────────────────────────────────────────────────────────

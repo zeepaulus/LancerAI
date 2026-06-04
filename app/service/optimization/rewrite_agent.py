@@ -94,11 +94,27 @@ Viết lại các đoạn trên theo công thức XYZ/STAR. Trả về JSON:"""
 
         rewritten_sections: list[RewrittenSection] = []
         for item in rewrites_raw:
+            if not isinstance(item, dict):
+                logger.warning("[rewrite_agent] Skipping non-dict rewrite item: %s", item)
+                continue
             try:
+                # Normalize formula_used
+                formula = str(item.get("formula_used", "")).lower()
+                if "xyz" in formula:
+                    item["formula_used"] = "xyz"
+                elif "star" in formula:
+                    item["formula_used"] = "star"
+                elif "car" in formula:
+                    item["formula_used"] = "car"
+                elif "direct" in formula:
+                    item["formula_used"] = "direct"
+                else:
+                    item["formula_used"] = "xyz"
+
                 section = RewrittenSection(**item)
                 rewritten_sections.append(section)
             except Exception as parse_exc:
-                logger.debug("[rewrite_agent] Skipping malformed rewrite: %s", parse_exc)
+                logger.warning("[rewrite_agent] Skipping malformed rewrite: %s. Item was: %s", parse_exc, item)
 
         logger.info("[rewrite_agent] Produced %d rewrites", len(rewritten_sections))
         return {

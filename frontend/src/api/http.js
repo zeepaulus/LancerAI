@@ -35,7 +35,7 @@ function readJsonSafe(text) {
 /**
  * POST/GET JSON đến backend. Mặc định gắn Bearer từ localStorage (trừ khi skipAuth).
  */
-export async function apiJson(path, { method = 'GET', body, headers = {}, skipAuth } = {}) {
+export async function apiJson(path, { method = 'GET', body, headers = {}, skipAuth, timeoutMs = 120_000 } = {}) {
     const token =
         typeof skipAuth === 'boolean' && skipAuth ? null : localStorage.getItem(keys.LANCERAI_ACCESS_TOKEN);
 
@@ -49,7 +49,6 @@ export async function apiJson(path, { method = 'GET', body, headers = {}, skipAu
 
     const url = `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
     const controller = new AbortController();
-    const timeoutMs = 60_000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     let res;
     try {

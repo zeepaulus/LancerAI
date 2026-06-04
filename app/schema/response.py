@@ -87,6 +87,9 @@ class CVOptimizationResponse(BaseModel):
     optimized_data: dict[str, Any] = Field(
         description="Structured CV data mapped to the final JSON schema.",
     )
+    roast_summary: str | None = None
+    roast_issues: list[dict[str, Any]] | None = None
+    rewritten_sections: list[dict[str, Any]] | None = None
 
 
 # --- Module 3: Matching ---
@@ -137,6 +140,10 @@ class InterviewReportResponse(BaseModel):
     star_scores: list[STARScore] = Field(default_factory=list)
     logic_issues: list[str] = Field(default_factory=list)
     improvement_suggestions: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+    title: str | None = None
+    focus_area: str | None = None
+    status: str | None = None
 
 
 class RenderedCVResponse(BaseModel):
