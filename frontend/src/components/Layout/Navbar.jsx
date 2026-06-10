@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../../store/ThemeContext';
 
 import * as keys from '../../config/storageKeys';
@@ -7,6 +7,7 @@ import logoImg from '../../assets/Logo/lancerai_logo.png'
 
 const Navbar = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [showDropdown, setShowDropdown] = useState(false);
     const { isDarkMode, toggleDarkMode } = useTheme();
     const dropdownRef = useRef(null);
@@ -44,19 +45,43 @@ const Navbar = () => {
             <div style={styles.btnGroup}>
                 <button
                     type="button"
-                    style={styles.navBtn}
+                    style={{
+                        ...styles.navBtn,
+                        color: location.pathname.startsWith('/dashboard') ? 'var(--ink)' : 'var(--muted)',
+                        backgroundColor: location.pathname.startsWith('/dashboard') ? 'var(--surface-strong)' : 'transparent',
+                        fontWeight: location.pathname.startsWith('/dashboard') ? 600 : 500,
+                    }}
+                    onClick={() => navigate('/dashboard')}
+                    onMouseEnter={(e) => { if (!location.pathname.startsWith('/dashboard')) e.target.style.color = 'var(--ink)' }}
+                    onMouseLeave={(e) => { if (!location.pathname.startsWith('/dashboard')) e.target.style.color = 'var(--muted)' }}
+                >
+                    Dashboard
+                </button>
+                <button
+                    type="button"
+                    style={{
+                        ...styles.navBtn,
+                        color: location.pathname.startsWith('/interview') ? 'var(--ink)' : 'var(--muted)',
+                        backgroundColor: location.pathname.startsWith('/interview') ? 'var(--surface-strong)' : 'transparent',
+                        fontWeight: location.pathname.startsWith('/interview') ? 600 : 500,
+                    }}
                     onClick={() => navigate('/interview')}
-                    onMouseEnter={(e) => e.target.style.color = 'var(--ink)'}
-                    onMouseLeave={(e) => e.target.style.color = 'var(--muted)'}
+                    onMouseEnter={(e) => { if (!location.pathname.startsWith('/interview')) e.target.style.color = 'var(--ink)' }}
+                    onMouseLeave={(e) => { if (!location.pathname.startsWith('/interview')) e.target.style.color = 'var(--muted)' }}
                 >
                     Phỏng vấn
                 </button>
                 <button
                     type="button"
-                    style={styles.navBtn}
+                    style={{
+                        ...styles.navBtn,
+                        color: location.pathname.startsWith('/cv-upload') ? 'var(--ink)' : 'var(--muted)',
+                        backgroundColor: location.pathname.startsWith('/cv-upload') ? 'var(--surface-strong)' : 'transparent',
+                        fontWeight: location.pathname.startsWith('/cv-upload') ? 600 : 500,
+                    }}
                     onClick={() => navigate('/cv-upload')}
-                    onMouseEnter={(e) => e.target.style.color = 'var(--ink)'}
-                    onMouseLeave={(e) => e.target.style.color = 'var(--muted)'}
+                    onMouseEnter={(e) => { if (!location.pathname.startsWith('/cv-upload')) e.target.style.color = 'var(--ink)' }}
+                    onMouseLeave={(e) => { if (!location.pathname.startsWith('/cv-upload')) e.target.style.color = 'var(--muted)' }}
                 >
                     Đánh giá CV
                 </button>
@@ -153,8 +178,9 @@ const styles = {
         lineHeight: 1.4,
         cursor: 'pointer',
         color: 'var(--muted)',
-        transition: 'color var(--transition-fast)',
+        transition: 'color var(--transition-fast), background-color var(--transition-fast)',
         padding: 'var(--sp-xs) var(--sp-sm)',
+        borderRadius: 'var(--rounded-pill)',
     },
     avatarBtn: {
         width: '36px',

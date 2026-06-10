@@ -182,7 +182,7 @@ const InterviewPage = () => {
                 {/* Header */}
                 <div style={styles.header}>
                     <div>
-                        <h2 className="display-sm">Phỏng vấn AI</h2>
+                        <h2 className="display-lg">Phỏng vấn AI</h2>
                         <p style={{ color: 'var(--muted)', marginTop: 'var(--sp-xs)', fontSize: '14px' }}>
                             Luyện tập phỏng vấn với AI, nhận đánh giá theo tiêu chí STAR.
                         </p>

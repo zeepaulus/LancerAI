@@ -110,7 +110,7 @@ const CVUploadPage = () => {
                     onDragOver={handleDrag}
                     onDrop={isLoading ? undefined : handleDrop}
                 >
-                    <div className="gradient-orb gradient-orb--sky" style={{ width: '200px', height: '200px', top: '-50px', right: '-50px', opacity: 0.15 }} />
+                    {/* <div className="gradient-orb gradient-orb--sky" style={{ width: '200px', height: '200px', top: '-50px', right: '-50px', opacity: 0.15 }} /> */}
 
                     <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
                         {/* Icon */}

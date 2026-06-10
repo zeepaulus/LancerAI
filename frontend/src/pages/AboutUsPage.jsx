@@ -31,10 +31,14 @@ const AboutUsPage = () => {
                             <img src={member.img} alt={member.name} style={styles.avatar} />
                             <div style={styles.infoBox}>
                                 <h3 className="title-sm" style={{marginBottom: 'var(--sp-xxs)'}}>{member.name}</h3>
-                                <span className="badge-pill" style={{marginBottom: 'var(--sp-xs)', fontSize: '10px'}}>
+                                <p style={{color: 'var(--muted)', fontSize: '13px', marginBottom: 'var(--sp-xs)'}}>
                                     MSSV: {member.mssv}
-                                </span>
-                                <p style={styles.role}>{member.role}</p>
+                                </p>
+                                <div>
+                                    <span className="badge-pill" style={{ fontSize: '11px' }}>
+                                        {member.role}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     ))}
