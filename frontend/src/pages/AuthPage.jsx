@@ -106,8 +106,8 @@ const AuthPage = () => {
     return (
         <div style={styles.wrapper}>
             {/* Subtle background orbs */}
-            <div className="gradient-orb gradient-orb--lavender" style={{width: '500px', height: '500px', top: '-150px', right: '-100px', opacity: 0.2}}></div>
-            <div className="gradient-orb gradient-orb--mint" style={{width: '400px', height: '400px', bottom: '-100px', left: '-80px', opacity: 0.15}}></div>
+            <div className="gradient-orb gradient-orb--lavender" style={{width: '500px', height: '500px', top: '-150px', right: '-100px'}}></div>
+            <div className="gradient-orb gradient-orb--mint" style={{width: '400px', height: '400px', bottom: '-100px', left: '-80px'}}></div>
 
             <div style={styles.card}>
                 <div style={styles.header}>

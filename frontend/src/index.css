@@ -23,8 +23,8 @@
   --muted: #777169;
   --muted-soft: #a8a29e;
   --on-primary: #ffffff;
-  --on-dark: #ffffff;
-  --on-dark-soft: #a8a29e;
+  /* --on-dark: #ffffff; */
+  /* --on-dark-soft: #a8a29e; */
 
   /* Surface */
   --canvas: #f5f5f5;
@@ -32,8 +32,8 @@
   --canvas-deep: #0c0a09;
   --surface-card: #ffffff;
   --surface-strong: #f0efed;
-  --surface-dark: #0c0a09;
-  --surface-dark-elevated: #1c1917;
+  /* --surface-dark: #0c0a09;
+  --surface-dark-elevated: #1c1917; */
 
   /* Hairlines */
   --hairline: #e7e5e4;
@@ -41,11 +41,11 @@
   --hairline-strong: #d6d3d1;
 
   /* Gradient stops (atmospheric) */
-  --gradient-mint: #a7e5d3;
-  --gradient-peach: #f4c5a8;
-  --gradient-lavender: #c8b8e0;
-  --gradient-sky: #a8c8e8;
-  --gradient-rose: #e8b8c4;
+  --gradient-mint: #7cd5ba;
+  --gradient-peach: #f2a679;
+  --gradient-lavender: #b39cdb;
+  --gradient-sky: #7eb4e6;
+  --gradient-rose: #e691a8;
 
   /* Semantic */
   --semantic-error: #dc2626;
@@ -102,16 +102,16 @@
   --muted: #78716c;
   --muted-soft: #57534e;
   --on-primary: #0c0a09;
-  --on-dark: #f5f5f5;
-  --on-dark-soft: #78716c;
+  /* --on-dark: #f5f5f5;
+  --on-dark-soft: #78716c; */
 
   --canvas: #0c0a09;
   --canvas-soft: #1c1917;
-  --canvas-deep: #000000;
+  /* --canvas-deep: #000000; */
   --surface-card: #1c1917;
   --surface-strong: #292524;
-  --surface-dark: #0c0a09;
-  --surface-dark-elevated: #292524;
+  /* --surface-dark: #0c0a09;
+  --surface-dark-elevated: #292524; */
 
   --hairline: #292524;
   --hairline-soft: #1c1917;
@@ -123,9 +123,9 @@
   --gradient-sky: #4a6178;
   --gradient-rose: #6e4a55;
 
-  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.3);
-  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.2);
-  --shadow-dropdown: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-soft: none;
+  --shadow-card: none;
+  --shadow-dropdown: none;
 }
 
 /* ── Base ──────────────────────────────────────────────────── */
@@ -360,6 +360,7 @@ body {
   border: 1px solid var(--hairline);
   border-radius: var(--rounded-xl);
   padding: var(--sp-lg);
+  box-shadow: var(--shadow-soft);
   transition: box-shadow var(--transition-base), border-color var(--transition-base);
 }
 
@@ -446,8 +447,8 @@ input, textarea, select {
 .gradient-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.5;
+  filter: blur(70px);
+  opacity: 0.95;
   pointer-events: none;
   animation: orb-drift 12s ease-in-out infinite;
 }
@@ -559,3 +560,19 @@ a {
 a:hover {
   opacity: 0.7;
 }
+
+/* ── Animations ────────────────────────────────────────────── */
+.card-animate {
+  opacity: 0;
+  transform: translateY(-40px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-animate.animate-float-down {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.delay-1 { transition-delay: 0.1s; }
+.delay-2 { transition-delay: 0.2s; }
+.delay-3 { transition-delay: 0.3s; }

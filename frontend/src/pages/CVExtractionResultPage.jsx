@@ -192,7 +192,7 @@ const CVExtractionResultPage = () => {
                     <button className="btn-outline" onClick={() => navigate('/job-matching', { state: { cvId: cv_id } })}>
                         So khớp với JD
                     </button>
-                    <button className="btn-outline" onClick={() => navigate('/cv-upload')}>
+                    <button className="btn-outline" style={{ marginLeft: 'auto' }} onClick={() => navigate('/cv-upload')}>
                         Upload CV khác
                     </button>
                 </div>
@@ -212,7 +212,7 @@ const styles = {
         transition: 'all var(--transition-fast)',
     },
     sectionCard: { padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)' },
-    fieldGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--sp-base)' },
+    fieldGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--sp-xl)' },
     field: { display: 'flex', flexDirection: 'column', gap: 'var(--sp-xxs)' },
     fieldLabel: { fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.96px', color: 'var(--muted)' },
     fieldValue: { fontSize: '15px', color: 'var(--ink)' },
