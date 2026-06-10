@@ -192,17 +192,56 @@ const InterviewPage = () => {
                     </button>
                 </div>
 
+                {/* Stats */}
+                {history.length > 0 && (
+                    <div style={styles.statsRow}>
+                        <div style={styles.statCard}>
+                            <span style={styles.statValue}>{history.length}</span>
+                            <span style={styles.statLabel}>Tổng buổi</span>
+                        </div>
+                        <div style={styles.statCard}>
+                            <span style={{ ...styles.statValue, color: 'var(--semantic-success, #22c55e)' }}>
+                                {(() => {
+                                    const completed = history.filter(h => h.status !== 'incomplete' && h.overall_confidence > 0);
+                                    if (completed.length === 0) return '—';
+                                    const avg = completed.reduce((sum, h) => sum + h.overall_confidence, 0) / completed.length;
+                                    return Math.round(avg);
+                                })()}
+                            </span>
+                            <span style={styles.statLabel}>Điểm trung bình</span>
+                        </div>
+                        <div style={styles.statCard}>
+                            <span style={{ ...styles.statValue, color: scoreColor(Math.max(...history.map(h => h.overall_confidence || 0), 0)) }}>
+                                {(() => {
+                                    const best = Math.max(...history.map(h => h.overall_confidence || 0));
+                                    return best > 0 ? Math.round(best) : '—';
+                                })()}
+                            </span>
+                            <span style={styles.statLabel}>Điểm cao nhất</span>
+                        </div>
+                    </div>
+                )}
+
                 {/* History */}
                 <p className="caption-uppercase" style={styles.sectionLabel}>LỊCH SỬ PHỎNG VẤN</p>
 
                 {historyLoading ? (
-                    <div style={styles.emptyState}>
-                        <div style={styles.spinner} />
+                    <div style={styles.skeletonList}>
+                        {[0, 1, 2].map(i => (
+                            <div key={i} style={styles.skeletonCard}>
+                                <div style={{ ...styles.skeletonLine, width: '60%' }} />
+                                <div style={{ ...styles.skeletonLine, width: '30%', height: '12px' }} />
+                            </div>
+                        ))}
                     </div>
                 ) : history.length === 0 ? (
                     <div style={styles.emptyState}>
+                        <div style={{ fontSize: '32px', marginBottom: 'var(--sp-sm)' }}>🎙️</div>
+                        <p style={{ color: 'var(--ink)', fontSize: '15px', fontWeight: 500, marginBottom: 'var(--sp-xs)' }}>
+                            Chưa có buổi phỏng vấn nào
+                        </p>
                         <p style={{ color: 'var(--muted)', fontSize: '14px' }}>
-                            Chưa có buổi phỏng vấn nào. Nhấn <strong>+ Bắt đầu phỏng vấn</strong> để thử ngay.
+                            Nhấn <strong>+ Bắt đầu phỏng vấn</strong> để thử ngay.
                         </p>
                     </div>
                 ) : (
@@ -222,11 +261,18 @@ const InterviewPage = () => {
                                     e.currentTarget.style.boxShadow  = 'none';
                                 }}
                             >
-                                <div>
-                                    <h4 className="title-sm" style={{ margin: '0 0 var(--sp-xs) 0' }}>
+                                <div style={{ flex: 1 }}>
+                                    <h4 className="title-sm" style={{ margin: '0 0 2px 0' }}>
                                         {item.title || 'Buổi phỏng vấn'}
                                     </h4>
-                                    <span style={styles.dateBadge}>{formatDate(item.created_at)}</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-sm)', flexWrap: 'wrap' }}>
+                                        <span style={styles.dateBadge}>{formatDate(item.created_at)}</span>
+                                        {item.focus_area && (
+                                            <span style={{ fontSize: '12px', color: 'var(--muted)', borderLeft: '1px solid var(--hairline)', paddingLeft: 'var(--sp-sm)' }}>
+                                                {item.focus_area}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                                 {item.status === 'incomplete' ? (
                                     <span
@@ -419,6 +465,35 @@ const styles = {
         alignItems: 'flex-start',
         marginBottom: 'var(--sp-xl)',
     },
+    statsRow: {
+        display: 'flex',
+        gap: 'var(--sp-base)',
+        marginBottom: 'var(--sp-xl)',
+    },
+    statCard: {
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '2px',
+        padding: 'var(--sp-base)',
+        backgroundColor: 'var(--surface-card)',
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--rounded-xl)',
+    },
+    statValue: {
+        fontSize: '28px',
+        fontWeight: 700,
+        color: 'var(--ink)',
+        fontFamily: 'var(--font-display)',
+    },
+    statLabel: {
+        fontSize: '12px',
+        fontWeight: 600,
+        color: 'var(--muted)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+    },
     sectionLabel: {
         color: 'var(--muted)',
         marginBottom: 'var(--sp-base)',
@@ -446,13 +521,25 @@ const styles = {
         border: '1px dashed var(--hairline)',
         borderRadius: 'var(--rounded-xl)',
     },
-    spinner: {
-        width: '28px', height: '28px',
-        border: '3px solid var(--hairline)',
-        borderTop: '3px solid var(--ink)',
-        borderRadius: '50%',
-        animation: 'spin 0.8s linear infinite',
-        margin: '0 auto',
+    skeletonList: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--sp-sm)',
+    },
+    skeletonCard: {
+        padding: 'var(--sp-lg)',
+        backgroundColor: 'var(--surface-card)',
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--rounded-xl)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--sp-sm)',
+    },
+    skeletonLine: {
+        height: '16px',
+        backgroundColor: 'var(--surface-strong)',
+        borderRadius: 'var(--rounded-sm)',
+        animation: 'pulse 1.5s ease-in-out infinite',
     },
     // Modal
     overlay: {

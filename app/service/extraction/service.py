@@ -32,11 +32,32 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB upload cap
 # Below this threshold we assume the page is scanned and run OCR.
 _MIN_TEXT_DENSITY = 5
 
-_CV_EXTRACTION_SYSTEM = """Bạn là chuyên gia phân tích CV tuyển dụng.
-Nhiệm vụ: Trích xuất thông tin từ CV và trả về JSON HỢP LỆ theo schema sau.
-Chỉ trả về JSON thuần, không thêm markdown hay giải thích.
+# Maximum raw text characters sent to LLM (increased for long CVs)
+_MAX_RAW_TEXT_CHARS = 8000
 
-Schema:
+_CV_EXTRACTION_SYSTEM = """Bạn là chuyên gia phân tích CV tuyển dụng chuyên nghiệp.
+
+## Nhiệm vụ
+Trích xuất TOÀN BỘ thông tin từ CV dưới đây và trả về MỘT object JSON duy nhất.
+Không bọc trong markdown. Không giải thích. Chỉ trả về JSON thuần túy.
+
+## Quy tắc trích xuất
+- **personal_info.name**: Họ tên đầy đủ. Viết hoa chữ cái đầu mỗi từ.
+- **personal_info.email**: Địa chỉ email. Để "" nếu không tìm thấy.
+- **personal_info.phone**: Giữ nguyên format gốc (VD: +84 xxx, 0xxx, (123) 456-7890).
+- **personal_info.linkedin**: URL LinkedIn nếu có.
+- **personal_info.location**: Thành phố / quốc gia.
+- **education**: Mỗi entry = 1 trường/chương trình. period = "Jan 2020 - Dec 2024" hoặc tương tự.
+- **experience**: Mỗi entry = 1 vị trí. descriptions = mô tả chi tiết (bullet points). key_impacts = thành tựu đo lường được. tech_stack = công nghệ sử dụng.
+- **projects**: Mỗi dự án cá nhân/nhóm. potential_roast_points = điểm yếu tiềm ẩn.
+- **skills_matrix.languages**: Ngôn ngữ LẬP TRÌNH (Python, Java, ...). KHÔNG phải ngôn ngữ giao tiếp.
+- **skills_matrix.frameworks**: React, FastAPI, Django, ...
+- **skills_matrix.tools**: Git, Docker, AWS, ...
+- **skills_matrix.soft_skills**: Kỹ năng mềm (nếu có).
+- **certifications**: Danh sách chứng chỉ (strings).
+- **languages**: Ngôn ngữ GIAO TIẾP (Tiếng Việt, English, ...). KHÔNG phải ngôn ngữ lập trình.
+
+## Schema JSON (bắt buộc tuân thủ)
 {
   "personal_info": {"name":"","email":"","phone":"","linkedin":"","location":""},
   "education": [{"school":"","degree":"","major":"","gpa":"","period":""}],
@@ -45,11 +66,24 @@ Schema:
   "skills_matrix": {"languages":[],"frameworks":[],"tools":[],"soft_skills":[]},
   "certifications": [],
   "languages": []
-}"""
+}
+
+Để "" hoặc [] nếu không tìm thấy thông tin cho field đó. KHÔNG bịa thông tin."""
+
+# Simplified retry prompt when first attempt fails
+_CV_EXTRACTION_RETRY_SYSTEM = """Trích xuất CV thành JSON. Chỉ trả JSON thuần, không markdown.
+Schema: {"personal_info":{"name":"","email":"","phone":"","linkedin":"","location":""},"education":[{"school":"","degree":"","major":"","gpa":"","period":""}],"experience":[{"company":"","title":"","period":"","descriptions":[],"key_impacts":[],"tech_stack":[]}],"projects":[{"name":"","role":"","tech_stack":[],"description":"","key_impacts":[],"potential_roast_points":[]}],"skills_matrix":{"languages":[],"frameworks":[],"tools":[],"soft_skills":[]},"certifications":[],"languages":[]}"""
 
 
 def _build_extraction_prompt(raw_text: str) -> str:
-    return f"""Trích xuất thông tin từ CV sau:\n\n{raw_text[:6000]}\n\nTrả về JSON theo schema đã cho:"""
+    truncated = raw_text[:_MAX_RAW_TEXT_CHARS]
+    return f"""Trích xuất thông tin từ CV sau đây và trả về JSON theo schema đã cho.
+
+--- BẮT ĐẦU CV ---
+{truncated}
+--- KẾT THÚC CV ---
+
+JSON:"""
 
 
 def _parse_extraction_response(raw: str, cv_id: str) -> CVExtractionResponse:
@@ -57,10 +91,38 @@ def _parse_extraction_response(raw: str, cv_id: str) -> CVExtractionResponse:
     try:
         from app.core.json_extractor import clean_and_parse_json
         data: dict[str, Any] = clean_and_parse_json(raw)
-        return CVExtractionResponse(cv_id=cv_id, **data)
+        result = CVExtractionResponse(cv_id=cv_id, **data)
+        return result
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         logger.warning("[Extraction] LLM JSON parse failed (%s) — returning empty schema", exc)
         return CVExtractionResponse(cv_id=cv_id)
+
+
+def _validate_extraction(extraction: CVExtractionResponse, raw_text: str) -> list[str]:
+    """Return a list of warning messages for potentially incomplete extractions."""
+    warnings: list[str] = []
+    raw_lower = raw_text.lower()
+
+    if not extraction.personal_info.name:
+        warnings.append("Missing personal_info.name")
+
+    # Check if email exists in raw text but wasn't extracted
+    import re
+    email_pattern = re.compile(r'[\w.+-]+@[\w-]+\.[\w.-]+')
+    if not extraction.personal_info.email and email_pattern.search(raw_text):
+        warnings.append("Email found in raw text but not extracted")
+
+    # Check if education is empty but keywords exist
+    edu_keywords = ["university", "college", "trường", "đại học", "bachelor", "master", "degree"]
+    if not extraction.education and any(kw in raw_lower for kw in edu_keywords):
+        warnings.append("Education keywords found but no education entries extracted")
+
+    # Check if experience is empty but keywords exist
+    exp_keywords = ["company", "công ty", "intern", "engineer", "developer", "kinh nghiệm"]
+    if not extraction.experience and any(kw in raw_lower for kw in exp_keywords):
+        warnings.append("Experience keywords found but no experience entries extracted")
+
+    return warnings
 
 
 class ExtractionService:
@@ -196,8 +258,8 @@ class ExtractionService:
         user_id: str,
         session: AsyncSession,
     ) -> CVExtractionResponse:
-        """LLM parse → persist CVRecord → store vector embedding."""
-        # 1. LLM structured extraction
+        """LLM parse → validate → retry if needed → persist CVRecord → store vector embedding."""
+        # 1. LLM structured extraction (first attempt)
         prompt = _build_extraction_prompt(raw_text)
         llm_response = await self._llm.generate(
             prompt,
@@ -206,7 +268,33 @@ class ExtractionService:
             json_mode=True,
         )
 
-        # 2. Persist CVRecord
+        # 2. Parse and validate
+        extraction = _parse_extraction_response(llm_response, "pending")
+        warnings = _validate_extraction(extraction, raw_text)
+
+        # 3. Retry with simpler prompt if critical fields are missing
+        if not extraction.personal_info.name and raw_text.strip():
+            logger.info("[Extraction] First attempt missing name — retrying with simplified prompt")
+            try:
+                retry_response = await self._llm.generate(
+                    prompt,
+                    system=_CV_EXTRACTION_RETRY_SYSTEM,
+                    use_cloud=bool(self._llm._cloud_api_key),
+                    json_mode=True,
+                )
+                retry_extraction = _parse_extraction_response(retry_response, "pending")
+                if retry_extraction.personal_info.name:
+                    extraction = retry_extraction
+                    llm_response = retry_response
+                    warnings = _validate_extraction(extraction, raw_text)
+                    logger.info("[Extraction] Retry succeeded — name: %s", extraction.personal_info.name)
+            except Exception as exc:
+                logger.warning("[Extraction] Retry failed: %s", exc)
+
+        if warnings:
+            logger.warning("[Extraction] Validation warnings: %s", warnings)
+
+        # 4. Persist CVRecord
         cv_record = await self._cv_repo.create(
             session,
             user_id=user_id,
@@ -217,10 +305,11 @@ class ExtractionService:
         await session.commit()
         await session.refresh(cv_record)
 
-        # 3. Parse LLM response into schema
-        extraction = _parse_extraction_response(llm_response, cv_record.id)
-
-        # 4. Update CVRecord with parsed structured data
+        # 5. Update extraction with real cv_id and persist structured data
+        extraction = CVExtractionResponse(
+            cv_id=cv_record.id,
+            **extraction.model_dump(exclude={"cv_id"}),
+        )
         structured: dict[str, Any] = {
             "raw_text": raw_text,
             **extraction.model_dump(exclude={"cv_id"}),
@@ -228,7 +317,7 @@ class ExtractionService:
         await self._cv_repo.update(session, cv_record.id, extracted_data=structured)
         await session.commit()
 
-        # 5. Generate & store vector embedding (best-effort; non-fatal)
+        # 6. Generate & store vector embedding (best-effort; non-fatal)
         try:
             embed_text = _build_embed_text(extraction)
             embedding = await self._llm.embed(embed_text)

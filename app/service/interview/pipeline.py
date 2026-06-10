@@ -180,14 +180,28 @@ class InterviewPipeline:
         self._phase = SessionPhase.SPEAKING
         await self._generate_and_speak()
 
-    async def feed_audio(self, pcm_bytes: bytes) -> None:
-        """Consume one chunk of microphone PCM Int16 mono 16kHz audio.
+    async def feed_audio(self, raw_bytes: bytes) -> None:
+        """Consume one chunk of audio from the client.
+
+        Accepts either:
+          - Raw PCM Int16 mono 16kHz bytes (standard mic stream).
+          - WebM/Opus container bytes (from browser MediaRecorder).
+            These are auto-detected by the EBML/WebM magic header and
+            converted to PCM via pydub/ffmpeg before VAD processing.
 
         Only accumulates while in LISTENING phase; audio arriving during
         PROCESSING or SPEAKING is silently dropped to avoid cross-talk.
         """
         if self._phase != SessionPhase.LISTENING:
             return
+
+        # Detect WebM container (magic bytes: 0x1A45DFA3 = EBML header)
+        pcm_bytes = raw_bytes
+        if len(raw_bytes) > 4 and raw_bytes[:4] == b'\x1a\x45\xdf\xa3':
+            pcm_bytes = await self._decode_webm_to_pcm(raw_bytes)
+            if not pcm_bytes:
+                logger.warning("[Pipeline] WebM decode returned empty — skipping")
+                return
 
         self._audio_buffer.extend(pcm_bytes)
 
@@ -206,6 +220,41 @@ class InterviewPipeline:
                 self._stt.reset_vad()
                 await self._process_user_turn(bytes(snapshot))
                 break
+
+    async def _decode_webm_to_pcm(self, webm_bytes: bytes) -> bytes:
+        """Convert WebM/Opus audio to PCM Int16 mono 16kHz.
+
+        Tries pydub first (fast, in-process); falls back to ffmpeg subprocess.
+        """
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, self._decode_webm_sync, webm_bytes)
+        except Exception as exc:
+            logger.error("[Pipeline] WebM→PCM decode failed: %s", exc)
+            return b""
+
+    @staticmethod
+    def _decode_webm_sync(webm_bytes: bytes) -> bytes:
+        """Synchronous WebM→PCM conversion (runs in thread pool)."""
+        import io
+        try:
+            from pydub import AudioSegment  # type: ignore[import-untyped]
+            seg = AudioSegment.from_file(io.BytesIO(webm_bytes), format="webm")
+            seg = seg.set_frame_rate(16_000).set_channels(1).set_sample_width(2)
+            return seg.raw_data
+        except Exception:
+            pass
+
+        # Fallback: ffmpeg subprocess
+        import subprocess
+        proc = subprocess.run(
+            ["ffmpeg", "-y", "-f", "webm", "-i", "pipe:0",
+             "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"],
+            input=webm_bytes, capture_output=True, timeout=30,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"ffmpeg failed: {proc.stderr[:200]}")
+        return proc.stdout
 
     async def stop(self) -> dict[str, Any]:
         """Tear down the session and return the final STAR evaluation payload."""

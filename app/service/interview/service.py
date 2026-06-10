@@ -227,6 +227,23 @@ class InterviewService:
             except Exception as exc:
                 logger.debug("[InterviewService] Skipping malformed STAR score: %s", exc)
 
+        # Query and load transcripts
+        from sqlalchemy import select
+        from app.models.interview_transcript import InterviewTranscript
+        from app.schema.response import TranscriptTurn
+
+        stmt = (
+            select(InterviewTranscript)
+            .where(InterviewTranscript.session_id == session_id)
+            .order_by(InterviewTranscript.created_at)
+        )
+        res = await session.execute(stmt)
+        transcript_records = res.scalars().all()
+        transcript_turns = [
+            TranscriptTurn(role=turn.role.value, content=turn.content)
+            for turn in transcript_records
+        ]
+
         return InterviewReportResponse(
             session_id=session_id,
             overall_confidence=float(record.overall_confidence or 0.0),
@@ -238,6 +255,7 @@ class InterviewService:
             title=stored_scores.get("title", "Phỏng vấn AI"),
             focus_area=stored_scores.get("focus_area"),
             status="incomplete" if (record.completed_at is None or record.total_questions == 0) else "completed",
+            transcript=transcript_turns,
         )
 
     async def list_sessions(

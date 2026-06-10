@@ -120,9 +120,8 @@ class VoiceTTSConnector:
         loop = asyncio.get_event_loop()
         pcm_data = await loop.run_in_executor(None, _mp3_bytes_to_pcm, mp3_data)
 
-        chunk_size = OUTPUT_SAMPLE_RATE * 2 * 20 // 1000  # ~20 ms @ 24kHz
-        for i in range(0, len(pcm_data), chunk_size):
-            yield pcm_data[i : i + chunk_size]
+        # Yield the entire sentence PCM data as one block for clean, gapless playback
+        yield pcm_data
 
     # ------------------------------------------------------------------
     # Engine: piper (local ONNX)
@@ -152,7 +151,7 @@ class VoiceTTSConnector:
             proc.stdin.write(text.encode())
             proc.stdin.close()
 
-            chunk_size = piper_sr * 2 * 20 // 1000
+            chunk_size = piper_sr * 2 * 200 // 1000  # ~200 ms buffer size to prevent jitter
             while True:
                 raw = await proc.stdout.read(chunk_size)
                 if not raw:
@@ -219,9 +218,8 @@ class VoiceTTSConnector:
                 data = (f32 * 32768.0).clip(-32768, 32767).astype(np.int16)
 
             raw = data.tobytes()
-            chunk_size = OUTPUT_SAMPLE_RATE * 2 * 20 // 1000
-            for i in range(0, len(raw), chunk_size):
-                yield raw[i : i + chunk_size]
+            # Yield the entire sentence PCM data as one block for clean, gapless playback
+            yield raw
 
         except Exception as exc:
             logger.error("[TTS] VieNeu error (%s) — falling back to edge", exc)

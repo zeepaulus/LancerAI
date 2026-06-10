@@ -131,6 +131,11 @@ class STARScore(BaseModel):
     result: float = Field(ge=0, le=10)
 
 
+class TranscriptTurn(BaseModel):
+    role: str
+    content: str
+
+
 class InterviewReportResponse(BaseModel):
     """Comprehensive interview performance report."""
 
@@ -144,6 +149,7 @@ class InterviewReportResponse(BaseModel):
     title: str | None = None
     focus_area: str | None = None
     status: str | None = None
+    transcript: list[TranscriptTurn] = Field(default_factory=list)
 
 
 class RenderedCVResponse(BaseModel):

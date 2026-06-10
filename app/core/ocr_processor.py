@@ -132,26 +132,43 @@ class OCRProcessor:
             )
         return results
 
-    def extract_text_grouped(self, image_bytes: bytes) -> str:
+    def extract_text_grouped(self, image_bytes: bytes, min_confidence: float = 0.4) -> str:
         """Return a single concatenated string of all detected text blocks.
 
         Blocks are sorted top-to-bottom (primary) and left-to-right (secondary)
         to reconstruct the natural reading order of the document.
-        Blocks on roughly the same line (y-delta < 10 px) are joined with a
-        space; otherwise a newline is inserted.
+        Blocks on roughly the same line are joined with a space; otherwise a
+        newline is inserted.
+
+        Improvements over the original:
+          - Dynamic y_threshold based on average block height (adapts to font size).
+          - Confidence filtering: blocks below ``min_confidence`` are skipped.
+          - Empty/whitespace-only blocks are silently dropped.
         """
         blocks = self.extract_text(image_bytes)
+        if not blocks:
+            return ""
+
+        # Filter low-confidence blocks (OCR noise)
+        blocks = [b for b in blocks if b["confidence"] >= min_confidence and b["text"].strip()]
         if not blocks:
             return ""
 
         # Sort: y1 primary (top-to-bottom), x1 secondary (left-to-right)
         blocks_sorted = sorted(blocks, key=lambda b: (b["bbox"][1], b["bbox"][0]))
 
+        # Compute dynamic y_threshold based on median block height
+        heights = [b["bbox"][3] - b["bbox"][1] for b in blocks_sorted if b["bbox"][3] > b["bbox"][1]]
+        if heights:
+            heights.sort()
+            median_height = heights[len(heights) // 2]
+            y_threshold = max(5, median_height * 0.5)  # half the median block height
+        else:
+            y_threshold = 10  # fallback
+
         lines: list[str] = []
         prev_y = None
         line_buffer: list[str] = []
-
-        y_threshold = 10  # px — same line if y-diff is within this range
 
         for block in blocks_sorted:
             y1 = block["bbox"][1]
@@ -174,3 +191,4 @@ class OCRProcessor:
             lines.append(" ".join(line_buffer))
 
         return "\n".join(lines)
+

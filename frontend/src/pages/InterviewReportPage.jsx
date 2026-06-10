@@ -13,8 +13,7 @@ const InterviewReportPage = () => {
     const sessionId = location.state?.sessionId;
 
     const [report, setReport] = useState(location.state?.report || null);
-    const [loading, setLoading] = useState(!report && !!sessionId);
-    const [fetchError, setFetchError] = useState('');
+    const [showTranscript, setShowTranscript] = useState(true);
 
     useEffect(() => {
         if (report || !sessionId) return;
@@ -74,7 +73,7 @@ const InterviewReportPage = () => {
         );
     }
 
-    const { session_id, overall_confidence, total_questions, star_scores, logic_issues, improvement_suggestions } = report;
+    const { session_id, overall_confidence, total_questions, star_scores, logic_issues, improvement_suggestions, transcript } = report;
 
     const avgSTAR = star_scores?.length > 0
         ? star_scores.reduce((acc, s) => ({
@@ -159,13 +158,91 @@ const InterviewReportPage = () => {
                     </div>
                 )}
 
-                {/* Improvement Suggestions */}
+                {/* Improvement Suggestions — Card-style */}
                 {improvement_suggestions?.length > 0 && (
                     <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
                         <h3 className="title-md" style={{marginBottom: 'var(--sp-base)'}}>💡 Gợi ý cải thiện</h3>
-                        <ul style={styles.issueList}>
-                            {improvement_suggestions.map((sug, i) => <li key={i}>{sug}</li>)}
-                        </ul>
+                        <div style={{display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)'}}>
+                            {improvement_suggestions.map((sug, i) => (
+                                <div key={i} style={{
+                                    display: 'flex', alignItems: 'flex-start', gap: 'var(--sp-sm)',
+                                    padding: 'var(--sp-sm) var(--sp-base)',
+                                    backgroundColor: 'var(--canvas-soft)',
+                                    borderRadius: 'var(--rounded-lg)',
+                                    border: '1px solid var(--hairline-soft)',
+                                }}>
+                                    <span style={{
+                                        width: '24px', height: '24px', borderRadius: '50%',
+                                        backgroundColor: 'var(--gradient-mint)', color: 'var(--ink)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: '11px', fontWeight: 700, flexShrink: 0, marginTop: '2px',
+                                    }}>{i + 1}</span>
+                                    <span style={{fontSize: '14px', color: 'var(--body)', lineHeight: 1.6}}>{sug}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Transcript / Conversation History */}
+                {transcript?.length > 0 && (
+                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
+                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-base)', cursor: 'pointer'}} onClick={() => setShowTranscript(!showTranscript)}>
+                            <h3 className="title-md" style={{margin: 0}}>💬 Lịch sử hội thoại</h3>
+                            <button className="btn-tertiary" style={{padding: '4px 8px'}}>{showTranscript ? 'Thu gọn ▲' : 'Mở rộng ▼'}</button>
+                        </div>
+                        {showTranscript && (
+                            <div style={{display: 'flex', flexDirection: 'column', gap: 'var(--sp-base)', maxHeight: '500px', overflowY: 'auto', paddingRight: 'var(--sp-xs)', paddingTop: 'var(--sp-xs)'}}>
+                                {transcript.map((turn, i) => {
+                                    if (turn.role === 'system') {
+                                        return (
+                                            <div key={i} style={{
+                                                textAlign: 'center',
+                                                color: 'var(--muted)',
+                                                fontSize: '12px',
+                                                fontStyle: 'italic',
+                                                margin: 'var(--sp-xs) 0',
+                                            }}>
+                                                {turn.content}
+                                            </div>
+                                        );
+                                    }
+                                    const isAI = turn.role === 'ai';
+                                    return (
+                                        <div key={i} style={{
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: isAI ? 'flex-start' : 'flex-end',
+                                            width: '100%',
+                                        }}>
+                                            <div style={{
+                                                fontSize: '11px',
+                                                color: 'var(--muted)',
+                                                marginBottom: '4px',
+                                                padding: '0 4px',
+                                            }}>
+                                                {isAI ? '🤖 Người phỏng vấn AI' : '👤 Bạn'}
+                                            </div>
+                                            <div style={{
+                                                maxWidth: '85%',
+                                                padding: '12px 16px',
+                                                borderRadius: 'var(--rounded-lg)',
+                                                borderTopLeftRadius: isAI ? '2px' : 'var(--rounded-lg)',
+                                                borderTopRightRadius: isAI ? 'var(--rounded-lg)' : '2px',
+                                                backgroundColor: isAI ? 'var(--surface-strong)' : 'var(--primary)',
+                                                color: isAI ? 'var(--ink)' : 'var(--on-primary)',
+                                                fontSize: '14px',
+                                                lineHeight: 1.5,
+                                                whiteSpace: 'pre-line',
+                                                border: isAI ? '1px solid var(--hairline-soft)' : 'none',
+                                            }}>
+                                                {turn.content}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 )}
 
