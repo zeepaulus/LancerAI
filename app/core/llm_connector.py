@@ -41,8 +41,22 @@ _TIMEOUT = httpx.Timeout(connect=10.0, read=600.0, write=30.0, pool=10.0)
 
 # Backend name constants
 BACKEND_OLLAMA = "ollama"
+BACKEND_SELF_HOSTED = "self_hosted"
 BACKEND_GROQ = "groq"
 BACKEND_NVIDIA = "nvidia"
+
+_PLACEHOLDER_KEY_MARKERS = (
+    "your-",
+    "change-me",
+    "example",
+    "placeholder",
+)
+
+
+def _is_configured_secret(value: str) -> bool:
+    """Return False for empty or example API keys from .env.example."""
+    normalized = value.strip().lower()
+    return bool(normalized) and not any(marker in normalized for marker in _PLACEHOLDER_KEY_MARKERS)
 
 
 class LLMConnector:
@@ -52,9 +66,13 @@ class LLMConnector:
         self,
         local_base_url: str,
         local_model: str,
-        cloud_base_url: str,
-        cloud_api_key: str,
-        cloud_model: str,
+        hosted_base_url: str = "",
+        hosted_api_key: str = "",
+        hosted_model: str = "",
+        hosted_embedding_model: str = "",
+        cloud_base_url: str = "",
+        cloud_api_key: str = "",
+        cloud_model: str = "",
         # NVIDIA NIM configuration
         nvidia_base_url: str = "https://integrate.api.nvidia.com",
         nvidia_api_key: str = "",
@@ -64,6 +82,10 @@ class LLMConnector:
     ) -> None:
         self._local_base_url = local_base_url.rstrip("/")
         self._local_model = local_model
+        self._hosted_base_url = hosted_base_url.rstrip("/")
+        self._hosted_api_key = hosted_api_key
+        self._hosted_model = hosted_model
+        self._hosted_embedding_model = hosted_embedding_model
         self._cloud_base_url = cloud_base_url.rstrip("/")
         self._cloud_api_key = cloud_api_key
         self._cloud_model = cloud_model
@@ -82,8 +104,17 @@ class LLMConnector:
 
     @property
     def has_cloud(self) -> bool:
-        """True when a cloud API key is configured."""
-        return bool(self._cloud_api_key)
+        """True when a remote/heavy-reasoning backend is configured."""
+        return (
+            self.has_hosted
+            or _is_configured_secret(self._cloud_api_key)
+            or _is_configured_secret(self._nvidia_api_key)
+        )
+
+    @property
+    def has_hosted(self) -> bool:
+        """True when a self-hosted OpenAI-compatible cloud endpoint is configured."""
+        return bool(self._hosted_base_url and self._hosted_model)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -93,20 +124,23 @@ class LLMConnector:
         """Auto-promote to NVIDIA if nvidia key is set and cloud key is empty/placeholder."""
         if use_nvidia:
             return False, True
-        
-        is_placeholder_cloud = not self._cloud_api_key or "your-groq" in self._cloud_api_key
-        has_nvidia = bool(self._nvidia_api_key) and "your-nvidia" not in self._nvidia_api_key
-        
+
+        if self.has_hosted:
+            return use_cloud, False
+
+        is_placeholder_cloud = not _is_configured_secret(self._cloud_api_key)
+        has_nvidia = _is_configured_secret(self._nvidia_api_key)
+
         if (use_cloud or is_placeholder_cloud) and has_nvidia:
             return False, True
-            
+
         return use_cloud, use_nvidia
 
 
     def _chat_url(self, use_cloud: bool, use_nvidia: bool = False) -> str:
         if use_nvidia:
             return f"{self._nvidia_base_url}/v1/chat/completions"
-        base = self._cloud_base_url if use_cloud else self._local_base_url
+        base = self._remote_base_url() if use_cloud else self._local_base_url
         if base.endswith("/v1"):
             return f"{base}/chat/completions"
         return f"{base}/v1/chat/completions"
@@ -115,6 +149,8 @@ class LLMConnector:
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if use_nvidia and self._nvidia_api_key:
             headers["Authorization"] = f"Bearer {self._nvidia_api_key}"
+        elif use_cloud and self.has_hosted and self._hosted_api_key:
+            headers["Authorization"] = f"Bearer {self._hosted_api_key}"
         elif use_cloud and self._cloud_api_key:
             headers["Authorization"] = f"Bearer {self._cloud_api_key}"
         return headers
@@ -122,12 +158,24 @@ class LLMConnector:
     def _model(self, use_cloud: bool, use_nvidia: bool = False) -> str:
         if use_nvidia:
             return self._nvidia_model
+        if use_cloud and self.has_hosted:
+            return self._hosted_model
         return self._cloud_model if use_cloud else self._local_model
 
     def _backend_name(self, use_cloud: bool, use_nvidia: bool = False) -> str:
         if use_nvidia:
             return BACKEND_NVIDIA
+        if use_cloud and self.has_hosted:
+            return BACKEND_SELF_HOSTED
         return BACKEND_GROQ if use_cloud else BACKEND_OLLAMA
+
+    def _remote_base_url(self) -> str:
+        return self._hosted_base_url if self.has_hosted else self._cloud_base_url
+
+    def _remote_embedding_model(self) -> str:
+        if self.has_hosted:
+            return self._hosted_embedding_model or self._hosted_model
+        return self._cloud_model
 
     def _build_chat_payload(
         self,
@@ -255,7 +303,7 @@ class LLMConnector:
         except httpx.HTTPStatusError as exc:
             logger.error("[LLM] HTTP error %s — %s", exc.response.status_code, exc.response.text[:200])
             raise
-        except Exception as exc:
+        except Exception:
             logger.exception("[LLM] _call_llm failed")
             raise
 
@@ -386,8 +434,8 @@ class LLMConnector:
             if embedding:
                 return embedding
 
-        # Final fallback: cloud (Groq) OpenAI-compatible
-        if use_cloud and self._cloud_api_key:
+        # Final fallback: remote OpenAI-compatible embeddings (self-hosted first).
+        if use_cloud and (self.has_hosted or self._cloud_api_key):
             return await self._embed_openai(text)
 
         return []
@@ -424,12 +472,9 @@ class LLMConnector:
 
     async def _embed_openai(self, text: str) -> list[float]:
         """Call OpenAI-compatible /v1/embeddings endpoint (Groq fallback)."""
-        base = self._cloud_base_url
-        if base.endswith("/v1"):
-            url = f"{base}/embeddings"
-        else:
-            url = f"{base}/v1/embeddings"
-        payload = {"model": self._cloud_model, "input": text}
+        base = self._remote_base_url()
+        url = f"{base}/embeddings" if base.endswith("/v1") else f"{base}/v1/embeddings"
+        payload = {"model": self._remote_embedding_model(), "input": text}
         headers = self._headers(use_cloud=True)
         try:
             resp = await self._client.post(url, json=payload, headers=headers)

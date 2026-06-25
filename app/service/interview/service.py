@@ -20,13 +20,15 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.llm_connector import LLMConnector
 from app.models.interview_session import InterviewSession
 from app.models.interview_transcript import InterviewTranscript, MessageRole
 from app.repository.relational_repository import RelationalRepository
-from app.schema.response import InterviewReportResponse, STARScore
+from app.schema.response import InterviewReportResponse, InterviewTranscriptResponse, STARScore
+from app.service.interview.scoring import score_to_confidence
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,17 @@ class InterviewService:
         self._llm = llm_connector
         self._sessions = session_repository
 
+    @staticmethod
+    def room_name_for(session_id: str) -> str:
+        """Return the stable realtime room name for an interview session."""
+        return f"interview-{session_id}"
+
+    @staticmethod
+    def meeting_url_for(session_id: str, frontend_base_url: str) -> str:
+        """Return the candidate-facing meeting URL for the existing SPA."""
+        base_url = frontend_base_url.rstrip("/")
+        return f"{base_url}/chat?session_id={session_id}"
+
     async def create_session(
         self,
         session: AsyncSession,
@@ -61,6 +74,9 @@ class InterviewService:
         job_listing_id: str | None = None,
         focus_area: str | None = None,
         duration_minutes: int = 5,
+        job_title: str = "",
+        jd_data: dict[str, Any] | None = None,
+        interview_plan: dict[str, Any] | None = None,
     ) -> str:
         """Create a session shell record (status: created) and return its id.
 
@@ -71,14 +87,6 @@ class InterviewService:
           2. Flush to DB (generates UUID).
           3. Return the generated session_id.
         """
-        title = "Phỏng vấn AI"
-        if focus_area:
-            parts = focus_area.split("—")
-            if len(parts) >= 2:
-                title = f"{parts[1].strip()} ({parts[2].strip() if len(parts) > 2 else mode})"
-            else:
-                title = focus_area
-
         record = await self._sessions.create(
             session,
             user_id=user_id,
@@ -88,10 +96,16 @@ class InterviewService:
             total_questions=0,
             overall_confidence=0.0,
             star_scores={
-                "title": title,
-                "focus_area": focus_area,
-                "scores": [],
-                "final_feedback": "",
+                "status": "created",
+                "setup": {
+                    "job_title": job_title,
+                    "duration_minutes": duration_minutes,
+                    "focus_area": focus_area or "",
+                    "jd_data": jd_data or {},
+                },
+                "title": job_title or "Phỏng vấn AI",
+                "focus_area": focus_area or "",
+                "interview_plan": interview_plan or {},
             },
             logic_issues=[],
             improvement_suggestions=[],
@@ -135,17 +149,20 @@ class InterviewService:
             s if isinstance(s, dict) else s.model_dump()
             for s in payload.get("star_scores", [])
         ]
-        overall_score: float = float(payload.get("overall_score", 0.0))
-        # Convert 0-10 scale to 0-100 for overall_confidence
-        overall_confidence = min(100.0, overall_score * 10)
+        scorecard: dict[str, Any] = payload.get("scorecard", {})
+        scorecard_overall = float(scorecard.get("overall_score", 0.0))
+        if scorecard_overall:
+            overall_confidence = score_to_confidence(scorecard_overall)
+        else:
+            overall_score: float = float(payload.get("overall_score", 0.0))
+            overall_confidence = min(100.0, overall_score * 10)
 
         strengths: list[str] = payload.get("strengths", [])
         improvements: list[str] = payload.get("improvements", [])
-
-        # Get title and focus_area from existing star_scores to merge
-        existing_star_scores = record.star_scores or {}
-        title = existing_star_scores.get("title", "Phỏng vấn AI")
-        focus_area = existing_star_scores.get("focus_area")
+        behavior_observations: list[dict[str, Any]] = payload.get("behavior_observations", [])
+        behavior_issues: list[str] = payload.get("behavior_issues", [])
+        behavior_score = float(payload.get("behavior_score", 100.0))
+        existing_scores = record.star_scores or {}
 
         await self._sessions.update(
             session,
@@ -153,12 +170,17 @@ class InterviewService:
             total_questions=len(star_scores_raw),
             overall_confidence=overall_confidence,
             star_scores={
-                "title": title,
-                "focus_area": focus_area,
+                **existing_scores,
+                "status": "completed",
                 "scores": star_scores_raw,
                 "final_feedback": payload.get("final_feedback", ""),
+                "behavior_score": behavior_score,
+                "behavior_observations": behavior_observations,
+                "scorecard": scorecard,
+                "title": existing_scores.get("title") or payload.get("job_title") or "Phỏng vấn AI",
+                "focus_area": existing_scores.get("focus_area") or "",
             },
-            logic_issues=[],
+            logic_issues=behavior_issues,
             improvement_suggestions=strengths + improvements,
             completed_at=datetime.now(UTC),
         )
@@ -227,22 +249,26 @@ class InterviewService:
             except Exception as exc:
                 logger.debug("[InterviewService] Skipping malformed STAR score: %s", exc)
 
-        # Query and load transcripts
-        from sqlalchemy import select
-        from app.models.interview_transcript import InterviewTranscript
-        from app.schema.response import TranscriptTurn
-
-        stmt = (
+        transcript_rows = await session.execute(
             select(InterviewTranscript)
             .where(InterviewTranscript.session_id == session_id)
-            .order_by(InterviewTranscript.created_at)
+            .order_by(InterviewTranscript.created_at.asc())
         )
-        res = await session.execute(stmt)
-        transcript_records = res.scalars().all()
-        transcript_turns = [
-            TranscriptTurn(role=turn.role.value, content=turn.content)
-            for turn in transcript_records
-        ]
+        transcript: list[InterviewTranscriptResponse] = []
+        for row in transcript_rows.scalars().all():
+            if row.role == MessageRole.AI:
+                role = "interviewer"
+            elif row.role == MessageRole.HUMAN:
+                role = "candidate"
+            else:
+                role = "system"
+            transcript.append(
+                InterviewTranscriptResponse(
+                    role=role,
+                    content=row.content,
+                    created_at=row.created_at.isoformat() if row.created_at else "",
+                )
+            )
 
         return InterviewReportResponse(
             session_id=session_id,
@@ -251,11 +277,15 @@ class InterviewService:
             star_scores=star_scores_list,
             logic_issues=list(record.logic_issues or []),
             improvement_suggestions=list(record.improvement_suggestions or []),
+            behavior_score=float(stored_scores.get("behavior_score", 100.0)),
+            behavior_observations=list(stored_scores.get("behavior_observations", [])),
+            scorecard=stored_scores.get("scorecard") or {},
+            interview_plan=stored_scores.get("interview_plan") or {},
+            transcript=transcript,
             created_at=record.started_at.isoformat() if record.started_at else None,
-            title=stored_scores.get("title", "Phỏng vấn AI"),
-            focus_area=stored_scores.get("focus_area"),
+            title=stored_scores.get("title") or stored_scores.get("setup", {}).get("job_title") or "Phỏng vấn AI",
+            focus_area=stored_scores.get("focus_area") or stored_scores.get("setup", {}).get("focus_area") or "",
             status="incomplete" if (record.completed_at is None or record.total_questions == 0) else "completed",
-            transcript=transcript_turns,
         )
 
     async def list_sessions(
@@ -263,10 +293,7 @@ class InterviewService:
         session: AsyncSession,
         user_id: str,
     ) -> list[InterviewSession]:
-        """Fetch all interview sessions belonging to the user, ordered by started_at desc."""
-        from sqlalchemy import select
-        from app.models.interview_session import InterviewSession
-
+        """Fetch all interview sessions belonging to the user, newest first."""
         stmt = (
             select(InterviewSession)
             .where(InterviewSession.user_id == user_id)

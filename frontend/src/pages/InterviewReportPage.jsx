@@ -1,32 +1,62 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '../components/Layout/Navbar';
 import { getReport } from '../api/interview';
 
 /**
  * InterviewReportPage — STAR-scored interview report.
- * Fetches report from API using sessionId from location.state.
+ * Receives report data via location.state.
  */
 const InterviewReportPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const sessionId = location.state?.sessionId;
-
-    const [report, setReport] = useState(location.state?.report || null);
-    const [showTranscript, setShowTranscript] = useState(true);
+    const initialReport = location.state?.report || null;
+    const sessionIdFromState = location.state?.sessionId || location.state?.viewReportId || initialReport?.session_id || '';
+    const [report, setReport] = useState(initialReport);
+    const [loading, setLoading] = useState(Boolean(!initialReport && sessionIdFromState));
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        if (report || !sessionId) return;
-        setLoading(true);
-        getReport(sessionId)
-            .then(data => { setReport(data); setLoading(false); })
-            .catch(err => {
-                setFetchError(err?.message || 'Không thể tải báo cáo. Vui lòng thử lại.');
-                setLoading(false);
-            });
-    }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+        if (report || !sessionIdFromState) return;
 
-    if (!sessionId && !report) {
+        let mounted = true;
+        setLoading(true);
+        getReport(sessionIdFromState)
+            .then((data) => {
+                if (mounted) {
+                    setReport(data);
+                    setError('');
+                }
+            })
+            .catch((err) => {
+                if (mounted) {
+                    setError(err.message || 'Khong the tai bao cao phong van.');
+                }
+            })
+            .finally(() => {
+                if (mounted) setLoading(false);
+            });
+
+        return () => {
+            mounted = false;
+        };
+    }, [report, sessionIdFromState]);
+
+    if (loading) {
+        return (
+            <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
+                <Navbar />
+                <div style={styles.container}>
+                    <div style={{textAlign: 'center', padding: 'var(--sp-section) 0'}}>
+                        <p className="title-md">Dang tai bao cao...</p>
+                        <p style={{color: 'var(--muted)', marginBottom: 'var(--sp-lg)'}}>Vui long doi trong giay lat.</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (!report) {
         return (
             <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
                 <Navbar />
@@ -41,39 +71,19 @@ const InterviewReportPage = () => {
         );
     }
 
-    if (loading) {
-        return (
-            <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
-                <Navbar />
-                <div style={styles.container}>
-                    <div style={{textAlign: 'center', padding: 'var(--sp-section) 0'}}>
-                        <div style={styles.spinner} />
-                        <p style={{color: 'var(--muted)', marginTop: 'var(--sp-lg)'}}>Đang tải kết quả phỏng vấn...</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    if (fetchError || !report) {
-        return (
-            <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
-                <Navbar />
-                <div style={styles.container}>
-                    <div style={{textAlign: 'center', padding: 'var(--sp-section) 0'}}>
-                        <p className="title-md">⚠️ Không tải được báo cáo</p>
-                        <p style={{color: 'var(--muted)', marginBottom: 'var(--sp-lg)'}}>{fetchError || 'Buổi phỏng vấn chưa hoàn thành hoặc chưa có kết quả.'}</p>
-                        <div style={{display: 'flex', gap: 'var(--sp-sm)', justifyContent: 'center'}}>
-                            <button className="btn-primary" onClick={() => { setFetchError(''); setLoading(true); getReport(sessionId).then(d => { setReport(d); setLoading(false); }).catch(e => { setFetchError(e?.message || 'Lỗi.'); setLoading(false); }); }}>Thử lại</button>
-                            <button className="btn-outline" onClick={() => navigate('/interview')}>Về trang Phỏng vấn</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    const { session_id, overall_confidence, total_questions, star_scores, logic_issues, improvement_suggestions, transcript } = report;
+    const {
+        session_id,
+        overall_confidence,
+        total_questions,
+        star_scores,
+        logic_issues,
+        improvement_suggestions,
+        behavior_score = 100,
+        behavior_observations = [],
+        scorecard = {},
+        interview_plan = {},
+        transcript = [],
+    } = report;
 
     const avgSTAR = star_scores?.length > 0
         ? star_scores.reduce((acc, s) => ({
@@ -101,24 +111,108 @@ const InterviewReportPage = () => {
             <div style={styles.container}>
                 <button className="btn-tertiary" style={{marginBottom: 'var(--sp-base)'}} onClick={() => navigate('/interview')}>← Về trang Phỏng vấn</button>
 
-                {/* <p className="caption-uppercase" style={{color: 'var(--muted)', marginBottom: 'var(--sp-xs)'}}>BÁO CÁO PHỎNG VẤN</p> */}
-                <h1 className="display-md" style={{marginBottom: 'var(--sp-xxs)'}}>Kết quả đánh giá</h1>
+                <p className="caption-uppercase" style={{color: 'var(--muted)', marginBottom: 'var(--sp-xs)'}}>BÁO CÁO PHỎNG VẤN</p>
+                <h1 className="display-sm" style={{marginBottom: 'var(--sp-xxs)'}}>Kết quả đánh giá</h1>
                 <p style={{color: 'var(--muted)', fontSize: '13px', marginBottom: 'var(--sp-xl)'}}>
-                    Session: <code style={{backgroundColor: 'var(--surface-strong)', padding: '2px 6px', borderRadius: 'var(--rounded-xs)', fontSize: '11px'}}>{session_id || sessionId}</code>
+                    Session: <code style={{backgroundColor: 'var(--surface-strong)', padding: '2px 6px', borderRadius: 'var(--rounded-xs)', fontSize: '11px'}}>{session_id}</code>
                 </p>
 
                 {/* Confidence Score */}
                 <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)', textAlign: 'center'}}>
                     <p className="caption-uppercase" style={{color: 'var(--muted)', marginBottom: 'var(--sp-sm)'}}>ĐỘ TỰ TIN TỔNG THỂ</p>
                     <div style={{fontSize: '56px', fontWeight: 300, fontFamily: 'var(--font-display)', color: 'var(--ink)'}}>
-                        {Math.round(overall_confidence ?? 0)}
+                        {Math.round(overall_confidence)}
                         <span style={{fontSize: '20px', color: 'var(--muted)'}}>/100</span>
                     </div>
                     <div style={{...styles.progressBar, marginTop: 'var(--sp-sm)', maxWidth: '300px', marginLeft: 'auto', marginRight: 'auto'}}>
-                        <div style={{height: '100%', width: `${overall_confidence ?? 0}%`, backgroundColor: getConfidenceColor(overall_confidence ?? 0), borderRadius: 'var(--rounded-pill)', transition: 'width 0.5s ease'}}></div>
+                        <div style={{height: '100%', width: `${overall_confidence}%`, backgroundColor: getConfidenceColor(overall_confidence), borderRadius: 'var(--rounded-pill)', transition: 'width 0.5s ease'}}></div>
                     </div>
-                    <p style={{color: 'var(--muted)', fontSize: '13px', marginTop: 'var(--sp-sm)'}}>Tổng câu hỏi: {total_questions ?? 0}</p>
+                    <p style={{color: 'var(--muted)', fontSize: '13px', marginTop: 'var(--sp-sm)'}}>Tổng câu hỏi: {total_questions}</p>
                 </div>
+
+                {behavior_observations.length > 0 && (
+                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
+                        <h3 className="title-md" style={{marginBottom: 'var(--sp-sm)'}}>Quan sát hành vi</h3>
+                        <div style={{display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: 'var(--sp-base)'}}>
+                            <span style={{fontSize: '32px', fontWeight: 300, fontFamily: 'var(--font-display)', color: 'var(--ink)'}}>
+                                {Math.round(behavior_score)}
+                            </span>
+                            <span style={{fontSize: '14px', color: 'var(--muted)'}}>/100 điểm hành vi</span>
+                        </div>
+                        <div style={styles.behaviorList}>
+                            {behavior_observations.map((obs, i) => (
+                                <div key={`${obs.kind}-${i}`} style={styles.behaviorItem}>
+                                    <div style={{display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-sm)'}}>
+                                        <strong style={{color: 'var(--ink)'}}>{obs.label}</strong>
+                                        <span style={styles.behaviorSeverity(obs.severity)}>{obs.severity}</span>
+                                    </div>
+                                    {(obs.suggestion || obs.detail) && (
+                                        <p style={{color: 'var(--muted)', fontSize: '13px', margin: '6px 0 0'}}>
+                                            {obs.suggestion || obs.detail}
+                                        </p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {scorecard?.competencies?.length > 0 && (
+                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
+                        <h3 className="title-md" style={{marginBottom: 'var(--sp-sm)'}}>Scorecard theo năng lực</h3>
+                        <div style={{display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-sm)', marginBottom: 'var(--sp-base)'}}>
+                            <span style={{fontSize: '28px', fontWeight: 300, fontFamily: 'var(--font-display)', color: 'var(--ink)'}}>
+                                {Number(scorecard.overall_score || 0).toFixed(1)}/5
+                            </span>
+                            <span className="badge-pill" style={{background: 'var(--surface-strong)', color: 'var(--ink)'}}>
+                                {scorecard.recommendation || 'n/a'}
+                            </span>
+                        </div>
+                        <div style={styles.behaviorList}>
+                            {scorecard.competencies.map((item, i) => (
+                                <div key={`${item.name}-${i}`} style={styles.behaviorItem}>
+                                    <div style={{display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-sm)'}}>
+                                        <strong style={{color: 'var(--ink)'}}>{item.name}</strong>
+                                        <span style={{fontWeight: 600, color: 'var(--primary)'}}>{Number(item.score || 0).toFixed(1)}/5</span>
+                                    </div>
+                                    <p style={{color: 'var(--muted)', fontSize: '13px', margin: '6px 0 0'}}>
+                                        Weight {Math.round((item.weight || 0) * 100)}% · {item.rationale || item.evidence}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {interview_plan?.question_plan?.length > 0 && (
+                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
+                        <h3 className="title-md" style={{marginBottom: 'var(--sp-base)'}}>Kế hoạch phỏng vấn</h3>
+                        <div style={styles.behaviorList}>
+                            {interview_plan.question_plan.map((item, i) => (
+                                <div key={`${item.stage}-${i}`} style={styles.behaviorItem}>
+                                    <strong style={{color: 'var(--ink)'}}>{i + 1}. {item.goal || item.stage}</strong>
+                                    <p style={{color: 'var(--muted)', fontSize: '13px', margin: '6px 0 0'}}>
+                                        {item.question}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {transcript?.length > 0 && (
+                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
+                        <h3 className="title-md" style={{marginBottom: 'var(--sp-base)'}}>Transcript hội thoại</h3>
+                        <div style={styles.transcriptList}>
+                            {transcript.map((turn, i) => (
+                                <div key={`${turn.role}-${i}`} style={styles.transcriptItem(turn.role)}>
+                                    <strong>{turn.role === 'candidate' ? 'Ứng viên' : turn.role === 'interviewer' ? 'AI phỏng vấn' : 'Hệ thống'}</strong>
+                                    <p style={{margin: '6px 0 0', whiteSpace: 'pre-wrap'}}>{turn.content}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* STAR Scores */}
                 {avgSTAR && (
@@ -158,91 +252,13 @@ const InterviewReportPage = () => {
                     </div>
                 )}
 
-                {/* Improvement Suggestions — Card-style */}
+                {/* Improvement Suggestions */}
                 {improvement_suggestions?.length > 0 && (
                     <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
                         <h3 className="title-md" style={{marginBottom: 'var(--sp-base)'}}>💡 Gợi ý cải thiện</h3>
-                        <div style={{display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)'}}>
-                            {improvement_suggestions.map((sug, i) => (
-                                <div key={i} style={{
-                                    display: 'flex', alignItems: 'flex-start', gap: 'var(--sp-sm)',
-                                    padding: 'var(--sp-sm) var(--sp-base)',
-                                    backgroundColor: 'var(--canvas-soft)',
-                                    borderRadius: 'var(--rounded-lg)',
-                                    border: '1px solid var(--hairline-soft)',
-                                }}>
-                                    <span style={{
-                                        width: '24px', height: '24px', borderRadius: '50%',
-                                        backgroundColor: 'var(--gradient-mint)', color: 'var(--ink)',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontSize: '11px', fontWeight: 700, flexShrink: 0, marginTop: '2px',
-                                    }}>{i + 1}</span>
-                                    <span style={{fontSize: '14px', color: 'var(--body)', lineHeight: 1.6}}>{sug}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Transcript / Conversation History */}
-                {transcript?.length > 0 && (
-                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
-                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-base)', cursor: 'pointer'}} onClick={() => setShowTranscript(!showTranscript)}>
-                            <h3 className="title-md" style={{margin: 0}}>💬 Lịch sử hội thoại</h3>
-                            <button className="btn-tertiary" style={{padding: '4px 8px'}}>{showTranscript ? 'Thu gọn ▲' : 'Mở rộng ▼'}</button>
-                        </div>
-                        {showTranscript && (
-                            <div style={{display: 'flex', flexDirection: 'column', gap: 'var(--sp-base)', maxHeight: '500px', overflowY: 'auto', paddingRight: 'var(--sp-xs)', paddingTop: 'var(--sp-xs)'}}>
-                                {transcript.map((turn, i) => {
-                                    if (turn.role === 'system') {
-                                        return (
-                                            <div key={i} style={{
-                                                textAlign: 'center',
-                                                color: 'var(--muted)',
-                                                fontSize: '12px',
-                                                fontStyle: 'italic',
-                                                margin: 'var(--sp-xs) 0',
-                                            }}>
-                                                {turn.content}
-                                            </div>
-                                        );
-                                    }
-                                    const isAI = turn.role === 'ai';
-                                    return (
-                                        <div key={i} style={{
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            alignItems: isAI ? 'flex-start' : 'flex-end',
-                                            width: '100%',
-                                        }}>
-                                            <div style={{
-                                                fontSize: '11px',
-                                                color: 'var(--muted)',
-                                                marginBottom: '4px',
-                                                padding: '0 4px',
-                                            }}>
-                                                {isAI ? '🤖 Người phỏng vấn AI' : '👤 Bạn'}
-                                            </div>
-                                            <div style={{
-                                                maxWidth: '85%',
-                                                padding: '12px 16px',
-                                                borderRadius: 'var(--rounded-lg)',
-                                                borderTopLeftRadius: isAI ? '2px' : 'var(--rounded-lg)',
-                                                borderTopRightRadius: isAI ? 'var(--rounded-lg)' : '2px',
-                                                backgroundColor: isAI ? 'var(--surface-strong)' : 'var(--primary)',
-                                                color: isAI ? 'var(--ink)' : 'var(--on-primary)',
-                                                fontSize: '14px',
-                                                lineHeight: 1.5,
-                                                whiteSpace: 'pre-line',
-                                                border: isAI ? '1px solid var(--hairline-soft)' : 'none',
-                                            }}>
-                                                {turn.content}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
+                        <ul style={styles.issueList}>
+                            {improvement_suggestions.map((sug, i) => <li key={i}>{sug}</li>)}
+                        </ul>
                     </div>
                 )}
 
@@ -266,14 +282,39 @@ const styles = {
         justifyContent: 'center', fontWeight: 600, fontSize: '14px', color: 'var(--ink)', flexShrink: 0,
     },
     issueList: { paddingLeft: 'var(--sp-lg)', color: 'var(--body)', fontSize: '14px', lineHeight: 1.8 },
-    spinner: {
-        width: '32px', height: '32px',
-        border: '3px solid var(--hairline)',
-        borderTop: '3px solid var(--ink)',
-        borderRadius: '50%',
-        animation: 'spin 0.8s linear infinite',
-        margin: '0 auto',
+    behaviorList: { display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' },
+    behaviorItem: {
+        padding: 'var(--sp-sm)',
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--rounded-md)',
+        background: 'var(--canvas-soft)',
     },
+    transcriptList: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--sp-sm)',
+        maxHeight: '420px',
+        overflowY: 'auto',
+    },
+    transcriptItem: (role) => ({
+        padding: 'var(--sp-sm)',
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--rounded-md)',
+        background: role === 'candidate' ? 'var(--surface-strong)' : 'var(--canvas-soft)',
+        color: 'var(--body)',
+        fontSize: '14px',
+        lineHeight: 1.6,
+    }),
+    behaviorSeverity: (severity) => ({
+        fontSize: '11px',
+        padding: '3px 8px',
+        borderRadius: 'var(--rounded-pill)',
+        border: '1px solid var(--hairline)',
+        background: severity === 'high' ? 'var(--gradient-rose)' : severity === 'medium' ? 'var(--gradient-peach)' : 'var(--surface-strong)',
+        color: 'var(--ink)',
+        textTransform: 'capitalize',
+        whiteSpace: 'nowrap',
+    }),
 };
 
 export default InterviewReportPage;

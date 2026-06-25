@@ -70,6 +70,17 @@ class InterviewSessionRequest(BaseModel):
 
     cv_id: str = Field(..., description="CV to use as interview context.")
     job_listing_id: str | None = Field(default=None, description="Optional JD to tailor the interview.")
+    job_title: str | None = Field(
+        default=None,
+        max_length=160,
+        description="Optional target role for CV-only interviews.",
+    )
+    jd_text: str | None = Field(
+        default=None,
+        max_length=12000,
+        description="Optional pasted JD text for this interview.",
+    )
+    jd_url: str | None = Field(default=None, max_length=500, description="Optional JD source URL for context/audit.")
     mode: Literal["practice", "mock", "quick"] = Field(
         default="practice",
         description="Interview mode: 'practice' (coaching), 'mock' (realistic), or 'quick' (fast-paced).",

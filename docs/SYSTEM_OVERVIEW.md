@@ -430,10 +430,12 @@ Cấu hình được đọc từ file `.env` (backend) và `.env` (frontend).
 | Nhóm | Biến | Ý nghĩa |
 |---|---|---|
 | App | `APP_ENV`, `APP_DEBUG` | Môi trường chạy |
+| App URL | `FRONTEND_BASE_URL`, `ALLOWED_ORIGINS` | Public web URL và CORS origins khi deploy cloud |
 | Auth | `AUTH_SECRET_KEY` | Khóa ký JWT |
 | Database | `DATABASE_URL` | Chuỗi kết nối PostgreSQL |
 | Cache | `REDIS_URL` | Kết nối Redis (broker Celery) |
 | LLM | `LLM_LOCAL_BASE_URL`, `LLM_LOCAL_MODEL` | Địa chỉ và tên model Ollama |
+| LLM self-hosted | `LLM_HOSTED_BASE_URL`, `LLM_HOSTED_MODEL` | Endpoint OpenAI-compatible của model tự host trên cloud |
 | LLM cloud | `LLM_CLOUD_API_KEY` | API key Groq (cloud fallback) |
 | STT | `STT_MODEL_ID` | Model STT (mặc định: PhoWhisper-base) |
 | TTS | `TTS_ENGINE`, `TTS_VOICE`, `TTS_MODEL_PATH` | TTS: `edge` (mạng) hoặc `piper` (ONNX cục bộ) |

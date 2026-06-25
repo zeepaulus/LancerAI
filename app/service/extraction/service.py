@@ -8,6 +8,8 @@ stored on ``CVRecord``. Vector embeddings are pushed to ``vector_repository``
 so later modules (matching, retrieval agent) can run RAG.
 """
 
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import json
@@ -264,7 +266,7 @@ class ExtractionService:
         llm_response = await self._llm.generate(
             prompt,
             system=_CV_EXTRACTION_SYSTEM,
-            use_cloud=bool(self._llm._cloud_api_key),
+            use_cloud=self._llm.has_cloud,
             json_mode=True,
         )
 
@@ -279,7 +281,7 @@ class ExtractionService:
                 retry_response = await self._llm.generate(
                     prompt,
                     system=_CV_EXTRACTION_RETRY_SYSTEM,
-                    use_cloud=bool(self._llm._cloud_api_key),
+                    use_cloud=self._llm.has_cloud,
                     json_mode=True,
                 )
                 retry_extraction = _parse_extraction_response(retry_response, "pending")

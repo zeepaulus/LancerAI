@@ -19,6 +19,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.service.interview.behavior import BehaviorEvent
+
 
 class STARScore(BaseModel):
     """Structured evaluation of a candidate's answer using the STAR method."""
@@ -68,6 +70,7 @@ class InterviewState(BaseModel):
     session_id: str = ""
     cv_data: dict[str, Any] = Field(default_factory=dict)
     jd_data: dict[str, Any] = Field(default_factory=dict)  # Job Description data (from DB)
+    interview_plan: dict[str, Any] = Field(default_factory=dict)
     job_title: str = ""
     job_description: str = ""
     interview_mode: Literal["practice", "mock", "quick"] = "practice"
@@ -85,6 +88,9 @@ class InterviewState(BaseModel):
 
     # --- STAR scores (append-only, filled post-hoc) ---
     star_scores: Annotated[list[STARScore], operator.add] = Field(default_factory=list)
+
+    # --- Behavioral observations from camera/browser signals ---
+    behavior_events: list[BehaviorEvent] = Field(default_factory=list)
 
     # --- Current state ---
     current_question: str = ""

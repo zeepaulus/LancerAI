@@ -48,6 +48,52 @@ def _ffmpeg_mp3_to_pcm(mp3_bytes: bytes) -> bytes:
     return proc.stdout
 
 
+def _waveform_to_pcm(audio: object, sample_rate: int) -> bytes:
+    """Convert a VieNeu waveform-like object to raw PCM Int16 mono 24 kHz."""
+    import numpy as np
+
+    from app.core.voice_stt_connector import _resample
+
+    if isinstance(audio, tuple) and len(audio) >= 2:
+        audio, sample_rate = audio[0], int(audio[1])
+
+    if isinstance(audio, dict):
+        sample_rate = int(audio.get("sample_rate") or audio.get("sampling_rate") or sample_rate)
+        audio = audio.get("audio") or audio.get("waveform") or audio.get("array")
+
+    if isinstance(audio, bytes):
+        try:
+            import soundfile as sf  # type: ignore[import-untyped]
+
+            data, sr = sf.read(io.BytesIO(audio), dtype="float32")
+            audio = data
+            sample_rate = int(sr)
+        except Exception:
+            return audio
+
+    if hasattr(audio, "detach") and hasattr(audio, "cpu"):
+        audio = audio.detach().cpu().numpy()
+
+    data = np.asarray(audio)
+    if data.size == 0:
+        return b""
+
+    if data.ndim > 1:
+        data = data[0] if data.shape[0] <= data.shape[-1] else data[:, 0]
+
+    if sample_rate != OUTPUT_SAMPLE_RATE:
+        data = _resample(data.astype(np.float32), sample_rate, OUTPUT_SAMPLE_RATE)
+
+    if data.dtype == np.int16:
+        pcm = data
+    elif np.issubdtype(data.dtype, np.integer):
+        pcm = data.clip(-32768, 32767).astype(np.int16)
+    else:
+        pcm = (data.astype(np.float32) * 32768.0).clip(-32768, 32767).astype(np.int16)
+
+    return pcm.tobytes()
+
+
 class VoiceTTSConnector:
     """Text-to-speech connector used by InterviewPipeline."""
 
@@ -62,6 +108,7 @@ class VoiceTTSConnector:
         self._model_path = model_path
         self._voice = voice
         self._speed = speed
+        self._vieneu_tts: object | None = None
 
     async def synthesize(self, text: str, voice: str | None = None) -> bytes:
         """Return complete PCM Int16 mono buffer for text."""
@@ -225,3 +272,51 @@ class VoiceTTSConnector:
             logger.error("[TTS] VieNeu error (%s) — falling back to edge", exc)
             async for chunk in self._stream_edge(text, "vi-VN-HoaiMyNeural"):
                 yield chunk
+    async def _stream_vieneu(self, text: str, voice: str) -> AsyncGenerator[bytes, None]:
+        """Stream via the official VieNeu SDK; falls back to edge if unavailable."""
+        try:
+            loop = asyncio.get_event_loop()
+            pcm_data = await loop.run_in_executor(None, self._synthesize_vieneu_sync, text, voice)
+            if pcm_data:
+                yield pcm_data
+        except Exception as exc:
+            logger.error("[TTS] VieNeu SDK error (%s) â€” falling back to edge", exc)
+            async for chunk in self._stream_edge(text, "vi-VN-HoaiMyNeural"):
+                yield chunk
+
+    def _synthesize_vieneu_sync(self, text: str, voice: str) -> bytes:
+        """Blocking VieNeu SDK call, executed in a thread pool by _stream_vieneu."""
+        if self._vieneu_tts is None:
+            try:
+                from vieneu import Vieneu
+            except ImportError as exc:
+                raise RuntimeError("vieneu SDK is not installed. Run: uv sync") from exc
+
+            logger.info("[TTS] Loading VieNeu SDK backend. First run may download model/codec files.")
+            self._vieneu_tts = Vieneu()
+
+        tts = self._vieneu_tts
+        selected_voice = self._resolve_vieneu_voice(tts, voice)
+        audio = tts.infer(text=text, voice=selected_voice) if selected_voice else tts.infer(text=text)
+        sample_rate = int(getattr(tts, "sample_rate", OUTPUT_SAMPLE_RATE))
+        return _waveform_to_pcm(audio, sample_rate)
+
+    def _resolve_vieneu_voice(self, tts: object, voice: str) -> str | None:
+        requested = (voice or "").strip().strip('"').lower()
+        if not requested or not hasattr(tts, "list_preset_voices"):
+            return None
+
+        try:
+            voices = tts.list_preset_voices()
+        except Exception as exc:
+            logger.debug("[TTS] Could not list VieNeu voices: %s", exc)
+            return None
+
+        for label, voice_id in voices:
+            voice_id_s = str(voice_id)
+            haystack = f"{label} {voice_id_s}".lower()
+            if requested in haystack or voice_id_s.lower() in requested:
+                return voice_id_s
+
+        logger.warning("[TTS] VieNeu voice %r not found; using SDK default voice", voice)
+        return None

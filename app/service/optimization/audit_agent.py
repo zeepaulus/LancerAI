@@ -185,16 +185,16 @@ Kiểm tra tính trung thực và trả về JSON:"""
         "medium": 5.0,
         "low": 2.0
     }
-    
+
     # Identify which fields have approved rewrites
     approved_fields = {sec.field for sec in approved_sections}
-    
+
     # Calculate remaining penalties
     optimized_penalty = 0.0
     for issue in roast_issues:
         if issue.field not in approved_fields:
             optimized_penalty += severity_penalties.get(issue.severity, 5.0)
-            
+
     # Calculate optimized score (out of 100.0)
     optimized_score = max(0.0, min(100.0, 100.0 - optimized_penalty))
     overall_score = optimized_score / 100.0

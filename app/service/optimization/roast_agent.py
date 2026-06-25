@@ -9,6 +9,8 @@ Strategy:
     - Set ``inquiry_needed`` when any issue requires user clarification.
 """
 
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import json

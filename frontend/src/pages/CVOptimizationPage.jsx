@@ -177,6 +177,55 @@ const CVOptimizationPage = () => {
                             </div>
                         </div>
 
+                        {result.cv_scorecard && Object.keys(result.cv_scorecard).length > 0 && (
+                            <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
+                                <h3 className="title-md" style={{marginBottom: 'var(--sp-base)'}}>
+                                    Scorecard CV & trọng tâm phỏng vấn
+                                </h3>
+                                <div style={styles.scorecardGrid}>
+                                    {Object.entries(result.cv_scorecard.section_scores || {}).map(([key, value]) => (
+                                        <div key={key} style={styles.scoreMetric}>
+                                            <span style={styles.metricLabel}>{formatMetricLabel(key)}</span>
+                                            <strong style={styles.metricValue}>{Math.round(value)}/100</strong>
+                                            <div style={styles.metricBar}>
+                                                <div style={{...styles.metricFill, width: `${Math.min(100, Math.max(0, value))}%`}} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div style={styles.scorecardColumns}>
+                                    <div>
+                                        <h4 style={styles.subTitle}>Kỹ năng khớp JD/vị trí</h4>
+                                        <div style={styles.chipWrap}>
+                                            {(result.cv_scorecard.matched_skills || []).length > 0
+                                                ? result.cv_scorecard.matched_skills.map((skill) => (
+                                                    <span key={skill} style={styles.goodChip}>{skill}</span>
+                                                ))
+                                                : <span style={styles.mutedText}>Chưa có kỹ năng khớp rõ ràng.</span>}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h4 style={styles.subTitle}>Khoảng trống cần hỏi sâu</h4>
+                                        <div style={styles.chipWrap}>
+                                            {(result.cv_scorecard.missing_skills || []).length > 0
+                                                ? result.cv_scorecard.missing_skills.map((skill) => (
+                                                    <span key={skill} style={styles.warnChip}>{skill}</span>
+                                                ))
+                                                : <span style={styles.mutedText}>Không có gap lớn theo scoring hiện tại.</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                                {(result.cv_scorecard.interview_focus || []).length > 0 && (
+                                    <div style={{marginTop: 'var(--sp-base)'}}>
+                                        <h4 style={styles.subTitle}>Gợi ý phỏng vấn từ CV</h4>
+                                        <ul style={styles.focusList}>
+                                            {result.cv_scorecard.interview_focus.map((item, idx) => <li key={idx}>{item}</li>)}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Roast Issues Section */}
                         {result.roast_issues && result.roast_issues.length > 0 && (
                             <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
@@ -293,6 +342,15 @@ const getIssueTypeLabel = (type) => {
     }
 };
 
+const formatMetricLabel = (key) => ({
+    profile: 'Hồ sơ',
+    experience: 'Kinh nghiệm',
+    impact: 'Impact/số liệu',
+    skills: 'Kỹ năng',
+    structure: 'Cấu trúc ATS',
+    target_alignment: 'Khớp vị trí',
+}[key] || key.replaceAll('_', ' '));
+
 const styles = {
     container: { maxWidth: '800px', margin: '0 auto', padding: 'var(--sp-xl) var(--sp-lg)' },
     formRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-base)', marginBottom: 'var(--sp-base)' },
@@ -319,6 +377,19 @@ const styles = {
     rewriteColOriginal: { flex: '1 1 300px', backgroundColor: 'rgba(239, 108, 0, 0.05)', border: '1px dashed rgba(239, 108, 0, 0.2)', padding: '10px', borderRadius: '6px' },
     rewriteColOptimized: { flex: '1 1 300px', backgroundColor: 'rgba(46, 125, 50, 0.05)', border: '1px dashed rgba(46, 125, 50, 0.2)', padding: '10px', borderRadius: '6px' },
     rewriteColLabel: { fontSize: '11px', fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: '4px' },
+    scorecardGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--sp-sm)', marginBottom: 'var(--sp-lg)' },
+    scoreMetric: { border: '1px solid var(--hairline)', borderRadius: '8px', padding: 'var(--sp-sm)', background: 'var(--canvas-soft)' },
+    metricLabel: { display: 'block', fontSize: '12px', color: 'var(--muted)', marginBottom: '6px' },
+    metricValue: { display: 'block', color: 'var(--ink)', marginBottom: '8px' },
+    metricBar: { height: '6px', borderRadius: '999px', background: 'var(--hairline)', overflow: 'hidden' },
+    metricFill: { height: '100%', borderRadius: '999px', background: 'var(--gradient-mint)' },
+    scorecardColumns: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 'var(--sp-base)' },
+    subTitle: { margin: '0 0 8px', fontSize: '14px', color: 'var(--ink)' },
+    chipWrap: { display: 'flex', flexWrap: 'wrap', gap: '6px' },
+    goodChip: { fontSize: '12px', borderRadius: '999px', padding: '4px 8px', background: 'rgba(46, 125, 50, 0.1)', color: '#2e7d32' },
+    warnChip: { fontSize: '12px', borderRadius: '999px', padding: '4px 8px', background: 'rgba(239, 108, 0, 0.1)', color: '#ef6c00' },
+    mutedText: { color: 'var(--muted)', fontSize: '13px' },
+    focusList: { margin: 0, paddingLeft: '18px', color: 'var(--body)', fontSize: '14px', lineHeight: 1.7 },
 };
 
 export default CVOptimizationPage;
