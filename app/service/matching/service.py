@@ -406,20 +406,30 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 async def _fetch_jd_from_url(url: str) -> str:
     """Fetch and return plain text from a JD URL (best-effort)."""
+    # 1. Try Jina Reader API first (handles JS rendering, anti-bot bypass)
+    jina_url = f"https://r.jina.ai/{url}"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            headers = {"Accept": "text/plain"}
+            resp = await client.get(jina_url, headers=headers)
+            if resp.status_code == 200 and resp.text:
+                return resp.text[:12000]
+    except Exception as exc:
+        logger.warning("[Matching] Jina Reader failed for %r: %s. Trying direct request...", url, exc)
+
+    # 2. Fallback to direct requests + BeautifulSoup
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(url, follow_redirects=True)
             resp.raise_for_status()
-            # Use BeautifulSoup for correct HTML→text (handles script/style/entities)
             from bs4 import BeautifulSoup  # noqa: PLC0415
 
             soup = BeautifulSoup(resp.text, "html.parser")
-            # Remove script and style blocks entirely
             for tag in soup(["script", "style"]):
                 tag.decompose()
             text = soup.get_text(separator=" ")
             text = re.sub(r"\s+", " ", text).strip()
             return text[:8000]
     except httpx.RequestError as exc:
-        logger.warning("[Matching] Failed to fetch JD URL %r: %s", url, exc)
+        logger.warning("[Matching] Failed to fetch JD URL %r directly: %s", url, exc)
         return ""

@@ -202,7 +202,18 @@ const ChatPage = () => {
         }
 
         if (payload.event === 'phase_change') {
-            setPhase(payload.phase);
+            const newPhase = payload.phase;
+            if (newPhase === 'listening') {
+                const audioCtx = audioContextPlayerRef.current;
+                if (audioCtx && nextStartTimeRef.current > audioCtx.currentTime) {
+                    const delayMs = (nextStartTimeRef.current - audioCtx.currentTime) * 1000;
+                    setTimeout(() => {
+                        setPhase((current) => (current === 'speaking' ? 'listening' : current));
+                    }, delayMs + 100);
+                    return;
+                }
+            }
+            setPhase(newPhase);
             return;
         }
 
@@ -273,7 +284,7 @@ const ChatPage = () => {
             float32[i] = int16[i] / 32768.0;
         }
 
-        const audioBuffer = audioCtx.createBuffer(1, float32.length, 16000);
+        const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000);
         audioBuffer.getChannelData(0).set(float32);
 
         const source = audioCtx.createBufferSource();
@@ -765,6 +776,25 @@ const ChatPage = () => {
     return (
         <div style={styles.page}>
             <Navbar />
+            <style>{`
+                @keyframes pulse-wave {
+                    0% { transform: scaleY(0.2); }
+                    50% { transform: scaleY(1.0); }
+                    100% { transform: scaleY(0.2); }
+                }
+                @keyframes glow-pulse {
+                    0%, 100% { box-shadow: 0 0 12px rgba(124, 213, 186, 0.2); border-color: rgba(124, 213, 186, 0.2); }
+                    50% { box-shadow: 0 0 28px rgba(124, 213, 186, 0.7); border-color: rgba(124, 213, 186, 0.5); }
+                }
+                .wave-bar {
+                    width: 4px;
+                    height: 18px;
+                    background: var(--gradient-mint);
+                    border-radius: 2px;
+                    animation: pulse-wave 0.8s ease-in-out infinite;
+                }
+            `}</style>
+
             <main style={styles.container}>
                 <div style={styles.topBar}>
                     <button className="btn-tertiary" onClick={() => navigate('/interview')}>
@@ -786,14 +816,45 @@ const ChatPage = () => {
                 <section style={styles.roomGrid}>
                     <div style={styles.leftPane}>
                         <div style={styles.videoShell}>
-                            <video ref={videoPreviewRef} style={styles.videoPreview} />
-                            {cameraStatus !== 'active' && (
-                                <div style={styles.videoPlaceholder}>
-                                    {cameraStatus === 'unavailable' ? 'Không có camera' : 'Đang bật camera'}
+                            {/* AI Stream Card */}
+                            <div style={styles.aiStreamCard}>
+                                <div style={styles.aiAvatarWrapper(phase)}>
+                                    <div style={styles.aiAvatarCore(phase)}>
+                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--gradient-mint)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <rect x="3" y="11" width="18" height="10" rx="2" />
+                                            <circle cx="12" cy="5" r="2" />
+                                            <path d="M12 7v4" />
+                                            <line x1="8" y1="16" x2="8" y2="16" />
+                                            <line x1="16" y1="16" x2="16" y2="16" />
+                                        </svg>
+                                    </div>
+                                    
+                                    {/* Real-time audio waveform animation when speaking */}
+                                    {phase === 'speaking' && (
+                                        <div style={styles.waveContainer}>
+                                            <div className="wave-bar" style={{ animationDelay: '0s' }} />
+                                            <div className="wave-bar" style={{ animationDelay: '0.15s' }} />
+                                            <div className="wave-bar" style={{ animationDelay: '0.3s' }} />
+                                            <div className="wave-bar" style={{ animationDelay: '0.45s' }} />
+                                            <div className="wave-bar" style={{ animationDelay: '0.6s' }} />
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                            <div style={styles.videoBadge}>
-                                {cameraStatus === 'active' ? 'Camera đang bật' : 'Camera chưa sẵn sàng'}
+                                <div style={styles.videoBadge}>Người phỏng vấn AI (LancerAI)</div>
+                                {phase === 'speaking' && <div style={styles.speakingIndicator}>Đang đặt câu hỏi...</div>}
+                            </div>
+
+                            {/* Candidate Stream Card */}
+                            <div style={styles.userStreamCard}>
+                                <video ref={videoPreviewRef} style={styles.videoPreview} />
+                                {cameraStatus !== 'active' && (
+                                    <div style={styles.videoPlaceholder}>
+                                        {cameraStatus === 'unavailable' ? 'Không có camera' : 'Đang bật camera'}
+                                    </div>
+                                )}
+                                <div style={styles.videoBadge}>
+                                    {cameraStatus === 'active' ? 'Ứng viên (Bạn)' : 'Không có camera'}
+                                </div>
                             </div>
                         </div>
 
@@ -990,9 +1051,65 @@ const styles = {
         height: '100%',
         minHeight: 0,
         borderRadius: 'var(--rounded-lg)',
-        background: 'var(--surface-strong)',
+        background: 'var(--canvas-soft)',
         border: '1px solid var(--hairline)',
         overflow: 'hidden',
+        display: 'grid',
+        gridTemplateRows: '1fr 1fr',
+        gap: '1px',
+    },
+    aiStreamCard: {
+        position: 'relative',
+        background: 'linear-gradient(180deg, var(--canvas-deep) 0%, #1e1b18 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    userStreamCard: {
+        position: 'relative',
+        background: 'var(--surface-strong)',
+        overflow: 'hidden',
+    },
+    aiAvatarWrapper: (currentPhase) => ({
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '16px',
+    }),
+    aiAvatarCore: (currentPhase) => ({
+        width: '68px',
+        height: '68px',
+        borderRadius: 'var(--rounded-full)',
+        background: 'rgba(255, 255, 255, 0.05)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        animation: currentPhase === 'speaking' ? 'glow-pulse 2s infinite ease-in-out' : 'none',
+        transition: 'all var(--transition-base)',
+    }),
+    waveContainer: {
+        position: 'absolute',
+        bottom: '-28px',
+        display: 'flex',
+        gap: '4px',
+        alignItems: 'center',
+        height: '24px',
+    },
+    speakingIndicator: {
+        position: 'absolute',
+        top: '12px',
+        right: '12px',
+        padding: '4px 8px',
+        borderRadius: 'var(--rounded-xs)',
+        background: 'rgba(124, 213, 186, 0.15)',
+        border: '1px solid rgba(124, 213, 186, 0.3)',
+        color: 'var(--gradient-mint)',
+        fontSize: '11px',
+        fontWeight: 600,
+        letterSpacing: '0.4px',
     },
     videoPreview: {
         width: '100%',
@@ -1019,6 +1136,7 @@ const styles = {
         background: 'rgba(0, 0, 0, 0.55)',
         color: '#fff',
         fontSize: '12px',
+        zIndex: 2,
     },
     statusCard: {
         border: '1px solid var(--hairline)',

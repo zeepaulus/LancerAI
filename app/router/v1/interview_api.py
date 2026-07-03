@@ -1,4 +1,4 @@
-﻿"""Module 4 â€” Voice interview and WebSocket."""
+"""Module 4 â€” Voice interview and WebSocket."""
 
 import contextlib
 import inspect
@@ -14,10 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.core.providers.auth import get_current_user, validate_ws_token
+from app.core.llm_connector import LLMConnector
 from app.core.providers.services import (
     get_extraction_service,
     get_interview_pipeline_factory,
     get_interview_service,
+    get_llm_connector,
 )
 from app.core.rate_limit import limiter
 from app.core.settings import Settings, get_settings
@@ -48,11 +50,67 @@ def _supported_kwargs(func: Callable[..., Any], kwargs: dict[str, Any]) -> dict[
     return {key: value for key, value in kwargs.items() if key in parameters}
 
 
+_JD_SCRAPE_SYSTEM = """Bạn là một trợ lý AI chuyên nghiệp phân tích tin tuyển dụng (Job Description).
+Hãy phân tích nội dung văn bản thô (raw text/markdown) được cào từ trang tin tuyển dụng và trả về kết quả dưới dạng JSON có cấu trúc như sau:
+{
+    "job_title": "Tên vị trí công việc (ví dụ: Kỹ sư Backend Python, Frontend React Developer)",
+    "company": "Tên công ty tuyển dụng (nếu có)",
+    "jd_text": "Mô tả công việc chi tiết và yêu cầu tuyển dụng được rút gọn và định dạng lại sạch sẽ bằng Markdown tiếng Việt",
+    "focus_area": "Mảng tập trung chính (ví dụ: React, Python, Django, AWS, QA/QC, Business Analyst)"
+}
+Lưu ý: Chỉ trả về duy nhất khối JSON hợp lệ, không kèm bất kỳ lời giải thích hay tag markdown ```json."""
+
+
 @router.get("/health")
 @limiter.limit("100/minute")
 async def interview_health(request: Request) -> dict[str, Any]:
     """Lightweight ping for the interview module."""
     return {"status": "ok", "module": "interview"}
+
+
+@router.get("/scrape-jd")
+@limiter.limit("20/minute")
+async def scrape_job_description(
+    request: Request,
+    url: str,
+    user: Annotated[User, Depends(get_current_user)],
+    llm: Annotated[LLMConnector, Depends(get_llm_connector)],
+) -> dict[str, Any]:
+    """Crawl a job description page and structure the output using LLM."""
+    if not url.strip():
+        raise HTTPException(status_code=400, detail="Vui lòng cung cấp link URL tuyển dụng.")
+
+    url = url.strip()
+    from app.service.matching.service import _fetch_jd_from_url
+    raw_text = await _fetch_jd_from_url(url)
+
+    if not raw_text or len(raw_text.strip()) < 50:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Không thể cào dữ liệu từ URL này. Vui lòng kiểm tra lại link hoặc copy-paste thủ công."
+        )
+
+    # Ask LLM to clean and structure it
+    prompt = [
+        {"role": "system", "content": _JD_SCRAPE_SYSTEM},
+        {"role": "user", "content": f"URL tuyển dụng: {url}\n\nNội dung thô:\n{raw_text[:6000]}"}
+    ]
+
+    try:
+        from app.core.json_extractor import clean_and_parse_json
+
+        response = await llm.generate_chat(prompt, use_cloud=llm.has_cloud)
+        structured_data = clean_and_parse_json(response)
+        return structured_data
+    except Exception as exc:
+        _logger.error("Failed to parse JD via LLM: %s", exc)
+        # Fallback to returning raw text in standard schema
+        return {
+            "job_title": "",
+            "company": "",
+            "jd_text": raw_text[:4000],
+            "focus_area": ""
+        }
 
 
 @router.post("/sessions", status_code=status.HTTP_201_CREATED)
@@ -75,10 +133,16 @@ async def create_interview_session(
         )
 
     cv_data: dict[str, Any] = cv.optimized_data or cv.extracted_data or {}
+    jd_url = (payload.jd_url or "").strip()
+    jd_text = (payload.jd_text or "").strip()
+    if jd_url and not jd_text:
+        from app.service.matching.service import _fetch_jd_from_url
+        jd_text = await _fetch_jd_from_url(jd_url)
+
     jd_data = build_manual_jd_data(
         job_title=payload.job_title,
-        jd_text=payload.jd_text,
-        jd_url=payload.jd_url,
+        jd_text=jd_text,
+        jd_url=jd_url,
     )
     if payload.job_listing_id:
         job_result = await db.execute(

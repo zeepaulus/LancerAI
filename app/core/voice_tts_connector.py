@@ -217,13 +217,10 @@ class VoiceTTSConnector:
     # Engine: vieneu (local GGUF)
     # ------------------------------------------------------------------
 
-    async def _stream_vieneu(self, text: str, voice: str) -> AsyncGenerator[bytes, None]:
-        """Stream via VieNeu binary subprocess; falls back to edge if missing."""
+    async def _stream_vieneu_cli(self, text: str, voice: str) -> AsyncGenerator[bytes, None]:
+        """Stream via VieNeu binary subprocess."""
         if self._model_path is None:
-            logger.warning("[TTS] VieNeu model_path not set — falling back to edge")
-            async for chunk in self._stream_edge(text, "vi-VN-HoaiMyNeural"):
-                yield chunk
-            return
+            raise ValueError("VieNeu model_path not set")
 
         model_path = Path(self._model_path)
         candidates = [
@@ -233,20 +230,17 @@ class VoiceTTSConnector:
         binary = next((b for b in candidates if b.exists()), None)
 
         if binary is None:
-            logger.warning("[TTS] VieNeu binary not found — falling back to edge")
-            async for chunk in self._stream_edge(text, "vi-VN-HoaiMyNeural"):
-                yield chunk
-            return
+            raise FileNotFoundError("VieNeu binary not found")
+
+        import numpy as np
+        import soundfile as sf  # type: ignore[import-untyped]
+
+        from app.core.voice_stt_connector import _resample
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_path = Path(tmp.name)
 
         try:
-            import numpy as np
-            import soundfile as sf  # type: ignore[import-untyped]
-
-            from app.core.voice_stt_connector import _resample
-
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                tmp_path = Path(tmp.name)
-
             proc = await asyncio.create_subprocess_exec(
                 str(binary), "--model", str(model_path),
                 "--speaker", voice, "--output", str(tmp_path), "--text", text,
@@ -255,8 +249,6 @@ class VoiceTTSConnector:
             await proc.wait()
 
             data, sr = sf.read(str(tmp_path), dtype="int16")
-            tmp_path.unlink(missing_ok=True)
-
             if data.ndim > 1:
                 data = data[:, 0]
             if sr != OUTPUT_SAMPLE_RATE:
@@ -264,25 +256,35 @@ class VoiceTTSConnector:
                 f32 = _resample(f32, sr, OUTPUT_SAMPLE_RATE)
                 data = (f32 * 32768.0).clip(-32768, 32767).astype(np.int16)
 
-            raw = data.tobytes()
-            # Yield the entire sentence PCM data as one block for clean, gapless playback
-            yield raw
+            yield data.tobytes()
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
-        except Exception as exc:
-            logger.error("[TTS] VieNeu error (%s) — falling back to edge", exc)
-            async for chunk in self._stream_edge(text, "vi-VN-HoaiMyNeural"):
-                yield chunk
+    async def _stream_vieneu_sdk(self, text: str, voice: str) -> AsyncGenerator[bytes, None]:
+        """Stream via the official VieNeu SDK."""
+        loop = asyncio.get_event_loop()
+        pcm_data = await loop.run_in_executor(None, self._synthesize_vieneu_sync, text, voice)
+        if pcm_data:
+            yield pcm_data
+
     async def _stream_vieneu(self, text: str, voice: str) -> AsyncGenerator[bytes, None]:
-        """Stream via the official VieNeu SDK; falls back to edge if unavailable."""
+        """Stream via VieNeu SDK first, then CLI binary, and finally edge-tts as fallback."""
         try:
-            loop = asyncio.get_event_loop()
-            pcm_data = await loop.run_in_executor(None, self._synthesize_vieneu_sync, text, voice)
-            if pcm_data:
-                yield pcm_data
-        except Exception as exc:
-            logger.error("[TTS] VieNeu SDK error (%s) â€” falling back to edge", exc)
-            async for chunk in self._stream_edge(text, "vi-VN-HoaiMyNeural"):
+            async for chunk in self._stream_vieneu_sdk(text, voice):
                 yield chunk
+            return
+        except Exception as sdk_exc:
+            logger.debug("[TTS] VieNeu SDK not available or failed: %s. Trying CLI...", sdk_exc)
+
+        try:
+            async for chunk in self._stream_vieneu_cli(text, voice):
+                yield chunk
+            return
+        except Exception as cli_exc:
+            logger.debug("[TTS] VieNeu CLI not available or failed: %s. Falling back to edge-tts...", cli_exc)
+
+        async for chunk in self._stream_edge(text, "vi-VN-HoaiMyNeural"):
+            yield chunk
 
     def _synthesize_vieneu_sync(self, text: str, voice: str) -> bytes:
         """Blocking VieNeu SDK call, executed in a thread pool by _stream_vieneu."""

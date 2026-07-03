@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Layout/Navbar';
-import { createSession, getSessions } from '../api/interview';
+import { createSession, getSessions, scrapeJD } from '../api/interview';
 import { uploadCV } from '../api/extraction';
 import * as keys from '../config/storageKeys';
 
@@ -53,6 +53,10 @@ const InterviewPage = () => {
     const [position, setPosition]       = useState('');
     const [level, setLevel]             = useState('');
     const [mode, setMode]               = useState('practice');
+    const [jdUrl, setJdUrl]             = useState('');
+    const [jdText, setJdText]           = useState('');
+    const [isScraping, setIsScraping]   = useState(false);
+    const [scrapeError, setScrapeError] = useState('');
 
     // CV upload inside modal
     const [cvFile, setCvFile]           = useState(null);
@@ -72,6 +76,7 @@ const InterviewPage = () => {
     const resetForm = () => {
         setSessionName(''); setIndustry(''); setPosition('');
         setLevel(''); setMode('practice');
+        setJdUrl(''); setJdText(''); setIsScraping(false); setScrapeError('');
         setCvFile(null); setCvError(''); setFormError('');
     };
 
@@ -127,6 +132,21 @@ const InterviewPage = () => {
         if (file && validateCvFile(file)) setCvFile(file);
     };
 
+    const handleScrapeJD = async () => {
+        if (!jdUrl.trim()) return;
+        setIsScraping(true);
+        setScrapeError('');
+        try {
+            const data = await scrapeJD(jdUrl);
+            if (data.job_title) setPosition(data.job_title);
+            if (data.jd_text) setJdText(data.jd_text);
+        } catch (err) {
+            setScrapeError(err.message || 'Không thể cào dữ liệu từ URL này. Vui lòng dán nội dung JD thủ công.');
+        } finally {
+            setIsScraping(false);
+        }
+    };
+
     // ── Submit ───────────────────────────────────────────────────────────────
 
     const canSubmit = sessionName.trim() && industry && position.trim() && level && cvFile && !submitting;
@@ -147,6 +167,9 @@ const InterviewPage = () => {
                 mode,
                 focus_area: `${industry} — ${position} — ${level}`,
                 duration_minutes: 20,
+                jd_text: jdText.trim() || undefined,
+                jd_url: jdUrl.trim() || undefined,
+                job_title: position.trim() || undefined,
             });
 
             // 3. Chuyển sang ChatPage với đầy đủ context
@@ -375,6 +398,44 @@ const InterviewPage = () => {
                                         </div>
                                     ))}
                                 </div>
+                            </div>
+
+                            {/* JD Scraper Input */}
+                            <div style={styles.field}>
+                                <label style={styles.label}>Link tin tuyển dụng (LinkedIn, TopCV, Indeed...)</label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input
+                                        className="text-input"
+                                        style={{ flex: 1 }}
+                                        placeholder="VD: https://www.linkedin.com/jobs/view/123456"
+                                        value={jdUrl}
+                                        onChange={e => setJdUrl(e.target.value)}
+                                        disabled={isScraping}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="btn-outline"
+                                        style={{ height: '40px', fontSize: '13px', whiteSpace: 'nowrap' }}
+                                        onClick={handleScrapeJD}
+                                        disabled={isScraping || !jdUrl.trim()}
+                                    >
+                                        {isScraping ? 'Đang cào...' : 'Lấy thông tin'}
+                                    </button>
+                                </div>
+                                {scrapeError && <p style={{ ...styles.errorText, marginTop: '4px', fontSize: '12px' }}>{scrapeError}</p>}
+                            </div>
+
+                            {/* JD Text Area */}
+                            <div style={styles.field}>
+                                <label style={styles.label}>Nội dung mô tả công việc (JD)</label>
+                                <textarea
+                                    className="text-input"
+                                    style={{ height: '90px', resize: 'vertical', fontFamily: 'var(--font-body)', fontSize: '13px' }}
+                                    placeholder="Nội dung chi tiết công việc sẽ được tự động điền khi nhập link ở trên, hoặc bạn tự dán vào đây..."
+                                    value={jdText}
+                                    onChange={e => setJdText(e.target.value)}
+                                    disabled={isScraping}
+                                />
                             </div>
 
                             {/* CV Upload */}
