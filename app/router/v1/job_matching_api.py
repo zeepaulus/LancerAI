@@ -36,11 +36,17 @@ async def match_cv_to_jd(
             detail="CV not found or access denied.",
         )
     try:
-        return await service.match_cv_to_jd(
+        result = await service.match_cv_to_jd(
             cv_data=cv.extracted_data or {},
             jd_text=getattr(body, "jd_text", "") or "",
             jd_url=getattr(body, "jd_url", "") or "",
         )
+        try:
+            await service.save_match_result(db, user_id=user.id, cv_id=body.cv_id, result=result)
+        except Exception as _save_exc:
+            import logging as _logging
+            _logging.getLogger(__name__).warning("Failed to persist match scores: %s", _save_exc)
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except Exception as exc:

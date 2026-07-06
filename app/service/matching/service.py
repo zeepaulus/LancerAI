@@ -200,6 +200,34 @@ class MatchingService:
 
         return recommendations
 
+    async def save_match_result(
+        self,
+        session: AsyncSession,
+        user_id: str,
+        cv_id: str,
+        result: JobMatchResponse,
+        job_id: str | None = None,
+    ) -> None:
+        """Persist a match result with component scores to job_match_results.
+
+        Called automatically after match_cv_to_jd so component scores are
+        never lost. job_id is None for manual JD-text matches.
+        """
+        await self._job_repo.create(
+            session,
+            user_id=user_id,
+            cv_id=cv_id,
+            job_id=job_id,
+            match_score=round(result.overall_score / 100.0, 4),
+            frequency_score=round(result.frequency_score / 100.0, 4),
+            position_score=round(result.position_score / 100.0, 4),
+            semantic_score=round(result.semantic_score / 100.0, 4),
+            matching_rationale={"improvement_feedback": result.improvement_feedback},
+            missing_skills=[s.skill_name for s in result.missing_skills],
+            status=MatchStatus.RECOMMENDED,
+        )
+        await session.commit()
+
     async def save_job(
         self,
         session: AsyncSession,

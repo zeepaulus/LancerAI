@@ -3,8 +3,9 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -32,6 +33,10 @@ class InterviewTranscript(Base):
     role: Mapped[MessageRole] = mapped_column(Enum(MessageRole), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     audio_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    turn_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    star_score: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    stt_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     session = relationship("InterviewSession", back_populates="transcripts")

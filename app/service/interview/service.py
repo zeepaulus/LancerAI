@@ -111,6 +111,21 @@ class InterviewService:
             improvement_suggestions=[],
         )
         await session.commit()
+
+        # Persist new columns (additive — does not affect existing logic)
+        from app.core.settings import get_settings as _get_settings
+        _s = _get_settings()
+        _jd_snapshot = (jd_data or {}).get("jd_text") or None
+        await self._sessions.update(
+            session,
+            record.id,
+            status="in_progress",
+            jd_snapshot=_jd_snapshot,
+            tts_voice=_s.tts_voice,
+            llm_model=_s.llm_cloud_model,
+        )
+        await session.commit()
+
         logger.info(
             "[InterviewService] Created session %s for user=%s cv=%s mode=%s",
             record.id,
@@ -185,9 +200,12 @@ class InterviewService:
             completed_at=datetime.now(UTC),
         )
 
+        # Mark session as completed (additive — does not affect existing logic)
+        await self._sessions.update(session, session_id, status="completed")
+
         # Bulk insert transcript turns
         transcript_turns: list[dict[str, Any]] = payload.get("transcript", [])
-        for turn in transcript_turns:
+        for _turn_idx, turn in enumerate(transcript_turns, start=1):
             role_str: str = turn.get("role", "")
             content: str = turn.get("content", "")
             if not content:
@@ -205,6 +223,7 @@ class InterviewService:
                 session_id=session_id,
                 role=db_role,
                 content=content,
+                turn_number=_turn_idx,
             )
             session.add(transcript_record)
 

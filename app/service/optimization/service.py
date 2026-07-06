@@ -121,6 +121,16 @@ class OptimizationService:
         await self._cv_repo.update(session, cv_id, optimized_data=optimized_cv)
         await session.commit()
 
+        # Persist new analytics columns (additive — does not affect existing logic)
+        await self._cv_repo.update(
+            session,
+            cv_id,
+            audit_score=audit_score,
+            optimization_mode=mode,
+            status="optimized",
+        )
+        await session.commit()
+
         logger.info(
             "[OptimizationService] Pipeline complete for CV=%s — score=%.1f",
             cv_id,
