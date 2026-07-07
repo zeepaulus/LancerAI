@@ -96,8 +96,11 @@ Chỉnh `.env` theo môi trường (xem [`.env.example`](.env.example)):
 | `AUTH_SECRET_KEY` | Khóa ký JWT — thay trước khi đưa lên production (bắt buộc) |
 | `NEO4J_PASSWORD` | Mật khẩu Neo4j (bắt buộc) |
 | `ALLOWED_ORIGINS` | CORS origins cho frontend (mặc định: localhost:3000,5173) |
+| `FRONTEND_BASE_URL` | Public URL của web app để backend tạo link phòng phỏng vấn |
 | `LLM_LOCAL_BASE_URL` | Ollama endpoint (mặc định: `http://localhost:11434`) |
 | `LLM_LOCAL_MODEL` | Tên model Ollama (mặc định: `qwen2.5:3b`) |
+| `LLM_HOSTED_BASE_URL` | Endpoint OpenAI-compatible của LLM bạn tự host trên cloud; được ưu tiên cho tác vụ nặng |
+| `LLM_HOSTED_MODEL` | Tên model self-hosted, ví dụ `Qwen/Qwen2.5-14B-Instruct` |
 | `VECTOR_DB_HOST` | Dùng `http://localhost` (không phải `localhost`) để tránh tạo folder local |
 
 ### 3. Cách 1 — Compose infra + backend/frontend local

@@ -1,860 +1,1324 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Layout/Navbar';
+import { createSession, getReport } from '../api/interview';
 import { API_BASE_URL } from '../config/env';
-import { INTERVIEW_WS_PATH } from '../api/paths';
 import * as keys from '../config/storageKeys';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const PHASE = {
-    GREETING:  'greeting',
-    INTERVIEW: 'interview',
-    ENDED:     'ended',
-};
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function buildWsUrl() {
-    const base = API_BASE_URL.replace(/^http/, 'ws');
-    return `${base}${INTERVIEW_WS_PATH}`;
-}
-
-function today() {
-    return new Date().toLocaleDateString('vi-VN', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-    });
-}
-
-function formatTimer(seconds) {
-    const m = String(Math.floor(seconds / 60)).padStart(2, '0');
-    const s = String(seconds % 60).padStart(2, '0');
-    return `${m}:${s}`;
-}
-
-// ─── CSS injection ────────────────────────────────────────────────────────────
-
-const CHAT_CSS = `
-@keyframes chat-wave {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-    30%            { transform: translateY(-6px); opacity: 1; }
-}
-@keyframes chat-pulse-ring {
-    0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
-    70%  { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
-    100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
-}
-@keyframes chat-fade-in {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes chat-waveform-bar {
-    0%, 100% { height: 4px; }
-    50%      { height: 18px; }
-}
-`;
-
-function injectCss() {
-    if (document.getElementById('lancerai-chatpage-css')) return;
-    const s = document.createElement('style');
-    s.id = 'lancerai-chatpage-css';
-    s.textContent = CHAT_CSS;
-    document.head.appendChild(s);
-}
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 const ChatPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const state    = location.state || {};
 
-    const {
-        sessionId, cvId, extractionData = {},
-        sessionName = 'Buổi phỏng vấn', industry = '',
-        position = 'Vị trí không xác định', level = '',
-        mode = 'practice', userName = 'bạn',
-    } = state;
+    const [messages, setMessages] = useState([]);
+    const [phase, setPhase] = useState('connecting');
+    const [error, setError] = useState('');
+    const [sessionInfo, setSessionInfo] = useState(null);
+    const [cameraStatus, setCameraStatus] = useState('pending');
+    const [behaviorEvents, setBehaviorEvents] = useState([]);
+    const [typedAnswer, setTypedAnswer] = useState('');
+    const [finalEvaluation, setFinalEvaluation] = useState(null);
+    const [loadingReport, setLoadingReport] = useState(false);
+
+    const chatEndRef = useRef(null);
+    const videoPreviewRef = useRef(null);
+    const wsRef = useRef(null);
+    const recordingRef = useRef(null);
+    const audioContextPlayerRef = useRef(null);
+    const nextStartTimeRef = useRef(0);
+    const phaseRef = useRef('connecting');
+    const behaviorLastSentRef = useRef({});
+    const connectionSeqRef = useRef(0);
 
     useEffect(() => {
-        if (!sessionId || !cvId) navigate('/interview', { replace: true });
-    }, [sessionId, cvId, navigate]);
-
-    useEffect(() => { injectCss(); }, []);
-
-    // ── Core state ─────────────────────────────────────────────────────────
-
-    const [phase, setPhase]         = useState(PHASE.GREETING);
-    const [messages, setMessages]   = useState([]);
-    const [inputText, setInputText] = useState('');
-    const [aiTyping, setAiTyping]   = useState(false);
-    const [wsError, setWsError]     = useState('');
-
-    // ── Voice recorder state ───────────────────────────────────────────────
-    const [voiceMode, setVoiceMode]           = useState('idle'); // 'idle' | 'recording' | 'paused'
-    const [voiceSupported, setVoiceSupported] = useState(false);
-    const [recSeconds, setRecSeconds]         = useState(0);
-
-    // ── Session timer ──────────────────────────────────────────────────────
-    const [sessionSeconds, setSessionSeconds] = useState(0);
-
-    // ── Refs ───────────────────────────────────────────────────────────────
-    const pendingMessagesRef = useRef([]);
-    const phaseRef           = useRef(PHASE.GREETING);
-    const wsRef              = useRef(null);
-    const chatEndRef         = useRef(null);
-    const textareaRef        = useRef(null);
-    const mediaRecorderRef   = useRef(null);
-    const audioChunksRef     = useRef([]);
-    const recTimerRef        = useRef(null);
-    const streamRef          = useRef(null);
-    const sessionTimerRef    = useRef(null);
-    const audioCtxRef        = useRef(null);
-    const nextPlayTimeRef    = useRef(0);
-
-    useEffect(() => { phaseRef.current = phase; }, [phase]);
-
-    // ── Auto-scroll ────────────────────────────────────────────────────────
+        phaseRef.current = phase;
+    }, [phase]);
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, aiTyping]);
-
-    // ── Textarea auto-resize ───────────────────────────────────────────────
-
-    const resizeTextarea = () => {
-        const el = textareaRef.current;
-        if (!el) return;
-        el.style.height = 'auto';
-        el.style.height = Math.min(el.scrollHeight, 200) + 'px';
-    };
-
-    useEffect(() => { resizeTextarea(); }, [inputText]);
-
-    // ── Check voice support ────────────────────────────────────────────────
+    }, [messages]);
 
     useEffect(() => {
-        setVoiceSupported(!!(navigator.mediaDevices && window.MediaRecorder));
-    }, []);
+        let cancelled = false;
 
-    // ── Audio player ───────────────────────────────────────────────────────
+        const loadSessionAndConnect = async () => {
+            const params = new URLSearchParams(location.search);
+            let sessionId = location.state?.sessionId || params.get('session_id') || '';
+            let cvId = location.state?.cvId || params.get('cv_id') || '';
+            const mode = location.state?.mode || 'practice';
+            const durationMinutes = Number(location.state?.durationMinutes || 5);
 
-    const initAudioContext = () => {
-        if (!audioCtxRef.current) {
-            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-            audioCtxRef.current = new AudioContextClass({ sampleRate: 24000 });
-            nextPlayTimeRef.current = audioCtxRef.current.currentTime;
-        }
-        if (audioCtxRef.current.state === 'suspended') {
-            audioCtxRef.current.resume();
-        }
-    };
+            try {
+                if (!sessionId) {
+                    cvId = cvId || getLatestCvId();
+                    if (!cvId) {
+                        setError('Vui lòng upload hoặc tối ưu CV trước khi phỏng vấn.');
+                        setPhase('ended');
+                        return;
+                    }
 
-    const playPcmChunk = async (arrayBuffer) => {
-        try {
-            initAudioContext();
-            const audioCtx = audioCtxRef.current;
-            
-            const int16Array = new Int16Array(arrayBuffer);
-            const float32Array = new Float32Array(int16Array.length);
-            for (let i = 0; i < int16Array.length; i++) {
-                float32Array[i] = int16Array[i] / 32768.0;
-            }
-
-            const buffer = audioCtx.createBuffer(1, float32Array.length, 24000);
-            buffer.copyToChannel(float32Array, 0);
-
-            const source = audioCtx.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioCtx.destination);
-
-            const now = audioCtx.currentTime;
-            let playTime = nextPlayTimeRef.current;
-            if (playTime < now) {
-                playTime = now;
-            }
-            source.start(playTime);
-            nextPlayTimeRef.current = playTime + buffer.duration;
-        } catch (err) {
-            console.error('Lỗi phát âm thanh:', err);
-        }
-    };
-
-    const stopAudio = () => {
-        if (audioCtxRef.current) {
-            audioCtxRef.current.close().catch(() => {});
-            audioCtxRef.current = null;
-        }
-        nextPlayTimeRef.current = 0;
-    };
-
-    // ── Append message ─────────────────────────────────────────────────────
-
-    const appendMessage = useCallback((role, text) => {
-        setMessages(prev => [...prev, { id: Date.now() + Math.random(), role, text }]);
-    }, []);
-
-    // ── WebSocket ──────────────────────────────────────────────────────────
-
-    const connectWebSocket = useCallback(() => {
-        if (!sessionId || !cvId) return;
-        const token = localStorage.getItem(keys.LANCERAI_ACCESS_TOKEN);
-        const ws    = new WebSocket(buildWsUrl());
-        ws.binaryType = 'arraybuffer';
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-            ws.send(JSON.stringify({
-                token, cv_id: cvId, cv_data: extractionData,
-                job_title: `${position}${level ? ' (' + level + ')' : ''}`,
-                focus_area: `${industry} — ${position} — ${level}`,
-                session_id: sessionId,
-                mode, duration_minutes: 20,
-            }));
-        };
-
-        ws.onmessage = (event) => {
-            if (event.data instanceof ArrayBuffer) {
-                playPcmChunk(event.data);
-                return;
-            }
-            if (typeof event.data !== 'string') return;
-            let msg;
-            try { msg = JSON.parse(event.data); } catch { return; }
-
-            const ev = msg.event || msg.type;
-
-            const showOrBuffer = (role, text) => {
-                if (!text) return;
-                if (phaseRef.current === PHASE.GREETING) {
-                    pendingMessagesRef.current.push({ id: Date.now() + Math.random(), role, text });
-                } else {
-                    appendMessage(role, text);
-                }
-            };
-
-            if (ev === 'assistant_text') {
-                setAiTyping(false);
-                showOrBuffer('ai', msg.text);
-
-            } else if (ev === 'phase_change') {
-                if (msg.phase === 'processing' || msg.phase === 'speaking') {
-                    if (phaseRef.current !== PHASE.GREETING) setAiTyping(true);
-                } else if (msg.phase === 'listening') {
-                    setAiTyping(false);
+                    const created = await createSession({
+                        cv_id: cvId,
+                        mode,
+                        duration_minutes: durationMinutes,
+                        job_title: location.state?.jobTitle || '',
+                        jd_text: location.state?.jdText || '',
+                        focus_area: location.state?.focusArea || '',
+                    });
+                    sessionId = created.session_id;
+                    navigate(`/chat?session_id=${encodeURIComponent(sessionId)}`, {
+                        replace: true,
+                        state: {
+                            sessionId,
+                            cvId,
+                            mode,
+                            durationMinutes: created.duration_minutes || durationMinutes,
+                            meetingUrl: created.meeting_url,
+                            jobTitle: created.job_title,
+                            interviewPlan: created.interview_plan,
+                        },
+                    });
                 }
 
-            } else if (ev === 'transcript') {
-                showOrBuffer('user', msg.text);
-
-            } else if (ev === 'session_started') {
-                // No action needed
-
-            } else if (ev === 'time_up' || ev === 'session_ended') {
-                setAiTyping(false);
-                setPhase(PHASE.ENDED);
-                stopSessionTimer();
-                stopAudio();
-                if (msg.evaluation?.final_feedback) {
-                    appendMessage('ai', msg.evaluation.final_feedback);
-                }
-
-            } else if (ev === 'error') {
-                setAiTyping(false);
-                stopAudio();
-                if (phaseRef.current === PHASE.INTERVIEW) {
-                    appendMessage('system', `⚠️ ${msg.message || 'Lỗi từ server.'}`);
-                }
+                if (cancelled) return;
+                const resolvedSession = {
+                    sessionId,
+                    cvId,
+                    mode,
+                    durationMinutes,
+                    meetingUrl: location.state?.meetingUrl || buildMeetingUrl(sessionId),
+                    jobTitle: location.state?.jobTitle || '',
+                    interviewPlan: location.state?.interviewPlan || {},
+                };
+                setSessionInfo(resolvedSession);
+                connectWebSocket(resolvedSession);
+            } catch (err) {
+                setError(err.message || 'Không thể khởi tạo phòng phỏng vấn.');
+                setPhase('ended');
             }
         };
 
-        ws.onerror = () => { setAiTyping(false); stopAudio(); };
+        loadSessionAndConnect();
 
-        ws.onclose = (evt) => {
-            setAiTyping(false);
-            stopAudio();
-            if (phaseRef.current === PHASE.INTERVIEW && evt.code !== 1000 && evt.code !== 1001) {
-                setWsError('Kết nối bị gián đoạn. Vui lòng tải lại trang.');
-            }
-        };
-    }, [sessionId, cvId, extractionData, position, level, mode, appendMessage, industry]);
-
-    // ── Session timer ──────────────────────────────────────────────────────
-
-    const startSessionTimer = () => {
-        setSessionSeconds(0);
-        sessionTimerRef.current = setInterval(() => setSessionSeconds(s => s + 1), 1000);
-    };
-
-    const stopSessionTimer = () => {
-        if (sessionTimerRef.current) {
-            clearInterval(sessionTimerRef.current);
-            sessionTimerRef.current = null;
-        }
-    };
-
-    // ── Bấm "Tôi đã sẵn sàng" ─────────────────────────────────────────────
-
-    const handleReady = () => {
-        setPhase(PHASE.INTERVIEW);
-        phaseRef.current = PHASE.INTERVIEW;
-        connectWebSocket();
-        startSessionTimer();
-        if (pendingMessagesRef.current.length > 0) {
-            setMessages(prev => [...prev, ...pendingMessagesRef.current]);
-            pendingMessagesRef.current = [];
-        }
-        setAiTyping(true);
-    };
-
-    // ── Cleanup ────────────────────────────────────────────────────────────
-
-    useEffect(() => {
         return () => {
-            wsRef.current?.close();
-            stopRecTimer();
-            stopSessionTimer();
-            stopAudio();
-            streamRef.current?.getTracks().forEach(t => t.stop());
+            cancelled = true;
+            cleanupConnections();
         };
     }, []);
 
-    // ── Gửi text ──────────────────────────────────────────────────────────
+    const buildMeetingUrl = (sessionId) =>
+        `${window.location.origin}/chat?session_id=${encodeURIComponent(sessionId)}`;
 
-    const sendText = useCallback(() => {
-        const text = inputText.trim();
-        if (!text || aiTyping || phase !== PHASE.INTERVIEW) return;
-
-        stopAudio();
-        setInputText('');
-        setAiTyping(true);
-
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'text_answer', content: text }));
-        } else {
-            setWsError('Mất kết nối. Vui lòng tải lại trang.');
-            setAiTyping(false);
-        }
-    }, [inputText, aiTyping, phase]);
-
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendText();
-        }
-    };
-
-    // ── Voice recorder ─────────────────────────────────────────────────────
-
-    const stopRecTimer = () => {
-        if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
-    };
-
-    const startRecTimer = () => {
-        setRecSeconds(0);
-        recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
-    };
-
-    const startVoice = async () => {
-        stopAudio();
+    const getLatestCvId = () => {
+        const storedCvHistory = localStorage.getItem('lancerai_cv_history');
+        if (!storedCvHistory) return '';
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            streamRef.current = stream;
+            const cvs = JSON.parse(storedCvHistory);
+            return cvs.length > 0 ? cvs[0].cvId : '';
         } catch {
-            alert('Cho phép LancerAI sử dụng micro để dùng tính năng này.');
+            return '';
+        }
+    };
+
+    const connectWebSocket = (session) => {
+        const token = localStorage.getItem(keys.LANCERAI_ACCESS_TOKEN);
+        const wsUrl = `${API_BASE_URL.replace(/^http/, 'ws')}/api/v1/interview/ws`;
+        const connectionId = connectionSeqRef.current + 1;
+        connectionSeqRef.current = connectionId;
+        if (!token) {
+            setError('Vui lòng đăng nhập lại để tham gia phòng phỏng vấn.');
+            setPhase('ended');
             return;
         }
 
-        audioChunksRef.current = [];
-        const mr = new MediaRecorder(streamRef.current);
-        mediaRecorderRef.current = mr;
+        const ws = new WebSocket(wsUrl);
+        ws.binaryType = 'arraybuffer';
+        wsRef.current = ws;
+        const isActiveSocket = () => connectionSeqRef.current === connectionId && wsRef.current === ws;
 
-        mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-        mr.onstop = () => {
-            // Audio blob is assembled in sendVoice
+        ws.onopen = () => {
+            if (!isActiveSocket()) return;
+            setError('');
+            ws.send(JSON.stringify({
+                token,
+                session_id: session.sessionId,
+                duration_minutes: session.durationMinutes || 5,
+            }));
+            startRecording(ws);
         };
 
-        mr.start();
-        setVoiceMode('recording');
-        startRecTimer();
+        ws.onmessage = (event) => {
+            if (!isActiveSocket()) return;
+            if (event.data instanceof ArrayBuffer) {
+                playAudioChunk(event.data);
+                return;
+            }
+
+            try {
+                const payload = JSON.parse(event.data);
+                handleSocketEvent(payload);
+            } catch (err) {
+                console.error('Failed to parse WS JSON message:', err);
+            }
+        };
+
+        ws.onerror = (event) => {
+            if (!isActiveSocket()) return;
+            console.error('Interview WebSocket error:', event, wsUrl);
+            setError('Không kết nối được WebSocket tới server.');
+        };
+
+        ws.onclose = (event) => {
+            if (!isActiveSocket()) return;
+            if (event.code === 1008) {
+                setError('Phiên phỏng vấn không hợp lệ hoặc phiên đăng nhập đã hết hạn.');
+            } else if (event.code === 1011) {
+                setError('Server gặp lỗi khi khởi tạo pipeline phỏng vấn. Kiểm tra log backend để xem chi tiết.');
+            } else if (![1000, 1001].includes(event.code) && phaseRef.current !== 'ended') {
+                setError(`WebSocket đã đóng bất thường (code ${event.code || 'unknown'}).`);
+            }
+            setPhase((current) => (current === 'ended' ? current : 'ended'));
+            stopRecording();
+        };
     };
 
-    const pauseVoice = () => {
-        mediaRecorderRef.current?.pause();
-        stopRecTimer();
-        setVoiceMode('paused');
-    };
-
-    const resumeVoice = () => {
-        mediaRecorderRef.current?.resume();
-        recTimerRef.current = setInterval(() => setRecSeconds(s => s + 1), 1000);
-        setVoiceMode('recording');
-    };
-
-    const discardVoice = () => {
-        mediaRecorderRef.current?.stop();
-        stopRecTimer();
-        streamRef.current?.getTracks().forEach(t => t.stop());
-        audioChunksRef.current = [];
-        setRecSeconds(0);
-        setVoiceMode('idle');
-    };
-
-    const sendVoice = async () => {
-        const wsReady = wsRef.current?.readyState === WebSocket.OPEN;
-
-        // Stop recorder to finalize the recording
-        if (mediaRecorderRef.current?.state !== 'inactive') {
-            mediaRecorderRef.current?.stop();
+    const handleSocketEvent = (payload) => {
+        if (payload.event === 'session_started') {
+            setSessionInfo((prev) => ({
+                ...(prev || {}),
+                sessionId: payload.session_id || prev?.sessionId,
+                jobTitle: payload.job_title || prev?.jobTitle,
+                durationMinutes: payload.duration_minutes || prev?.durationMinutes,
+                interviewPlan: payload.interview_plan || prev?.interviewPlan || {},
+            }));
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: `system-${Date.now()}`,
+                    sender: 'system',
+                    text: 'Phòng phỏng vấn đã sẵn sàng. AI sẽ bắt đầu bằng câu chào và câu hỏi đầu tiên.',
+                },
+            ]);
+            return;
         }
 
-        // Wait a tick for onstop to fire, then send
-        await new Promise(r => setTimeout(r, 100));
-
-        if (wsReady && audioChunksRef.current.length > 0) {
-            const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            const arrayBuffer = await blob.arrayBuffer();
-            wsRef.current.send(arrayBuffer);
-            setAiTyping(true);
-        } else if (!wsReady) {
-            setWsError('Mất kết nối. Vui lòng tải lại trang.');
+        if (payload.event === 'phase_change') {
+            const newPhase = payload.phase;
+            if (newPhase === 'listening') {
+                const audioCtx = audioContextPlayerRef.current;
+                if (audioCtx && nextStartTimeRef.current > audioCtx.currentTime) {
+                    const delayMs = (nextStartTimeRef.current - audioCtx.currentTime) * 1000;
+                    setTimeout(() => {
+                        setPhase((current) => (current === 'speaking' ? 'listening' : current));
+                    }, delayMs + 100);
+                    return;
+                }
+            }
+            setPhase(newPhase);
+            return;
         }
 
-        // Reset voice UI
-        stopRecTimer();
-        streamRef.current?.getTracks().forEach(t => t.stop());
-        audioChunksRef.current = [];
-        setRecSeconds(0);
-        setVoiceMode('idle');
+        if (payload.event === 'transcript') {
+            appendMessage('user', payload.text);
+            return;
+        }
+
+        if (payload.event === 'assistant_text') {
+            appendMessage('ai', payload.text);
+            return;
+        }
+
+        if (payload.event === 'session_ended') {
+            setPhase('ended');
+            setFinalEvaluation(payload.evaluation || null);
+            saveSessionToHistory(payload.evaluation);
+            return;
+        }
+
+        if (payload.event === 'behavior_event_ack') {
+            setBehaviorEvents((prev) =>
+                prev.map((item, idx) =>
+                    idx === 0 && item.kind === payload.kind ? { ...item, acknowledged: true } : item
+                )
+            );
+            return;
+        }
+
+        if (payload.event === 'error') {
+            setError(payload.message || 'Lỗi phiên phỏng vấn.');
+        }
     };
 
-    // ── Kết thúc / Lưu ────────────────────────────────────────────────────
+    const appendMessage = (sender, text) => {
+        if (!text) return;
+        setMessages((prev) => [
+            ...prev,
+            { id: `${sender}-${Date.now()}-${prev.length}`, sender, text },
+        ]);
+    };
 
-    const handleEnd = () => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
+    const resampleAndConvertTo16kInt16 = (inputBuffer, inputSampleRate) => {
+        const targetSampleRate = 16000;
+        const ratio = inputSampleRate / targetSampleRate;
+        const newLength = Math.round(inputBuffer.length / ratio);
+        const result = new Int16Array(newLength);
+        for (let i = 0; i < newLength; i += 1) {
+            const index = Math.min(inputBuffer.length - 1, Math.round(i * ratio));
+            const val = Math.max(-1, Math.min(1, inputBuffer[index]));
+            result[i] = val < 0 ? val * 0x8000 : val * 0x7fff;
+        }
+        return result.buffer;
+    };
+
+    const playAudioChunk = (arrayBuffer) => {
+        if (!audioContextPlayerRef.current) {
+            audioContextPlayerRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            nextStartTimeRef.current = audioContextPlayerRef.current.currentTime;
+        }
+
+        const audioCtx = audioContextPlayerRef.current;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const int16 = new Int16Array(arrayBuffer);
+        const float32 = new Float32Array(int16.length);
+        for (let i = 0; i < int16.length; i += 1) {
+            float32[i] = int16[i] / 32768.0;
+        }
+
+        const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000);
+        audioBuffer.getChannelData(0).set(float32);
+
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioCtx.destination);
+
+        const currentTime = audioCtx.currentTime;
+        if (nextStartTimeRef.current < currentTime) nextStartTimeRef.current = currentTime;
+        source.start(nextStartTimeRef.current);
+        nextStartTimeRef.current += audioBuffer.duration;
+    };
+
+    const startRecording = async (ws) => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            let videoStream = null;
+            let behaviorCleanup = () => {};
+
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 960 },
+                        height: { ideal: 540 },
+                        frameRate: { ideal: 15 },
+                    },
+                    audio: false,
+                });
+                behaviorCleanup = await startBehaviorMonitoring(videoStream, ws);
+            } catch (cameraErr) {
+                console.warn('Camera setup failed:', cameraErr);
+                setCameraStatus('unavailable');
+                sendBehaviorEvent(ws, {
+                    kind: 'camera_unavailable',
+                    severity: 'medium',
+                    confidence: 1,
+                    detail: 'Candidate did not grant camera access or no camera was available.',
+                }, 0);
+            }
+
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioCtx.createMediaStreamSource(stream);
+            const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+            source.connect(processor);
+            processor.connect(audioCtx.destination);
+
+            processor.onaudioprocess = (e) => {
+                if (phaseRef.current !== 'listening') return;
+                const inputData = e.inputBuffer.getChannelData(0);
+                const int16Buffer = resampleAndConvertTo16kInt16(inputData, audioCtx.sampleRate);
+                if (ws.readyState === WebSocket.OPEN) ws.send(int16Buffer);
+            };
+
+            recordingRef.current = { stream, videoStream, audioCtx, processor, behaviorCleanup };
+        } catch (err) {
+            console.error('Mic setup failed:', err);
+            setError('Không thể truy cập microphone. Vui lòng cấp quyền ghi âm.');
+        }
+    };
+
+    const startBehaviorMonitoring = async (videoStream, ws) => {
+        const videoTracks = videoStream?.getVideoTracks?.() || [];
+        if (videoTracks.length === 0) {
+            setCameraStatus('unavailable');
+            sendBehaviorEvent(ws, {
+                kind: 'camera_unavailable',
+                severity: 'medium',
+                confidence: 1,
+                detail: 'Camera stream was not available.',
+            }, 0);
+            return () => {};
+        }
+
+        setCameraStatus('active');
+        sendBehaviorEvent(ws, {
+            kind: 'camera_ready',
+            severity: 'low',
+            confidence: 0.9,
+            detail: 'Camera is active for behavioral observations.',
+        }, 0);
+
+        const video = videoPreviewRef.current;
+        if (video) {
+            video.srcObject = videoStream;
+            video.muted = true;
+            video.playsInline = true;
+            await video.play().catch(() => {});
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 160;
+        canvas.height = 120;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const FaceDetectorCtor = window.FaceDetector;
+        const faceDetector = FaceDetectorCtor
+            ? new FaceDetectorCtor({ fastMode: true, maxDetectedFaces: 2 })
+            : null;
+
+        if (!faceDetector) {
+            sendBehaviorEvent(ws, {
+                kind: 'camera_analysis_limited',
+                severity: 'info',
+                confidence: 1,
+                detail: 'Native FaceDetector is not supported in this browser.',
+            }, 0);
+        }
+
+        let previousPixels = null;
+        let lastFaceCenter = null;
+        let noFaceSince = 0;
+        let offCenterSince = 0;
+        let centeredSince = 0;
+        let restlessTicks = 0;
+        let lowLightTicks = 0;
+        let running = false;
+
+        const analyseFrame = async () => {
+            if (running || !ctx || !video || video.readyState < 2) return;
+            running = true;
+            try {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                let brightness = 0;
+                let diff = 0;
+                const sampleCount = Math.max(1, Math.floor(frame.data.length / 16));
+
+                for (let i = 0; i < frame.data.length; i += 16) {
+                    const gray = (frame.data[i] + frame.data[i + 1] + frame.data[i + 2]) / 3;
+                    brightness += gray;
+                    if (previousPixels) diff += Math.abs(gray - previousPixels[i / 16]);
+                }
+
+                brightness /= sampleCount;
+                diff = previousPixels ? diff / sampleCount : 0;
+                previousPixels = Array.from({ length: sampleCount }, (_, idx) => {
+                    const p = idx * 16;
+                    return (frame.data[p] + frame.data[p + 1] + frame.data[p + 2]) / 3;
+                });
+
+                if (brightness < 42) lowLightTicks += 1;
+                else lowLightTicks = 0;
+                if (lowLightTicks >= 4) {
+                    sendBehaviorEvent(ws, {
+                        kind: 'poor_lighting',
+                        severity: 'medium',
+                        confidence: 0.65,
+                        detail: 'Camera image is too dark for reliable behavioral observations.',
+                    });
+                }
+
+                if (diff > 38) restlessTicks += 1;
+                else restlessTicks = Math.max(0, restlessTicks - 1);
+                if (restlessTicks >= 4) {
+                    sendBehaviorEvent(ws, {
+                        kind: 'restless_motion',
+                        severity: 'medium',
+                        confidence: 0.55,
+                        detail: 'Camera frame changed rapidly several times in a short period.',
+                    });
+                    restlessTicks = 0;
+                }
+
+                if (faceDetector) {
+                    const faces = await faceDetector.detect(video);
+                    const now = Date.now();
+                    if (faces.length === 0) {
+                        if (!noFaceSince) noFaceSince = now;
+                        centeredSince = 0;
+                        if (now - noFaceSince > 3000) {
+                            sendBehaviorEvent(ws, {
+                                kind: 'face_not_visible',
+                                severity: 'high',
+                                confidence: 0.8,
+                                detail: 'No face was visible for more than 3 seconds.',
+                            });
+                        }
+                    } else {
+                        noFaceSince = 0;
+                        if (faces.length > 1) {
+                            sendBehaviorEvent(ws, {
+                                kind: 'multiple_faces',
+                                severity: 'high',
+                                confidence: 0.8,
+                                detail: `${faces.length} faces were visible in the camera frame.`,
+                            });
+                        }
+
+                        const face = faces[0].boundingBox;
+                        const videoWidth = video.videoWidth || 1;
+                        const videoHeight = video.videoHeight || 1;
+                        const center = {
+                            x: (face.x + face.width / 2) / videoWidth,
+                            y: (face.y + face.height / 2) / videoHeight,
+                        };
+                        const centered =
+                            center.x >= 0.34 && center.x <= 0.66 && center.y >= 0.22 && center.y <= 0.78;
+
+                        if (centered) {
+                            offCenterSince = 0;
+                            if (!centeredSince) centeredSince = now;
+                            if (now - centeredSince > 10000) {
+                                sendBehaviorEvent(ws, {
+                                    kind: 'eye_contact_stable',
+                                    severity: 'low',
+                                    confidence: 0.6,
+                                    detail: 'Face stayed centered for a sustained period.',
+                                }, 12000);
+                                centeredSince = now;
+                            }
+                        } else {
+                            centeredSince = 0;
+                            if (!offCenterSince) offCenterSince = now;
+                            if (now - offCenterSince > 3500) {
+                                sendBehaviorEvent(ws, {
+                                    kind: 'face_off_center',
+                                    severity: 'medium',
+                                    confidence: 0.65,
+                                    detail: 'Face was off-center for more than 3 seconds.',
+                                });
+                            }
+                        }
+
+                        if (lastFaceCenter) {
+                            const jump = Math.abs(center.x - lastFaceCenter.x) + Math.abs(center.y - lastFaceCenter.y);
+                            if (jump > 0.22) {
+                                sendBehaviorEvent(ws, {
+                                    kind: 'restless_motion',
+                                    severity: 'medium',
+                                    confidence: 0.65,
+                                    detail: 'Face position moved abruptly in the camera frame.',
+                                });
+                            }
+                        }
+                        lastFaceCenter = center;
+                    }
+                }
+            } finally {
+                running = false;
+            }
+        };
+
+        const timer = window.setInterval(analyseFrame, 1000);
+        return () => {
+            window.clearInterval(timer);
+            if (videoPreviewRef.current) videoPreviewRef.current.srcObject = null;
+        };
+    };
+
+    const sendBehaviorEvent = (ws, event, minIntervalMs = 6000) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN || !event?.kind) return;
+        const now = Date.now();
+        const lastSent = behaviorLastSentRef.current[event.kind] || 0;
+        if (now - lastSent < minIntervalMs) return;
+        behaviorLastSentRef.current[event.kind] = now;
+
+        const payload = { ...event, ts: now / 1000 };
+        ws.send(JSON.stringify({ action: 'behavior_event', event: payload }));
+        setBehaviorEvents((prev) => [payload, ...prev].slice(0, 5));
+    };
+
+    useEffect(() => {
+        let disposed = false;
+        let awaySince = 0;
+        let awayTimer = null;
+        let monitorTimer = null;
+        let screenDetails = null;
+
+        const report = (event, minIntervalMs = 8000) => {
+            if (disposed || phaseRef.current === 'ended') return;
+            sendBehaviorEvent(wsRef.current, event, minIntervalMs);
+        };
+
+        const clearAwayTimer = () => {
+            if (awayTimer) window.clearTimeout(awayTimer);
+            awayTimer = null;
+        };
+
+        const comeBack = () => {
+            awaySince = 0;
+            clearAwayTimer();
+        };
+
+        const goAway = (viaBlur = false) => {
+            if (awaySince) return;
+            awaySince = Date.now();
+            const tick = () => {
+                if (document.visibilityState === 'visible' && document.hasFocus()) {
+                    comeBack();
+                    return;
+                }
+                const awayMs = Date.now() - awaySince;
+                report({
+                    kind: 'tab_switch',
+                    severity: 'high',
+                    confidence: 0.85,
+                    detail: `Candidate left the interview window for ${(awayMs / 1000).toFixed(1)}s.`,
+                }, 10000);
+                awayTimer = window.setTimeout(tick, 10000);
+            };
+            awayTimer = window.setTimeout(tick, viaBlur ? 1200 : 600);
+        };
+
+        const onVisibility = () => {
+            if (document.visibilityState === 'hidden') goAway(false);
+            else comeBack();
+        };
+        const onBlur = () => goAway(true);
+
+        document.addEventListener('visibilitychange', onVisibility);
+        window.addEventListener('blur', onBlur);
+        window.addEventListener('focus', comeBack);
+
+        const evaluateMonitor = () => {
+            const extended = window.screen?.isExtended === true;
+            const count = screenDetails?.screens?.length || (extended ? 2 : 1);
+            if (extended || count > 1) {
+                report({
+                    kind: 'secondary_monitor',
+                    severity: 'high',
+                    confidence: 0.8,
+                    detail: `${count} display(s) detected during the interview.`,
+                }, 15000);
+            }
+        };
+
+        const monitorSupported =
+            typeof window.screen?.isExtended === 'boolean' ||
+            typeof window.getScreenDetails === 'function';
+
+        if (typeof window.getScreenDetails === 'function') {
+            window.getScreenDetails()
+                .then((details) => {
+                    if (disposed) return;
+                    screenDetails = details;
+                    evaluateMonitor();
+                    details.addEventListener?.('screenschange', evaluateMonitor);
+                })
+                .catch((err) => {
+                    if (typeof window.screen?.isExtended !== 'boolean') {
+                        report({
+                            kind: 'detection_unsupported',
+                            severity: 'info',
+                            confidence: 1,
+                            detail: `Screen detection unavailable: ${err?.message || err}`,
+                        }, 0);
+                    }
+                });
+        } else if (monitorSupported) {
+            evaluateMonitor();
+        } else {
+            report({
+                kind: 'detection_unsupported',
+                severity: 'info',
+                confidence: 1,
+                detail: 'This browser cannot detect extended displays.',
+            }, 0);
+        }
+
+        if (monitorSupported) {
+            monitorTimer = window.setInterval(evaluateMonitor, 15000);
+        }
+
+        return () => {
+            disposed = true;
+            clearAwayTimer();
+            if (monitorTimer) window.clearInterval(monitorTimer);
+            document.removeEventListener('visibilitychange', onVisibility);
+            window.removeEventListener('blur', onBlur);
+            window.removeEventListener('focus', comeBack);
+            screenDetails?.removeEventListener?.('screenschange', evaluateMonitor);
+        };
+    }, []);
+
+    const stopRecording = () => {
+        if (!recordingRef.current) return;
+        try {
+            const { stream, videoStream, audioCtx, processor, behaviorCleanup } = recordingRef.current;
+            behaviorCleanup?.();
+            stream.getTracks().forEach((track) => track.stop());
+            videoStream?.getTracks?.().forEach((track) => track.stop());
+            processor.disconnect();
+            audioCtx.close();
+        } catch {
+            // Best-effort cleanup.
+        }
+        recordingRef.current = null;
+    };
+
+    const cleanupConnections = () => {
+        stopRecording();
+        if (wsRef.current) {
+            const ws = wsRef.current;
+            connectionSeqRef.current += 1;
+            ws.onopen = null;
+            ws.onmessage = null;
+            ws.onerror = null;
+            ws.onclose = null;
+            ws.close();
+            if (wsRef.current === ws) {
+                wsRef.current = null;
+            }
+        }
+        if (audioContextPlayerRef.current) {
+            audioContextPlayerRef.current.close();
+            audioContextPlayerRef.current = null;
+        }
+    };
+
+    const handleStopInterview = () => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify({ action: 'stop' }));
         }
-        setPhase(PHASE.ENDED);
-        stopSessionTimer();
     };
 
-    const handleSave = () => {
-        navigate('/interview');
+    const handleSendTypedAnswer = (event) => {
+        event.preventDefault();
+        const text = typedAnswer.trim();
+        if (!text || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+        wsRef.current.send(JSON.stringify({ action: 'text_answer', text }));
+        setTypedAnswer('');
     };
 
-    // ─── Render ───────────────────────────────────────────────────────────
+    const handleCopyMeetingLink = async () => {
+        if (!sessionInfo?.meetingUrl || !navigator.clipboard) return;
+        await navigator.clipboard.writeText(sessionInfo.meetingUrl);
+    };
 
-    if (!sessionId) return null;
+    const handleViewReport = async () => {
+        const sessionId = finalEvaluation?.session_id || sessionInfo?.sessionId;
+        if (!sessionId) return;
+        setLoadingReport(true);
+        try {
+            await new Promise((resolve) => window.setTimeout(resolve, 500));
+            const report = await getReport(sessionId);
+            navigate('/interview-report', { state: { report } });
+        } catch (err) {
+            setError(err.message || 'Chưa tải được báo cáo. Vui lòng thử lại sau vài giây.');
+        } finally {
+            setLoadingReport(false);
+        }
+    };
 
-    const positionLabel = `${position}${level ? ' — ' + level : ''}`;
-    const isVoiceUI = voiceMode !== 'idle';
+    const saveSessionToHistory = (evaluation) => {
+        if (!evaluation?.session_id) return;
+        const storedHistory = localStorage.getItem('lancerai_interview_history') || '[]';
+        let historyList = [];
+        try {
+            historyList = JSON.parse(storedHistory);
+        } catch {
+            historyList = [];
+        }
+
+        const scorecardScore = Number(evaluation.scorecard?.overall_score || 0);
+        const score = scorecardScore ? Math.round((scorecardScore / 5) * 100) : Math.round((evaluation.overall_score || 0) * 10);
+        const newSession = {
+            id: evaluation.session_id,
+            title: `Phỏng vấn ${evaluation.job_title || sessionInfo?.jobTitle || 'CV'}`,
+            date: new Date().toLocaleDateString('vi-VN'),
+            score,
+            behaviorScore: Math.round(evaluation.behavior_score || 100),
+        };
+
+        const updatedHistory = [newSession, ...historyList.filter((item) => item.id !== newSession.id)];
+        localStorage.setItem('lancerai_interview_history', JSON.stringify(updatedHistory));
+    };
+
+    const statusText = {
+        connecting: 'Đang kết nối phòng phỏng vấn',
+        listening: 'Đang nghe ứng viên',
+        processing: 'Đang xử lý câu trả lời',
+        speaking: 'AI đang đặt câu hỏi',
+        ended: 'Phiên phỏng vấn đã kết thúc',
+    }[phase] || phase;
+
+    const statusTextClean = {
+        connecting: 'Đang kết nối phòng phỏng vấn',
+        listening: 'Đang nghe ứng viên',
+        processing: 'Đang phân tích câu trả lời',
+        speaking: 'AI đang đặt câu hỏi',
+        ended: 'Phiên phỏng vấn đã kết thúc',
+    }[phase] || phase;
+    const statusHintClean = {
+        connecting: 'Đang mở WebSocket, microphone và camera.',
+        listening: 'Bạn có thể trả lời bằng giọng nói hoặc nhập text.',
+        processing: 'Hệ thống đang chuyển giọng nói thành transcript và đánh giá ngữ cảnh.',
+        speaking: 'Đợi AI hỏi xong để tránh chồng âm thanh.',
+        ended: 'Bạn có thể xem báo cáo tổng hợp ngay khi hệ thống lưu xong.',
+    }[phase] || '';
 
     return (
-        <div style={{ backgroundColor: 'var(--canvas)', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={styles.page}>
             <Navbar />
-            <div style={styles.container}>
+            <style>{`
+                @keyframes pulse-wave {
+                    0% { transform: scaleY(0.2); }
+                    50% { transform: scaleY(1.0); }
+                    100% { transform: scaleY(0.2); }
+                }
+                @keyframes glow-pulse {
+                    0%, 100% { box-shadow: 0 0 12px rgba(124, 213, 186, 0.2); border-color: rgba(124, 213, 186, 0.2); }
+                    50% { box-shadow: 0 0 28px rgba(124, 213, 186, 0.7); border-color: rgba(124, 213, 186, 0.5); }
+                }
+                .wave-bar {
+                    width: 4px;
+                    height: 18px;
+                    background: var(--gradient-mint);
+                    border-radius: 2px;
+                    animation: pulse-wave 0.8s ease-in-out infinite;
+                }
+            `}</style>
 
-                {/* ── Top bar ── */}
+            <main style={styles.container}>
                 <div style={styles.topBar}>
-                    <button className="btn-tertiary" onClick={handleSave} style={{ fontSize: '13px' }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="15 18 9 12 15 6" />
-                        </svg>
+                    <button className="btn-tertiary" onClick={() => navigate('/interview')}>
                         Quay lại
                     </button>
-                    <div style={styles.sessionInfo}>
-                        <span style={{ fontWeight: 600, fontSize: '14px' }}>{sessionName}</span>
-                        <span style={styles.sessionMeta}>
-                            {positionLabel}{industry ? ` · ${industry}` : ''} ·{' '}
-                            <span style={{ color: mode === 'mock' ? 'var(--semantic-error,#ef4444)' : 'var(--semantic-success,#22c55e)' }}>
-                                {mode === 'mock' ? 'Khắt khe' : 'Chuẩn'}
-                            </span>
-                        </span>
+                    <div style={styles.roomMeta}>
+                        <span style={styles.metaLabel}>Phòng phỏng vấn CV live</span>
+                        <strong style={styles.metaTitle}>{sessionInfo?.jobTitle || 'CV Interview'}</strong>
                     </div>
-                    <div style={styles.topBarRight}>
-                        {phase === PHASE.INTERVIEW && (
-                            <>
-                                <span style={styles.timerBadge}>
-                                    <span style={styles.timerDot} />
-                                    {formatTimer(sessionSeconds)}
-                                </span>
-                                <button
-                                    className="btn-outline"
-                                    onClick={handleEnd}
-                                    style={{ fontSize: '13px', color: 'var(--semantic-error,#ef4444)', borderColor: 'var(--semantic-error,#ef4444)' }}
-                                >
-                                    Kết thúc
-                                </button>
-                            </>
-                        )}
-                        {phase !== PHASE.INTERVIEW && <div style={{ width: '80px' }} />}
-                    </div>
+                    {sessionInfo?.meetingUrl && (
+                        <button className="btn-outline" type="button" onClick={handleCopyMeetingLink}>
+                            Copy link
+                        </button>
+                    )}
                 </div>
 
-                {/* ── Chat box ── */}
-                <div style={styles.chatBox}>
-                    {/* Lời chào tĩnh */}
-                    <div style={{ ...styles.bubbleAI, animation: 'chat-fade-in 0.3s ease' }}>
-                        <div style={styles.aiAvatar}>AI</div>
-                        <div>
-                            Xin chào <strong>{userName}</strong>, hãy bắt đầu với buổi phỏng vấn cho vị trí{' '}
-                            <strong>{positionLabel}</strong> ngày <strong>{today()}</strong>.
-                            {industry ? ` Ngành: ${industry}.` : ''}
-                        </div>
-                    </div>
+                {error && <div style={styles.errorBox}>{error}</div>}
 
-                    {/* Messages */}
-                    {messages.map(msg => {
-                        const isUser = msg.role === 'user';
-                        const isSystem = msg.role === 'system';
-                        return (
-                            <div
-                                key={msg.id}
-                                style={{
-                                    display: 'flex',
-                                    justifyContent: isUser ? 'flex-end' : 'flex-start',
-                                    animation: 'chat-fade-in 0.3s ease',
-                                }}
-                            >
-                                <div style={isUser ? styles.bubbleUser : isSystem ? styles.bubbleSystem : styles.bubbleAI}>
-                                    {!isUser && !isSystem && <div style={styles.aiAvatar}>AI</div>}
-                                    <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
+                <section style={styles.roomGrid}>
+                    <div style={styles.leftPane}>
+                        <div style={styles.videoShell}>
+                            {/* AI Stream Card */}
+                            <div style={styles.aiStreamCard}>
+                                <div style={styles.aiAvatarWrapper(phase)}>
+                                    <div style={styles.aiAvatarCore(phase)}>
+                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--gradient-mint)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <rect x="3" y="11" width="18" height="10" rx="2" />
+                                            <circle cx="12" cy="5" r="2" />
+                                            <path d="M12 7v4" />
+                                            <line x1="8" y1="16" x2="8" y2="16" />
+                                            <line x1="16" y1="16" x2="16" y2="16" />
+                                        </svg>
+                                    </div>
+                                    
+                                    {/* Real-time audio waveform animation when speaking */}
+                                    {phase === 'speaking' && (
+                                        <div style={styles.waveContainer}>
+                                            <div className="wave-bar" style={{ animationDelay: '0s' }} />
+                                            <div className="wave-bar" style={{ animationDelay: '0.15s' }} />
+                                            <div className="wave-bar" style={{ animationDelay: '0.3s' }} />
+                                            <div className="wave-bar" style={{ animationDelay: '0.45s' }} />
+                                            <div className="wave-bar" style={{ animationDelay: '0.6s' }} />
+                                        </div>
+                                    )}
                                 </div>
+                                <div style={styles.videoBadge}>Người phỏng vấn AI (LancerAI)</div>
+                                {phase === 'speaking' && <div style={styles.speakingIndicator}>Đang đặt câu hỏi...</div>}
                             </div>
-                        );
-                    })}
 
-                    {/* Typing indicator */}
-                    {aiTyping && (
-                        <div style={{ display: 'flex', justifyContent: 'flex-start', animation: 'chat-fade-in 0.2s ease' }}>
-                            <div style={{ ...styles.bubbleAI, ...styles.typingBubble }}>
-                                <div style={styles.aiAvatar}>AI</div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    {[0, 1, 2].map(i => (
-                                        <span key={i} style={{ ...styles.dot, animation: 'chat-wave 1.2s ease-in-out infinite', animationDelay: `${i * 0.18}s` }} />
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* WS error */}
-                    {wsError && (
-                        <div style={{ textAlign: 'center', padding: 'var(--sp-sm)' }}>
-                            <p style={{ color: 'var(--semantic-error,#ef4444)', fontSize: '13px', margin: 0 }}>{wsError}</p>
-                            <button
-                                className="btn-outline"
-                                onClick={() => { setWsError(''); connectWebSocket(); }}
-                                style={{ marginTop: 'var(--sp-xs)', fontSize: '12px' }}
-                            >
-                                Thử kết nối lại
-                            </button>
-                        </div>
-                    )}
-                    <div ref={chatEndRef} />
-                </div>
-
-                {/* ── Input area ── */}
-
-                {phase === PHASE.GREETING && (
-                    <div style={styles.bottomBar}>
-                        <div style={styles.greetingContent}>
-                            <p style={{ color: 'var(--muted)', fontSize: '14px', margin: '0 0 var(--sp-sm) 0', textAlign: 'center' }}>
-                                Khi sẵn sàng, bấm nút bên dưới để bắt đầu phỏng vấn.
-                            </p>
-                            <button className="btn-primary" onClick={handleReady} style={{ minWidth: '220px', height: '48px', fontSize: '16px' }}>
-                                Tôi đã sẵn sàng 🚀
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {phase === PHASE.INTERVIEW && !isVoiceUI && (
-                    /* ── Text mode ── */
-                    <div style={styles.inputArea}>
-                        {voiceSupported && (
-                            <button
-                                onClick={startVoice}
-                                style={{ ...styles.iconBtn, color: 'var(--muted)' }}
-                                title="Ghi âm câu trả lời"
-                                disabled={aiTyping}
-                            >
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                    <line x1="12" y1="19" x2="12" y2="23" />
-                                    <line x1="8" y1="23" x2="16" y2="23" />
-                                </svg>
-                            </button>
-                        )}
-                        <textarea
-                            ref={textareaRef}
-                            className="text-input"
-                            style={styles.textarea}
-                            placeholder="Nhập câu trả lời... (Enter để gửi, Shift+Enter xuống dòng)"
-                            value={inputText}
-                            onChange={e => { setInputText(e.target.value); resizeTextarea(); }}
-                            onKeyDown={handleKeyDown}
-                            disabled={aiTyping}
-                            rows={1}
-                        />
-                        <button
-                            className="btn-primary"
-                            onClick={sendText}
-                            disabled={!inputText.trim() || aiTyping}
-                            style={{ flexShrink: 0, alignSelf: 'flex-end' }}
-                        >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="22" y1="2" x2="11" y2="13" />
-                                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                            </svg>
-                            Gửi
-                        </button>
-                    </div>
-                )}
-
-                {phase === PHASE.INTERVIEW && isVoiceUI && (
-                    /* ── Voice recorder UI ── */
-                    <div style={styles.recorderBar}>
-                        {/* Nút xoá */}
-                        <button
-                            onClick={discardVoice}
-                            style={{ ...styles.iconBtn, color: 'var(--semantic-error,#ef4444)', fontSize: '20px' }}
-                            title="Xoá đoạn ghi âm"
-                        >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="3 6 5 6 21 6" />
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                            </svg>
-                        </button>
-
-                        {/* Dải recorder */}
-                        <div style={styles.recorderTrack}>
-                            <button
-                                onClick={voiceMode === 'recording' ? pauseVoice : resumeVoice}
-                                style={styles.recPlayBtn}
-                                title={voiceMode === 'recording' ? 'Tạm dừng' : 'Tiếp tục'}
-                            >
-                                {voiceMode === 'recording' ? (
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
-                                        <rect x="6" y="4" width="4" height="16" rx="1" />
-                                        <rect x="14" y="4" width="4" height="16" rx="1" />
-                                    </svg>
-                                ) : (
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="white">
-                                        <polygon points="5,3 19,12 5,21" />
-                                    </svg>
-                                )}
-                            </button>
-
-                            {/* Waveform + status */}
-                            <div style={styles.recMiddle}>
-                                {voiceMode === 'recording' && (
-                                    <div style={styles.waveform}>
-                                        {Array.from({ length: 24 }).map((_, i) => (
-                                            <div
-                                                key={i}
-                                                style={{
-                                                    ...styles.waveBar,
-                                                    animation: 'chat-waveform-bar 0.6s ease-in-out infinite',
-                                                    animationDelay: `${i * 0.04}s`,
-                                                }}
-                                            />
-                                        ))}
+                            {/* Candidate Stream Card */}
+                            <div style={styles.userStreamCard}>
+                                <video ref={videoPreviewRef} style={styles.videoPreview} />
+                                {cameraStatus !== 'active' && (
+                                    <div style={styles.videoPlaceholder}>
+                                        {cameraStatus === 'unavailable' ? 'Không có camera' : 'Đang bật camera'}
                                     </div>
                                 )}
-                                {voiceMode === 'paused' && (
-                                    <span style={{ color: 'var(--muted)', fontSize: '13px' }}>Đã tạm dừng</span>
+                                <div style={styles.videoBadge}>
+                                    {cameraStatus === 'active' ? 'Ứng viên (Bạn)' : 'Không có camera'}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={styles.statusCard}>
+                            <div style={styles.statusLine}>
+                                <span style={styles.statusDot(phase)} />
+                                <div>
+                                    <strong style={styles.statusTitle}>{statusTextClean}</strong>
+                                    <p style={styles.statusHintActive}>{statusHintClean}</p>
+                                    <p style={styles.statusHint}>
+                                        {phase === 'listening'
+                                            ? 'Bạn có thể nói trực tiếp hoặc nhập câu trả lời bằng text.'
+                                            : 'Hệ thống đang giữ lượt nói để tránh chồng âm thanh.'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div style={styles.controls}>
+                                {phase !== 'ended' ? (
+                                    <button style={styles.btnStop} onClick={handleStopInterview}>
+                                        Kết thúc
+                                    </button>
+                                ) : (
+                                    <button className="btn-primary" onClick={handleViewReport} disabled={loadingReport}>
+                                        {loadingReport ? 'Đang tải báo cáo...' : 'Xem báo cáo'}
+                                    </button>
                                 )}
                             </div>
-
-                            <span style={styles.recTimer}>{formatTimer(recSeconds)}</span>
                         </div>
 
-                        {/* Nút Gửi */}
-                        <button
-                            className="btn-primary"
-                            onClick={sendVoice}
-                            disabled={aiTyping}
-                            style={{ flexShrink: 0, fontSize: '13px', gap: '6px' }}
-                        >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="22" y1="2" x2="11" y2="13" />
-                                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                            </svg>
-                            Gửi
-                        </button>
-                    </div>
-                )}
+                        <div style={styles.behaviorCard}>
+                            <div style={styles.panelHeader}>
+                                <strong>Quan sát hành vi</strong>
+                                <span style={styles.smallMuted}>Tín hiệu phụ</span>
+                            </div>
+                            <div style={styles.behaviorEvents}>
+                                {behaviorEvents.length === 0 ? (
+                                    <span style={styles.smallMuted}>Chưa có tín hiệu đáng chú ý.</span>
+                                ) : behaviorEvents.map((event, idx) => (
+                                    <span key={`${event.kind}-${idx}`} style={styles.behaviorChip(event.severity)}>
+                                        {event.kind.replaceAll('_', ' ')}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
 
-                {phase === PHASE.ENDED && (
-                    <div style={styles.bottomBar}>
-                        <div style={styles.endedContent}>
-                            <div style={styles.endedIcon}>✓</div>
+                    </div>
+
+                    <div style={styles.chatPane}>
+                        <div style={styles.panelHeader}>
                             <div>
-                                <p style={{ color: 'var(--ink)', fontSize: '15px', fontWeight: 600, margin: '0 0 2px 0' }}>
-                                    Buổi phỏng vấn đã kết thúc
-                                </p>
-                                <p style={{ color: 'var(--muted)', fontSize: '13px', margin: 0 }}>
-                                    Thời lượng: {formatTimer(sessionSeconds)} · {messages.filter(m => m.role === 'user').length} câu trả lời
-                                </p>
+                                <strong>Log hội thoại</strong>
+                                <p style={styles.statusHintActive}>Transcript dùng để chấm STAR và tạo report.</p>
                             </div>
-                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--sp-xs)' }}>
-                                <button className="btn-outline" onClick={() => navigate('/interview')}>
-                                    Quay lại
-                                </button>
-                                <button className="btn-primary" onClick={() => navigate('/interview-report', { state: { sessionId } })}>
-                                    Xem kết quả →
-                                </button>
-                            </div>
+                            <span style={styles.messageCount}>{messages.length} lượt</span>
                         </div>
+
+                        <div style={styles.chatBox}>
+                            {messages.length === 0 && (
+                                <div style={styles.emptyChat}>
+                                    Đang chuẩn bị câu hỏi đầu tiên. Cho phép microphone và camera để bắt đầu.
+                                </div>
+                            )}
+                            {messages.map((msg) => {
+                                const isUser = msg.sender === 'user';
+                                const isSystem = msg.sender === 'system';
+                                return (
+                                    <div
+                                        key={msg.id}
+                                        style={{
+                                            display: 'flex',
+                                            justifyContent: isUser ? 'flex-end' : 'flex-start',
+                                        }}
+                                    >
+                                        <div style={isSystem ? styles.bubbleSystem : isUser ? styles.bubbleUser : styles.bubbleAI}>
+                                            <span style={styles.senderLabel}>
+                                                {isSystem ? 'Hệ thống' : isUser ? 'Bạn' : 'AI phỏng vấn'}
+                                            </span>
+                                            <div>{msg.text}</div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <div ref={chatEndRef} />
+                        </div>
+
+                        <form style={styles.textForm} onSubmit={handleSendTypedAnswer}>
+                            <input
+                                style={styles.textInput}
+                                value={typedAnswer}
+                                onChange={(event) => setTypedAnswer(event.target.value)}
+                                placeholder="Nhập câu trả lời nếu muốn dùng text thay microphone..."
+                                disabled={phase === 'ended' || phase === 'speaking' || phase === 'connecting'}
+                            />
+                            <button
+                                className="btn-primary"
+                                type="submit"
+                                disabled={!typedAnswer.trim() || phase === 'ended' || phase === 'speaking' || phase === 'connecting'}
+                            >
+                                Gửi
+                            </button>
+                        </form>
                     </div>
-                )}
-            </div>
+                </section>
+            </main>
         </div>
     );
 };
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = {
+    page: {
+        height: '100vh',
+        maxHeight: '100vh',
+        overflow: 'hidden',
+        background: 'linear-gradient(135deg, var(--canvas) 0%, var(--canvas-soft) 55%, var(--surface-strong) 100%)',
+        display: 'flex',
+        flexDirection: 'column',
+    },
     container: {
-        maxWidth: '860px', margin: '0 auto',
-        padding: 'var(--sp-base) var(--sp-lg)',
-        flex: 1, display: 'flex', flexDirection: 'column',
-        height: 'calc(100vh - var(--nav-height, 64px))',
+        height: 'calc(100vh - var(--nav-height))',
+        minHeight: 0,
+        width: '100%',
+        maxWidth: '1440px',
+        margin: '0 auto',
+        padding: '12px 18px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        overflow: 'hidden',
     },
     topBar: {
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 'var(--sp-sm)', gap: 'var(--sp-base)',
+        minHeight: '42px',
+        display: 'grid',
+        gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+        alignItems: 'center',
+        gap: '12px',
+        flexShrink: 0,
     },
-    sessionInfo: {
-        flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
+    roomMeta: {
+        minWidth: 0,
+        display: 'flex',
+        flexDirection: 'column',
     },
-    sessionMeta: { fontSize: '12px', color: 'var(--muted)' },
-    topBarRight: {
-        display: 'flex', alignItems: 'center', gap: 'var(--sp-sm)',
+    metaLabel: {
+        fontSize: '11px',
+        color: 'var(--muted)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.6px',
     },
-    timerBadge: {
-        display: 'inline-flex', alignItems: 'center', gap: '6px',
-        backgroundColor: 'var(--surface-strong)', borderRadius: 'var(--rounded-pill)',
-        padding: '4px 12px', fontSize: '13px', fontWeight: 600,
-        color: 'var(--ink)', fontVariantNumeric: 'tabular-nums',
+    metaTitle: {
+        color: 'var(--ink)',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
     },
-    timerDot: {
-        width: '6px', height: '6px', borderRadius: '50%',
-        backgroundColor: 'var(--semantic-error, #ef4444)',
-        animation: 'chat-pulse-ring 1.5s ease-out infinite',
+    errorBox: {
+        flexShrink: 0,
+        background: 'var(--gradient-rose)',
+        color: 'var(--ink)',
+        padding: '8px 12px',
+        borderRadius: 'var(--rounded-md)',
+        fontSize: '13px',
+        fontWeight: 600,
     },
-    // Chat area
+    roomGrid: {
+        flex: 1,
+        minHeight: 0,
+        display: 'grid',
+        gridTemplateColumns: 'minmax(320px, 0.85fr) minmax(420px, 1.15fr)',
+        gap: '14px',
+        alignItems: 'stretch',
+        overflow: 'hidden',
+    },
+    leftPane: {
+        display: 'grid',
+        gridTemplateRows: 'minmax(220px, 1fr) auto minmax(92px, 128px)',
+        gap: '10px',
+        minWidth: 0,
+        minHeight: 0,
+        overflow: 'hidden',
+    },
+    chatPane: {
+        minWidth: 0,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--rounded-lg)',
+        background: 'var(--surface-card)',
+        overflow: 'hidden',
+    },
+    videoShell: {
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        minHeight: 0,
+        borderRadius: 'var(--rounded-lg)',
+        background: 'var(--canvas-soft)',
+        border: '1px solid var(--hairline)',
+        overflow: 'hidden',
+        display: 'grid',
+        gridTemplateRows: '1fr 1fr',
+        gap: '1px',
+    },
+    aiStreamCard: {
+        position: 'relative',
+        background: 'linear-gradient(180deg, var(--canvas-deep) 0%, #1e1b18 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    userStreamCard: {
+        position: 'relative',
+        background: 'var(--surface-strong)',
+        overflow: 'hidden',
+    },
+    aiAvatarWrapper: (currentPhase) => ({
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '16px',
+    }),
+    aiAvatarCore: (currentPhase) => ({
+        width: '68px',
+        height: '68px',
+        borderRadius: 'var(--rounded-full)',
+        background: 'rgba(255, 255, 255, 0.05)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        animation: currentPhase === 'speaking' ? 'glow-pulse 2s infinite ease-in-out' : 'none',
+        transition: 'all var(--transition-base)',
+    }),
+    waveContainer: {
+        position: 'absolute',
+        bottom: '-28px',
+        display: 'flex',
+        gap: '4px',
+        alignItems: 'center',
+        height: '24px',
+    },
+    speakingIndicator: {
+        position: 'absolute',
+        top: '12px',
+        right: '12px',
+        padding: '4px 8px',
+        borderRadius: 'var(--rounded-xs)',
+        background: 'rgba(124, 213, 186, 0.15)',
+        border: '1px solid rgba(124, 213, 186, 0.3)',
+        color: 'var(--gradient-mint)',
+        fontSize: '11px',
+        fontWeight: 600,
+        letterSpacing: '0.4px',
+    },
+    videoPreview: {
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        display: 'block',
+        background: 'var(--surface-strong)',
+    },
+    videoPlaceholder: {
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'var(--muted)',
+        background: 'var(--surface-strong)',
+    },
+    videoBadge: {
+        position: 'absolute',
+        left: '12px',
+        bottom: '12px',
+        padding: '6px 10px',
+        borderRadius: 'var(--rounded-pill)',
+        background: 'rgba(0, 0, 0, 0.55)',
+        color: '#fff',
+        fontSize: '12px',
+        zIndex: 2,
+    },
+    statusCard: {
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--rounded-lg)',
+        background: 'var(--surface-card)',
+        padding: '12px',
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) auto',
+        alignItems: 'center',
+        gap: '10px',
+        minHeight: '78px',
+    },
+    statusLine: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        minWidth: 0,
+    },
+    statusTitle: {
+        display: 'block',
+        color: 'var(--ink)',
+        lineHeight: 1.2,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+    },
+    statusDot: (currentPhase) => ({
+        width: '12px',
+        height: '12px',
+        borderRadius: 'var(--rounded-full)',
+        flexShrink: 0,
+        background:
+            currentPhase === 'listening'
+                ? 'var(--gradient-mint)'
+                : currentPhase === 'processing'
+                    ? 'var(--primary)'
+                    : currentPhase === 'speaking'
+                        ? 'var(--gradient-peach)'
+                        : 'var(--muted)',
+        boxShadow: currentPhase === 'listening' ? '0 0 0 6px rgba(88, 166, 111, 0.12)' : 'none',
+    }),
+    statusHint: {
+        display: 'none',
+    },
+    statusHintActive: {
+        margin: '4px 0 0',
+        color: 'var(--muted)',
+        fontSize: '12px',
+        lineHeight: 1.4,
+    },
+    controls: {
+        display: 'flex',
+        gap: 'var(--sp-xs)',
+    },
+    btnStop: {
+        background: 'var(--gradient-rose)',
+        color: 'var(--ink)',
+        padding: '10px 16px',
+        border: 'none',
+        borderRadius: 'var(--rounded-md)',
+        cursor: 'pointer',
+        fontWeight: 700,
+    },
+    behaviorCard: {
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--rounded-lg)',
+        background: 'var(--surface-card)',
+        padding: 0,
+        minHeight: 0,
+        overflow: 'hidden',
+    },
+    panelHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 'var(--sp-sm)',
+        alignItems: 'flex-start',
+        padding: '8px 10px',
+        borderBottom: '1px solid var(--hairline)',
+        color: 'var(--ink)',
+        flexShrink: 0,
+    },
+    smallMuted: {
+        color: 'var(--muted)',
+        fontSize: '12px',
+    },
+    behaviorEvents: {
+        display: 'flex',
+        gap: '6px',
+        flexWrap: 'wrap',
+        padding: '8px 10px 10px',
+        overflow: 'hidden',
+    },
+    behaviorChip: (severity) => ({
+        fontSize: '11px',
+        padding: '4px 8px',
+        borderRadius: 'var(--rounded-pill)',
+        border: '1px solid var(--hairline)',
+        background:
+            severity === 'high'
+                ? 'var(--gradient-rose)'
+                : severity === 'medium'
+                    ? 'var(--gradient-peach)'
+                    : 'var(--surface-strong)',
+        color: 'var(--ink)',
+        textTransform: 'capitalize',
+    }),
+    messageCount: {
+        color: 'var(--muted)',
+        fontSize: '12px',
+        whiteSpace: 'nowrap',
+    },
     chatBox: {
-        flex: 1, overflowY: 'auto', padding: 'var(--sp-lg)',
-        backgroundColor: 'var(--surface-card)', border: '1px solid var(--hairline)',
-        borderRadius: 'var(--rounded-xl) var(--rounded-xl) 0 0',
-        display: 'flex', flexDirection: 'column', gap: 'var(--sp-base)',
+        flex: 1,
+        minHeight: 0,
+        overflowY: 'auto',
+        padding: 'var(--sp-base)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--sp-sm)',
     },
-    aiAvatar: {
-        width: '28px', height: '28px', borderRadius: '50%',
-        backgroundColor: 'var(--primary)', color: 'var(--on-primary)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: '11px', fontWeight: 700, flexShrink: 0,
-        letterSpacing: '0.5px',
+    emptyChat: {
+        color: 'var(--muted)',
+        textAlign: 'center',
+        margin: 'auto',
+        maxWidth: '320px',
+        lineHeight: 1.6,
     },
-    bubbleAI: {
-        maxWidth: '80%', padding: 'var(--sp-sm) var(--sp-base)',
-        borderRadius: 'var(--rounded-xl)',
-        backgroundColor: 'var(--surface-strong)', color: 'var(--ink)',
-        fontSize: '15px', lineHeight: 1.6,
-        border: '1px solid var(--hairline)', alignSelf: 'flex-start',
-        display: 'flex', gap: 'var(--sp-sm)', alignItems: 'flex-start',
+    senderLabel: {
+        display: 'block',
+        fontSize: '11px',
+        fontWeight: 700,
+        color: 'var(--muted)',
+        marginBottom: '4px',
+        textTransform: 'uppercase',
+        letterSpacing: '0.4px',
     },
     bubbleUser: {
-        maxWidth: '75%', padding: 'var(--sp-sm) var(--sp-base)',
-        borderRadius: 'var(--rounded-xl)',
-        backgroundColor: 'var(--primary, var(--ink))', color: 'var(--on-primary, #fff)',
-        fontSize: '15px', lineHeight: 1.6, alignSelf: 'flex-end',
+        maxWidth: '82%',
+        padding: '10px 12px',
+        borderRadius: 'var(--rounded-lg) var(--rounded-lg) var(--rounded-xs) var(--rounded-lg)',
+        background: 'var(--primary)',
+        color: 'var(--on-primary)',
+        fontSize: '14px',
+        lineHeight: 1.55,
+    },
+    bubbleAI: {
+        maxWidth: '82%',
+        padding: '10px 12px',
+        borderRadius: 'var(--rounded-lg) var(--rounded-lg) var(--rounded-lg) var(--rounded-xs)',
+        background: 'var(--surface-strong)',
+        color: 'var(--body-strong, var(--ink))',
+        border: '1px solid var(--hairline)',
+        fontSize: '14px',
+        lineHeight: 1.55,
     },
     bubbleSystem: {
-        maxWidth: '90%', padding: 'var(--sp-xs) var(--sp-base)',
-        borderRadius: 'var(--rounded-lg)', backgroundColor: 'transparent',
-        color: 'var(--muted)', fontSize: '13px', fontStyle: 'italic',
-    },
-    typingBubble: { padding: '12px 16px', minWidth: '80px' },
-    dot: { display: 'inline-block', width: '7px', height: '7px', borderRadius: '50%', backgroundColor: 'var(--muted)' },
-    // Bottom bars
-    bottomBar: {
-        padding: 'var(--sp-base) var(--sp-lg)',
-        backgroundColor: 'var(--surface-card)', border: '1px solid var(--hairline)',
-        borderTop: 'none', borderRadius: '0 0 var(--rounded-xl) var(--rounded-xl)',
-    },
-    greetingContent: {
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--sp-xs)',
-    },
-    endedContent: {
-        display: 'flex', alignItems: 'center', gap: 'var(--sp-base)',
-    },
-    endedIcon: {
-        width: '36px', height: '36px', borderRadius: '50%',
-        backgroundColor: 'var(--semantic-success, #22c55e)', color: '#fff',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: '16px', fontWeight: 700, flexShrink: 0,
-    },
-    // Text input area
-    inputArea: {
-        display: 'flex', padding: 'var(--sp-sm)',
-        backgroundColor: 'var(--surface-card)', border: '1px solid var(--hairline)',
-        borderTop: 'none', borderRadius: '0 0 var(--rounded-xl) var(--rounded-xl)',
-        gap: 'var(--sp-xs)', alignItems: 'flex-end',
-    },
-    textarea: {
-        flex: 1, resize: 'none', borderRadius: 'var(--rounded-lg)',
-        minHeight: '40px', maxHeight: '200px',
-        overflowY: 'auto', lineHeight: 1.5,
-        padding: 'var(--sp-sm) var(--sp-base)',
-        transition: 'height 0.1s ease',
-    },
-    iconBtn: {
-        width: '40px', height: '40px', border: 'none',
-        borderRadius: 'var(--rounded-full)', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0, transition: 'all var(--transition-base)',
-        backgroundColor: 'transparent',
-    },
-    // Voice recorder bar
-    recorderBar: {
-        display: 'flex', alignItems: 'center', gap: 'var(--sp-sm)',
-        padding: '10px var(--sp-sm)',
-        backgroundColor: 'var(--canvas-deep)', borderTop: 'none',
+        maxWidth: '90%',
+        padding: '10px 12px',
+        borderRadius: 'var(--rounded-md)',
+        background: 'var(--canvas-soft)',
+        color: 'var(--muted)',
         border: '1px solid var(--hairline)',
-        borderRadius: '0 0 var(--rounded-xl) var(--rounded-xl)',
+        fontSize: '13px',
+        lineHeight: 1.5,
     },
-    recorderTrack: {
-        flex: 1, display: 'flex', alignItems: 'center', gap: 'var(--sp-sm)',
-        backgroundColor: 'var(--surface-dark-elevated)', borderRadius: 'var(--rounded-pill)',
-        padding: '6px 14px', minHeight: '44px',
-    },
-    recPlayBtn: {
-        width: '32px', height: '32px', borderRadius: '50%',
-        backgroundColor: 'var(--semantic-error, #ef4444)', border: 'none', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+    textForm: {
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) auto',
+        gap: 'var(--sp-xs)',
+        padding: 'var(--sp-sm)',
+        borderTop: '1px solid var(--hairline)',
+        background: 'var(--surface-card)',
         flexShrink: 0,
-        animation: 'chat-pulse-ring 1.5s ease-out infinite',
     },
-    recMiddle: {
-        flex: 1, display: 'flex', alignItems: 'center',
-        overflow: 'hidden', minHeight: '28px',
-    },
-    waveform: {
-        display: 'flex', alignItems: 'center', gap: '2px', height: '28px',
-    },
-    waveBar: {
-        width: '3px', borderRadius: '2px',
-        backgroundColor: 'var(--semantic-error, #ef4444)', opacity: 0.8,
-        minHeight: '4px',
-    },
-    recTimer: {
-        color: 'var(--on-dark-soft)', fontSize: '13px', fontVariantNumeric: 'tabular-nums',
-        flexShrink: 0, minWidth: '40px', textAlign: 'right',
+    textInput: {
+        minWidth: 0,
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--rounded-md)',
+        padding: '10px 12px',
+        background: 'var(--canvas)',
+        color: 'var(--ink)',
+        outline: 'none',
     },
 };
 

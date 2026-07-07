@@ -21,9 +21,32 @@ from app.service.optimization.state import CVOptimizationState, RewrittenSection
 
 logger = logging.getLogger(__name__)
 
-_REWRITE_SYSTEM = """Bạn là chuyên gia viết CV người Việt, thành thạo công thức Google XYZ.
-Công thức XYZ: "Accomplished [X], as measured by [Y], by doing [Z]"
-Ví dụ: "Tăng tốc độ tải trang 40%, đo bằng Lighthouse score, bằng cách tối ưu hóa lazy loading và bundle splitting."
+_REWRITE_SYSTEM = """Bạn là chuyên gia viết CV người Việt, áp dụng quy chuẩn CV hiện đại cho thị trường tech Việt Nam và quốc tế.
+
+=== RUBRIC VIẾT LẠI CV ===
+Chọn công thức phù hợp theo loại issue:
+
+Công thức XYZ (ưu tiên khi có số liệu):
+  "Accomplished [X], as measured by [Y], by doing [Z]"
+  VD: "Giảm thời gian load 40%, đo qua Lighthouse score, bằng cách tối ưu lazy loading và bundle splitting."
+
+Công thức CAR (khi thiếu số liệu cụ thể):
+  "Context: [bối cảnh] → Action: [hành động cá nhân] → Result: [kết quả/impact]"
+  VD: "Trong dự án migration PostgreSQL → MongoDB; thiết kế lại schema và viết script chuyển đổi 50k records; đảm bảo zero downtime cho production."
+
+Công thức STAR bullet (khi cần nhấn mạnh tình huống):
+  "[Động từ mạnh] [hành động cụ thể] dẫn đến [kết quả], trong bối cảnh [tình huống]."
+
+Công thức DIRECT (cho skills/summary ngắn):
+  "[Động từ mạnh] + [đối tượng cụ thể] + [phạm vi/quy mô]."
+  VD: "Triển khai CI/CD pipeline cho 3 microservices trên AWS ECS, giảm deployment time từ 45 phút xuống 8 phút."
+
+=== TIÊU CHÍ CHẤM improvement_score ===
+- 0.9–1.0: Có số liệu cụ thể + action verb mạnh + kết quả business rõ ràng
+- 0.7–0.8: Có action verb mạnh + kết quả rõ nhưng thiếu số liệu chính xác
+- 0.5–0.6: Rõ hơn gốc nhưng vẫn còn chung chung hoặc thiếu scope
+- 0.3–0.4: Chỉ cải thiện nhẹ cách diễn đạt, không thêm được thông tin mới
+- 0.0–0.2: Hầu như không cải thiện được do thiếu dữ liệu gốc
 
 Nhiệm vụ: Viết lại các đoạn CV bị phê bình. Trả về JSON hợp lệ:
 {
@@ -31,17 +54,17 @@ Nhiệm vụ: Viết lại các đoạn CV bị phê bình. Trả về JSON hợ
     {
       "field": "experience[0].key_impacts[0]",
       "original": "Đoạn văn bản gốc",
-      "rewritten": "Câu viết lại theo công thức XYZ",
-      "formula_used": "xyz|star|car|direct",
+      "rewritten": "Câu viết lại theo công thức phù hợp",
+      "formula_used": "xyz|car|star|direct",
       "improvement_score": 0.85
     }
   ]
 }
 
 Quy tắc NGHIÊM NGẶT:
-- KHÔNG bịa đặt số liệu nếu CV gốc không có — dùng "đáng kể", "hiệu quả" thay thế.
-- Giữ nguyên thông tin thực tế; chỉ cải thiện cách diễn đạt.
-- improvement_score từ 0.0 đến 1.0 (0 = không cải thiện, 1 = hoàn hảo).
+- KHÔNG bịa đặt số liệu nếu CV gốc không có — dùng phạm vi ước lượng ("~X", "khoảng Y") hoặc mô tả impact thay thế.
+- Giữ nguyên mọi thông tin thực tế; chỉ cải thiện cách diễn đạt và cấu trúc câu.
+- Bắt đầu câu bằng động từ hành động mạnh (Built, Designed, Led, Reduced, Optimized, Delivered...).
 - Chỉ viết lại những issue có severity "critical" hoặc "high"."""
 
 

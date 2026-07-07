@@ -103,7 +103,7 @@ class OCRProcessor:
             texts = dict_data.get("rec_texts", [])
             scores = dict_data.get("rec_scores", [])
             polys = dict_data.get("dt_polys") or dict_data.get("rec_polys") or dict_data.get("rec_boxes", [])
-            
+
             classic_list = []
             for i in range(len(texts)):
                 text = texts[i]

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     app_debug: bool = False  # Enable only for local development; never staging/prod
     app_host: str = "0.0.0.0"
     app_port: int = 8000
+    frontend_base_url: str = ""
     allowed_origins: list[str] = []  # Production: ["https://lancerai.com"]
 
     # --- Auth / organization-scoped data ----------------------------------
@@ -87,6 +88,10 @@ class Settings(BaseSettings):
     # --- LLM --------------------------------------------------------------
     llm_local_base_url: str = "http://localhost:11434"
     llm_local_model: str = "qwen2.5:3b"
+    llm_hosted_base_url: str = ""
+    llm_hosted_api_key: str = ""
+    llm_hosted_model: str = ""
+    llm_hosted_embedding_model: str = ""
     llm_cloud_api_key: str = ""
     llm_cloud_base_url: str = "https://api.groq.com/openai/v1"
     llm_cloud_model: str = "llama-3.1-70b-versatile"

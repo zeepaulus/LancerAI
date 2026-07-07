@@ -200,6 +200,34 @@ class MatchingService:
 
         return recommendations
 
+    async def save_match_result(
+        self,
+        session: AsyncSession,
+        user_id: str,
+        cv_id: str,
+        result: JobMatchResponse,
+        job_id: str | None = None,
+    ) -> None:
+        """Persist a match result with component scores to job_match_results.
+
+        Called automatically after match_cv_to_jd so component scores are
+        never lost. job_id is None for manual JD-text matches.
+        """
+        await self._job_repo.create(
+            session,
+            user_id=user_id,
+            cv_id=cv_id,
+            job_id=job_id,
+            match_score=round(result.overall_score / 100.0, 4),
+            frequency_score=round(result.frequency_score / 100.0, 4),
+            position_score=round(result.position_score / 100.0, 4),
+            semantic_score=round(result.semantic_score / 100.0, 4),
+            matching_rationale={"improvement_feedback": result.improvement_feedback},
+            missing_skills=[s.skill_name for s in result.missing_skills],
+            status=MatchStatus.RECOMMENDED,
+        )
+        await session.commit()
+
     async def save_job(
         self,
         session: AsyncSession,
@@ -406,20 +434,30 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 async def _fetch_jd_from_url(url: str) -> str:
     """Fetch and return plain text from a JD URL (best-effort)."""
+    # 1. Try Jina Reader API first (handles JS rendering, anti-bot bypass)
+    jina_url = f"https://r.jina.ai/{url}"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            headers = {"Accept": "text/plain"}
+            resp = await client.get(jina_url, headers=headers)
+            if resp.status_code == 200 and resp.text:
+                return resp.text[:12000]
+    except Exception as exc:
+        logger.warning("[Matching] Jina Reader failed for %r: %s. Trying direct request...", url, exc)
+
+    # 2. Fallback to direct requests + BeautifulSoup
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(url, follow_redirects=True)
             resp.raise_for_status()
-            # Use BeautifulSoup for correct HTML→text (handles script/style/entities)
             from bs4 import BeautifulSoup  # noqa: PLC0415
 
             soup = BeautifulSoup(resp.text, "html.parser")
-            # Remove script and style blocks entirely
             for tag in soup(["script", "style"]):
                 tag.decompose()
             text = soup.get_text(separator=" ")
             text = re.sub(r"\s+", " ", text).strip()
             return text[:8000]
     except httpx.RequestError as exc:
-        logger.warning("[Matching] Failed to fetch JD URL %r: %s", url, exc)
+        logger.warning("[Matching] Failed to fetch JD URL %r directly: %s", url, exc)
         return ""

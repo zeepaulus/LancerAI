@@ -20,6 +20,10 @@ def _create_llm_connector() -> LLMConnector:
     return LLMConnector(
         local_base_url=s.llm_local_base_url,
         local_model=s.llm_local_model,
+        hosted_base_url=s.llm_hosted_base_url,
+        hosted_api_key=s.llm_hosted_api_key,
+        hosted_model=s.llm_hosted_model,
+        hosted_embedding_model=s.llm_hosted_embedding_model,
         cloud_base_url=s.llm_cloud_base_url,
         cloud_api_key=s.llm_cloud_api_key,
         cloud_model=s.llm_cloud_model,

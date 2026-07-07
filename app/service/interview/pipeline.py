@@ -29,7 +29,14 @@ from typing import Any
 from app.core.llm_connector import LLMConnector
 from app.core.voice_stt_connector import VoiceSTTConnector
 from app.core.voice_tts_connector import VoiceTTSConnector
-from app.service.interview.agents import evaluate_node, wrap_up_node
+from app.service.interview.agents import evaluate_node, scorecard_node
+from app.service.interview.behavior import (
+    behavior_feedback_lines,
+    normalise_behavior_event,
+    summarize_behavior,
+)
+from app.service.interview.pacing import PacingClock, PacingSignal, is_terminal, signal_instruction
+from app.service.interview.planning import plan_for_prompt
 from app.service.interview.state import ChatMessage, InterviewState, InterviewTurn
 from app.service.interview.state_machine import SessionPhase
 
@@ -39,6 +46,8 @@ logger = logging.getLogger(__name__)
 _SENTENCE_BOUNDARY = re.compile(r"(?<=[.?!\n])\s*")
 # Minimum characters in a TTS sentence (avoid sending tiny fragments)
 _MIN_SENTENCE_CHARS = 15
+_MAX_QUESTIONS: dict[str, int] = {"quick": 4, "practice": 7, "mock": 10}
+_GRACE_MINUTES: dict[str, int] = {"quick": 1, "practice": 2, "mock": 3}
 
 
 def _split_sentence(text: str) -> tuple[str, str]:
@@ -63,35 +72,30 @@ def _build_system_prompt(
     job_title: str,
     cv_data: dict[str, Any],
     jd_data: dict[str, Any] | None,
+    interview_plan: dict[str, Any] | None,
     mode: str,
     duration_minutes: int,
-    focus_area: str | None = None,
 ) -> str:
     """Compose the Vietnamese interviewer system prompt."""
     cv_summary = cv_data.get("summary", "") or cv_data.get("raw_text", "")[:800]
     jd_summary = ""
     if jd_data:
         jd_summary = jd_data.get("description", "") or jd_data.get("raw_text", "")[:600]
-    # Max questions per mode
-    max_q = {"quick": 4, "practice": 7, "mock": 10}.get(mode, 7)
-
     mode_instruction = {
         "practice": "Phỏng vấn luyện tập — thân thiện, khuyến khích, đưa gợi ý nhỏ sau mỗi câu.",
         "mock": "Phỏng vấn thử thực chiến — chuyên nghiệp, đánh giá nghiêm túc, không gợi ý.",
-        "quick": "Phỏng vấn nhanh — hỏi đúng 3-4 câu trọng tâm, ngắn gọn, tập trung kỹ năng cốt lõi.",
+        "quick": "Phỏng vấn nhanh — hỏi 3-4 câu trọng tâm, ngắn gọn, tập trung kỹ năng cốt lõi.",
     }.get(mode, "Phỏng vấn tiêu chuẩn.")
-
-    focus_area_instruction = f"\n## Chủ đề & Trình độ trọng tâm:\n- {focus_area}\n" if focus_area else ""
 
     return f"""Bạn là một chuyên gia phỏng vấn tuyển dụng người Việt, \
 đang phỏng vấn ứng viên cho vị trí **{job_title}**.
-{focus_area_instruction}
+
 ## Phong cách
 - Nói bằng tiếng Việt tự nhiên, lịch sự, chuyên nghiệp.
 - Hỏi một câu tại một thời điểm. Không liệt kê nhiều câu cùng lúc.
-- Câu nhận xét/chuyển chủ đề ngắn gọn (1-2 câu).
+- Câu trả lời ngắn gọn (1-2 câu) khi nhận xét hoặc chuyển chủ đề.
 - Chế độ: {mode_instruction}
-- Thời lượng phỏng vấn: {duration_minutes} phút. Tối đa **{max_q} câu hỏi**.
+- Thời lượng phỏng vấn: {duration_minutes} phút.
 
 ## Thông tin ứng viên (CV)
 {cv_summary if cv_summary else "(Chưa có thông tin CV)"}
@@ -103,13 +107,129 @@ def _build_system_prompt(
 1. Bắt đầu bằng lời chào ngắn và câu hỏi giới thiệu bản thân.
 2. Đặt các câu hỏi STAR (Tình huống, Nhiệm vụ, Hành động, Kết quả).
 3. Lắng nghe và đặt câu hỏi tiếp nối nếu câu trả lời chưa rõ.
-4. **QUAN TRỌNG:** Khi đạt đủ số câu hỏi hoặc sắp hết thời gian (được thông báo trong tin nhắn [SYSTEM]), hãy nói lời tổng kết lịch sự và KẾT THÚC phỏng vấn (đừng hỏi thêm câu nào nữa).
+4. Khi hết thời gian, thông báo kết thúc lịch sự.
 
 Hãy bắt đầu phỏng vấn ngay bây giờ."""
 
 
-# Max questions per mode (used by pipeline to auto-end)
-_MAX_QUESTIONS: dict[str, int] = {"quick": 4, "practice": 7, "mock": 10}
+def _build_planned_system_prompt(
+    job_title: str,
+    cv_data: dict[str, Any],
+    jd_data: dict[str, Any] | None,
+    interview_plan: dict[str, Any] | None,
+    mode: str,
+    duration_minutes: int,
+) -> str:
+    """Compose the interviewer prompt with the precomputed plan attached."""
+    base_prompt = _build_system_prompt(
+        job_title=job_title,
+        cv_data=cv_data,
+        jd_data=jd_data,
+        interview_plan=interview_plan,
+        mode=mode,
+        duration_minutes=duration_minutes,
+    )
+    return (
+        f"{base_prompt}\n\n"
+        "## Interview plan / evaluation brief\n"
+        f"{plan_for_prompt(interview_plan or {})}\n\n"
+        "## Important operating rules\n"
+        "- Bám theo interview plan nhưng vẫn hỏi tự nhiên theo câu trả lời của ứng viên.\n"
+        "- Chỉ hỏi một câu tại một thời điểm.\n"
+        "- Không đọc điểm số hoặc kết luận tuyển dụng trong lúc phỏng vấn.\n"
+        "- Ưu tiên câu hỏi dựa trên CV, dự án, kinh nghiệm thật và yêu cầu JD nếu có.\n"
+    )
+
+
+def _build_system_prompt(
+    job_title: str,
+    cv_data: dict[str, Any],
+    jd_data: dict[str, Any] | None,
+    interview_plan: dict[str, Any] | None,
+    mode: str,
+    duration_minutes: int,
+) -> str:
+    """Compose the final Vietnamese interviewer prompt for CV-first interviews."""
+    cv_summary = cv_data.get("summary", "") or cv_data.get("raw_text", "")[:1200]
+    jd_summary = ""
+    if jd_data:
+        jd_summary = jd_data.get("description", "") or jd_data.get("raw_text", "")[:900]
+
+    mode_instruction = {
+        "practice": (
+            "Luyện tập: thân thiện, khuyến khích, có thể phản hồi rất ngắn sau câu trả lời "
+            "nhưng vẫn phải hỏi chuyên nghiệp và có chiều sâu."
+        ),
+        "mock": (
+            "Mock interview: nghiêm túc như phỏng vấn thật, không gợi ý đáp án, "
+            "chỉ hỏi follow-up khi cần evidence."
+        ),
+        "quick": "Phỏng vấn nhanh: chọn câu hỏi có giá trị đánh giá cao nhất, tránh lan man.",
+    }.get(mode, "Phỏng vấn tiêu chuẩn, chuyên nghiệp, tập trung vào CV/JD.")
+
+    return f"""Bạn là Senior Interviewer người Việt đang phỏng vấn ứng viên cho vị trí {job_title}.
+
+Mục tiêu phiên live:
+- Kiểm chứng năng lực thật trong CV, mức phù hợp với JD và khả năng trình bày theo STAR.
+- Hỏi sâu vào dự án, kinh nghiệm, kỹ năng, impact và khoảng trống CV/JD.
+- Tạo trải nghiệm tự nhiên như một buổi phỏng vấn thật trên web.
+
+Phong cách:
+- Tiếng Việt tự nhiên, lịch sự, ngắn gọn.
+- Mỗi lượt chỉ hỏi MỘT câu.
+- Không đọc rubric, không nói điểm số, không kết luận tuyển dụng trong lúc phỏng vấn.
+- Khi ứng viên trả lời mơ hồ, hỏi follow-up về vai trò cá nhân, hành động cụ thể, trade-off hoặc kết quả đo được.
+- Khi câu trả lời đã đủ rõ, chuyển sang câu hỏi kế tiếp theo kế hoạch.
+- Nếu gần hết thời gian, chốt lịch sự thay vì mở chủ đề mới.
+
+Chế độ: {mode_instruction}
+Thời lượng mục tiêu: {duration_minutes} phút.
+
+CV ứng viên:
+{cv_summary if cv_summary else "(Chưa có nội dung CV đủ rõ. Hỏi mở để xác minh kinh nghiệm và kỹ năng chính.)"}
+
+JD / yêu cầu vị trí:
+{jd_summary if jd_summary else "(Chưa có JD chi tiết. Đánh giá theo vai trò mục tiêu và nội dung CV.)"}
+
+Luồng hỏi ưu tiên:
+1. Mở đầu ngắn và yêu cầu ứng viên giới thiệu trọng tâm phù hợp vị trí.
+2. Deep-dive vào kinh nghiệm/dự án nổi bật trong CV.
+3. Hỏi STAR để lấy evidence về trách nhiệm cá nhân, hành động và kết quả.
+4. Kiểm tra kỹ năng/JD fit và các gap quan trọng.
+5. Quan sát cách giao tiếp, độ rõ ràng và khả năng phản biện.
+6. Kết thúc bằng cơ hội bổ sung nếu còn thời gian.
+
+Hãy bắt đầu ngay bằng lời chào ngắn và một câu hỏi mở đầu sát CV/vị trí."""
+
+
+def _build_planned_system_prompt(
+    job_title: str,
+    cv_data: dict[str, Any],
+    jd_data: dict[str, Any] | None,
+    interview_plan: dict[str, Any] | None,
+    mode: str,
+    duration_minutes: int,
+) -> str:
+    """Compose the final interviewer prompt with the precomputed plan attached."""
+    base_prompt = _build_system_prompt(
+        job_title=job_title,
+        cv_data=cv_data,
+        jd_data=jd_data,
+        interview_plan=interview_plan,
+        mode=mode,
+        duration_minutes=duration_minutes,
+    )
+    return (
+        f"{base_prompt}\n\n"
+        "Interview plan / evaluation brief:\n"
+        f"{plan_for_prompt(interview_plan or {})}\n\n"
+        "Operating rules:\n"
+        "- Bám interview plan nhưng phản ứng tự nhiên theo câu trả lời thực tế.\n"
+        "- Chỉ hỏi một câu mỗi lượt; câu hỏi tối đa khoảng 35 từ.\n"
+        "- Ưu tiên câu hỏi dựa trên CV, dự án, kinh nghiệm thật và yêu cầu JD.\n"
+        "- Không bịa thông tin ngoài CV/JD/transcript.\n"
+        "- Không tiết lộ scorecard, recommendation hoặc đánh giá nội bộ cho ứng viên trong phiên live.\n"
+    )
 
 
 class InterviewPipeline:
@@ -134,12 +254,15 @@ class InterviewPipeline:
         self.state: InterviewState | None = None
         self._phase = SessionPhase.STOPPED
         self._abort_tts = asyncio.Event()
-        self._candidate_turn_count: int = 0  # Track how many candidate turns
+        self._final_evaluation: dict[str, Any] | None = None
+        self._candidate_turn_count = 0
+        self._pacing_clock: PacingClock | None = None
+        self._last_pacing_signal: PacingSignal | None = None
 
         # Raw PCM audio buffer (bytes) accumulated during LISTENING phase
         self._audio_buffer: bytearray = bytearray()
-        # asyncio.Queue: each item is a bytearray snapshot of _audio_buffer to transcribe
-        self._stt_queue: asyncio.Queue[bytearray] = asyncio.Queue()
+        # VAD consumes _audio_buffer in windows; STT still needs the whole utterance.
+        self._speech_buffer: bytearray = bytearray()
 
     # ------------------------------------------------------------------
     # Public API
@@ -150,22 +273,36 @@ class InterviewPipeline:
         job_title: str,
         cv_data: dict[str, Any],
         jd_data: dict[str, Any] | None = None,
+        interview_plan: dict[str, Any] | None = None,
         mode: str = "practice",
         duration_minutes: int = 5,
         session_id: str | None = None,
-        focus_area: str | None = None,
     ) -> None:
         """Initialise the session and emit the interviewer's first greeting."""
-        if not session_id:
-            session_id = str(uuid.uuid4())
-        system_prompt = _build_system_prompt(
-            job_title, cv_data, jd_data, mode, duration_minutes, focus_area=focus_area
+        session_id = session_id or str(uuid.uuid4())
+        system_prompt = _build_planned_system_prompt(
+            job_title, cv_data, jd_data, interview_plan, mode, duration_minutes
         )
+        self._audio_buffer.clear()
+        self._speech_buffer.clear()
+        self._final_evaluation = None
+        self._candidate_turn_count = 0
+        self._last_pacing_signal = None
+        self._pacing_clock = PacingClock(
+            duration_minutes=duration_minutes,
+            grace_minutes=_GRACE_MINUTES.get(mode, 2),
+            dead_air_prompt_sec=45,
+            max_silence_end_min=max(3, duration_minutes),
+            wrap_soon_minutes=1 if duration_minutes <= 5 else 2,
+            now=time.time,
+        )
+        self._pacing_clock.start()
 
         self.state = InterviewState(
             session_id=session_id,
             cv_data=cv_data,
             jd_data=jd_data or {},
+            interview_plan=interview_plan or {},
             job_title=job_title,
             interview_mode=mode,  # type: ignore[arg-type]
             duration_minutes=duration_minutes,
@@ -174,20 +311,22 @@ class InterviewPipeline:
         )
 
         logger.info("[Pipeline] Session %s started — user=%s mode=%s", session_id, self._user_id, mode)
-        await self._send_json({"event": "session_started", "session_id": session_id})
+        await self._send_json(
+            {
+                "event": "session_started",
+                "session_id": session_id,
+                "job_title": job_title,
+                "duration_minutes": duration_minutes,
+                "interview_plan": interview_plan or {},
+            }
+        )
 
         # Emit greeting
         self._phase = SessionPhase.SPEAKING
         await self._generate_and_speak()
 
-    async def feed_audio(self, raw_bytes: bytes) -> None:
-        """Consume one chunk of audio from the client.
-
-        Accepts either:
-          - Raw PCM Int16 mono 16kHz bytes (standard mic stream).
-          - WebM/Opus container bytes (from browser MediaRecorder).
-            These are auto-detected by the EBML/WebM magic header and
-            converted to PCM via pydub/ffmpeg before VAD processing.
+    async def feed_audio(self, pcm_bytes: bytes) -> None:
+        """Consume one chunk of microphone PCM Int16 mono 16kHz audio.
 
         Only accumulates while in LISTENING phase; audio arriving during
         PROCESSING or SPEAKING is silently dropped to avoid cross-talk.
@@ -195,79 +334,64 @@ class InterviewPipeline:
         if self._phase != SessionPhase.LISTENING:
             return
 
-        # Detect WebM container (magic bytes: 0x1A45DFA3 = EBML header)
-        pcm_bytes = raw_bytes
-        if len(raw_bytes) > 4 and raw_bytes[:4] == b'\x1a\x45\xdf\xa3':
-            pcm_bytes = await self._decode_webm_to_pcm(raw_bytes)
-            if not pcm_bytes:
-                logger.warning("[Pipeline] WebM decode returned empty — skipping")
-                return
-
         self._audio_buffer.extend(pcm_bytes)
 
         # VAD: analyse in 512-sample (1024-byte) windows
         while len(self._audio_buffer) >= 1024:
             window_bytes = bytes(self._audio_buffer[:1024])
             del self._audio_buffer[:1024]
+            self._speech_buffer.extend(window_bytes)
 
             import numpy as np
             window_f32 = np.frombuffer(window_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
             if self._stt.check_vad(window_f32):
-                # Silence threshold crossed — snapshot and queue for STT
-                snapshot = bytearray(self._audio_buffer)
+                # Silence threshold crossed: send the complete utterance to STT.
+                snapshot = bytes(self._speech_buffer)
                 self._audio_buffer.clear()
+                self._speech_buffer.clear()
                 self._stt.reset_vad()
-                await self._process_user_turn(bytes(snapshot))
+                await self._process_user_turn(snapshot)
                 break
-
-    async def _decode_webm_to_pcm(self, webm_bytes: bytes) -> bytes:
-        """Convert WebM/Opus audio to PCM Int16 mono 16kHz.
-
-        Tries pydub first (fast, in-process); falls back to ffmpeg subprocess.
-        """
-        loop = asyncio.get_running_loop()
-        try:
-            return await loop.run_in_executor(None, self._decode_webm_sync, webm_bytes)
-        except Exception as exc:
-            logger.error("[Pipeline] WebM→PCM decode failed: %s", exc)
-            return b""
-
-    @staticmethod
-    def _decode_webm_sync(webm_bytes: bytes) -> bytes:
-        """Synchronous WebM→PCM conversion (runs in thread pool)."""
-        import io
-        try:
-            from pydub import AudioSegment  # type: ignore[import-untyped]
-            seg = AudioSegment.from_file(io.BytesIO(webm_bytes), format="webm")
-            seg = seg.set_frame_rate(16_000).set_channels(1).set_sample_width(2)
-            return seg.raw_data
-        except Exception:
-            pass
-
-        # Fallback: ffmpeg subprocess
-        import subprocess
-        proc = subprocess.run(
-            ["ffmpeg", "-y", "-f", "webm", "-i", "pipe:0",
-             "-f", "s16le", "-ar", "16000", "-ac", "1", "pipe:1"],
-            input=webm_bytes, capture_output=True, timeout=30,
-        )
-        if proc.returncode != 0:
-            raise RuntimeError(f"ffmpeg failed: {proc.stderr[:200]}")
-        return proc.stdout
 
     async def stop(self) -> dict[str, Any]:
         """Tear down the session and return the final STAR evaluation payload."""
+        if self.state is None:
+            return {}
+        if self._final_evaluation is not None:
+            return self._final_evaluation
+
         self._phase = SessionPhase.STOPPED
         self._abort_tts.set()
 
-        if self.state is None:
-            return {}
-
         logger.info("[Pipeline] Stopping session %s", self.state.session_id)
         evaluation = await self._run_final_evaluation()
+        self._final_evaluation = evaluation
         await self._send_json({"event": "session_ended", "evaluation": evaluation})
         return evaluation
+
+    async def record_behavior_event(self, raw_event: dict[str, Any]) -> None:
+        """Store a lightweight browser/camera behavioral observation."""
+        if self.state is None:
+            return
+        event = normalise_behavior_event(raw_event)
+        if event is None:
+            return
+        self.state.behavior_events.append(event)
+        await self._send_json(
+            {
+                "event": "behavior_event_ack",
+                "kind": event.kind,
+                "severity": event.severity,
+            }
+        )
+
+    async def feed_text(self, text: str) -> None:
+        """Accept a typed candidate answer as a fallback to microphone/STT."""
+        transcript = text.strip()
+        if not transcript or self._phase not in {SessionPhase.LISTENING, SessionPhase.PROCESSING}:
+            return
+        await self._handle_user_transcript(transcript)
 
     # ------------------------------------------------------------------
     # Internal: user turn processing
@@ -296,11 +420,20 @@ class InterviewPipeline:
             await self._send_json({"event": "phase_change", "phase": SessionPhase.LISTENING})
             return
 
+        await self._handle_user_transcript(transcript)
+
+    async def _handle_user_transcript(self, transcript: str) -> None:
+        """Update state from a candidate transcript, then ask the LLM to respond."""
+        if self.state is None:
+            return
+
         logger.info("[Pipeline] Transcript: %r", transcript)
         self.state.latest_transcript = transcript
         self.state.chat_history.append(ChatMessage(role="user", content=transcript))
         self.state.turns.append(InterviewTurn(role="candidate", content=transcript))
         self._candidate_turn_count += 1
+        if self._pacing_clock is not None:
+            self._pacing_clock.note_activity()
 
         await self._send_json({"event": "transcript", "text": transcript})
 
@@ -309,67 +442,76 @@ class InterviewPipeline:
         await self._send_json({"event": "phase_change", "phase": SessionPhase.SPEAKING})
         await self._generate_and_speak()
 
-    async def process_text_turn(self, text: str) -> None:
-        """Nhận text trực tiếp từ client (bỏ qua STT), rồi LLM → TTS."""
-        if self.state is None or not text.strip():
-            return
-
-        self._phase = SessionPhase.PROCESSING
-        await self._send_json({"event": "phase_change", "phase": SessionPhase.PROCESSING})
-
-        self.state.latest_transcript = text
-        self.state.chat_history.append(ChatMessage(role="user", content=text))
-        self.state.turns.append(InterviewTurn(role="candidate", content=text))
-        self._candidate_turn_count += 1
-
-        await self._send_json({"event": "transcript", "text": text})
-
-        self._phase = SessionPhase.SPEAKING
-        await self._send_json({"event": "phase_change", "phase": SessionPhase.SPEAKING})
-        await self._generate_and_speak()
-        
     # ------------------------------------------------------------------
     # Internal: LLM → sentence chunking → TTS streaming
     # ------------------------------------------------------------------
 
     def _inject_context_message(self) -> None:
-        """Inject a system message with remaining time + question count into chat history."""
+        """Attach runtime guidance without permanently bloating chat history."""
         if self.state is None:
             return
-        mode = self.state.interview_mode
-        max_q = _MAX_QUESTIONS.get(mode, 7)
-        remaining_sec = self.state.get_remaining_seconds()
-        remaining_min = round(remaining_sec / 60, 1)
-        answered = self._candidate_turn_count
-        remaining_q = max(0, max_q - answered)
 
-        if remaining_q <= 1 or remaining_min <= 1:
-            hint = (
-                f"[SYSTEM] Phỏng vấn sắp kết thúc: đã hỏi {answered}/{max_q} câu, "
-                f"còn {remaining_min} phút. Hãy hỏi câu CUỐI CÙNG (nếu cần) rồi tổng kết và kết thúc lịch sự."
+        max_questions = _MAX_QUESTIONS.get(self.state.interview_mode, 7)
+        pacing_signal = self._current_pacing_signal()
+        instruction = signal_instruction(pacing_signal)
+        remaining_seconds = int(
+            self._pacing_clock.remaining_to_target()
+            if self._pacing_clock is not None
+            else self.state.get_remaining_seconds()
+        )
+        should_wrap = (
+            self._candidate_turn_count >= max_questions
+            or remaining_seconds <= 45
+            or pacing_signal in {PacingSignal.WRAP_UP_NOW, PacingSignal.FORCE_END, PacingSignal.ABANDON}
+        )
+        if should_wrap:
+            guidance = (
+                "Runtime guidance: this should be the final interviewer turn. "
+                "Briefly thank the candidate, close the interview, and do not ask a new question."
             )
         else:
-            hint = (
-                f"[SYSTEM] Tiến độ: đã hỏi {answered}/{max_q} câu, còn khoảng {remaining_min} phút."
+            questions_left = max(1, max_questions - self._candidate_turn_count)
+            guidance = (
+                "Runtime guidance: ask exactly one focused follow-up or next CV/JD-based question. "
+                f"Approximate candidate turns left: {questions_left}. "
+                f"Approximate seconds left: {remaining_seconds}."
             )
-        self.state.chat_history.append(ChatMessage(role="system", content=hint))
+        if instruction:
+            guidance = f"{guidance} {instruction}"
+
+        self.state.chat_history = [
+            message
+            for message in self.state.chat_history
+            if not (message.role == "system" and message.content.startswith("Runtime guidance:"))
+        ]
+        self.state.chat_history.append(ChatMessage(role="system", content=guidance))
+
+    def _current_pacing_signal(self) -> PacingSignal:
+        if self._pacing_clock is None:
+            return PacingSignal.ON_TRACK
+        signal = self._pacing_clock.signal()
+        if signal != self._last_pacing_signal:
+            logger.info("[Pipeline] Pacing signal changed: %s", signal.value)
+            self._last_pacing_signal = signal
+        return signal
 
     def _is_interview_over(self) -> bool:
-        """Check if the interview should end (time up OR question limit reached)."""
         if self.state is None:
-            return False
-        mode = self.state.interview_mode
-        max_q = _MAX_QUESTIONS.get(mode, 7)
-        return self.state.is_time_up() or self._candidate_turn_count >= max_q
+            return True
+        max_questions = _MAX_QUESTIONS.get(self.state.interview_mode, 7)
+        pacing_signal = self._current_pacing_signal()
+        return (
+            is_terminal(pacing_signal)
+            or pacing_signal == PacingSignal.WRAP_UP_NOW
+            or self._candidate_turn_count >= max_questions
+        )
 
     async def _generate_and_speak(self) -> None:
         """Stream LLM tokens, chunk into sentences, synthesise + send PCM."""
         if self.state is None:
             return
 
-        # Inject context (time + question count) before each LLM call
         self._inject_context_message()
-
         self._abort_tts.clear()
         full_response: list[str] = []
         pending_text = ""
@@ -409,13 +551,8 @@ class InterviewPipeline:
                 )
                 await self._send_json({"event": "assistant_text", "text": assistant_content})
 
-            # Check time-based OR question-limit wrap-up
+            # Check time-based wrap-up
             if self.state and self._is_interview_over() and self._phase != SessionPhase.STOPPED:
-                logger.info(
-                    "[Pipeline] Interview over — turns=%d time_up=%s",
-                    self._candidate_turn_count,
-                    self.state.is_time_up(),
-                )
                 await self._send_json({"event": "time_up"})
                 await self.stop()
             else:
@@ -450,21 +587,28 @@ class InterviewPipeline:
                 if eval_result:
                     self.state = self.state.model_copy(update=eval_result)
 
-            wrap_result = await wrap_up_node(self.state, self._llm)
-            if wrap_result:
-                self.state = self.state.model_copy(update=wrap_result)
-
         except Exception as exc:
             logger.error("[Pipeline] Final evaluation failed: %s", exc)
+
+        behavior_summary = summarize_behavior(self.state.behavior_events)
+        behavior_issues, behavior_suggestions = behavior_feedback_lines(behavior_summary)
+        scorecard = await scorecard_node(self.state, self._llm, behavior_summary)
+        final_feedback = scorecard.summary or scorecard.headline or self.state.final_feedback
+        strengths = scorecard.strengths or self.state.strengths
+        improvements = scorecard.concerns or self.state.improvements
 
         return {
             "session_id": self.state.session_id,
             "job_title": self.state.job_title,
             "duration_seconds": time.time() - self.state.start_time,
-            "overall_score": self.state.overall_score,
-            "strengths": self.state.strengths,
-            "improvements": self.state.improvements,
-            "final_feedback": self.state.final_feedback,
+            "overall_score": scorecard.overall_score * 2,
+            "scorecard": scorecard.model_dump(),
+            "strengths": strengths,
+            "improvements": improvements + behavior_suggestions,
+            "final_feedback": final_feedback,
             "star_scores": [s.model_dump() for s in self.state.star_scores],
             "transcript": [t.model_dump() for t in self.state.turns],
+            "behavior_score": behavior_summary.score,
+            "behavior_observations": [obs.model_dump() for obs in behavior_summary.observations],
+            "behavior_issues": behavior_issues,
         }
