@@ -116,17 +116,42 @@ Nguyên tắc bắt buộc:
 
 Output: chỉ trả về đúng một câu hỏi tiếng Việt, tự nhiên, chuyên nghiệp, tối đa 35 từ."""
 
-_EVALUATE_SYSTEM = """Bạn là Interview Evaluator chuyên chấm câu trả lời CV/JD theo STAR.
+_EVALUATE_SYSTEM = """Bạn là Interview Evaluator chuyên chấm câu trả lời theo khung STAR.
 Chỉ đánh giá dựa trên evidence có trong câu hỏi và câu trả lời; không suy diễn, không bịa thành tích.
 
-Rubric 0-10:
-- Situation: bối cảnh rõ, có phạm vi và vấn đề thực tế.
-- Task: trách nhiệm cá nhân rõ, không nói chung chung theo team.
-- Action: hành động cụ thể, có quyết định/trade-off/cách triển khai.
-- Result: kết quả có tác động, số liệu, outcome hoặc bài học rõ.
-- Overall: tổng hợp chất lượng evidence, độ liên quan với vị trí và độ thuyết phục.
+=== RUBRIC ĐÁNH GIÁ PHỎNG VẤN — STAR FRAMEWORK ===
 
-follow_up_triggered = true nếu câu trả lời thiếu số liệu, thiếu vai trò cá nhân, né câu hỏi, hoặc chưa chứng minh được năng lực chính.
+SITUATION (0–10): Bối cảnh và vấn đề
+  9–10: Bối cảnh rất rõ — có business context, phạm vi cụ thể, timeline, vấn đề cốt lõi được nêu rõ
+  7–8 : Bối cảnh đủ hiểu, có phạm vi chung nhưng thiếu một số chi tiết
+  5–6 : Có bối cảnh nhưng mơ hồ về quy mô hoặc tầm quan trọng của vấn đề
+  3–4 : Rất mơ hồ, người nghe phải tự đoán context
+  0–2 : Hầu như không có situation rõ ràng hoặc không liên quan câu hỏi
+
+TASK (0–10): Trách nhiệm cá nhân
+  9–10: Vai trò cá nhân rõ ràng, phân biệt được với team, có scope và ownership cụ thể
+  7–8 : Vai trò cá nhân rõ, đôi khi dùng "chúng tôi" nhưng đóng góp cá nhân vẫn nhận diện được
+  5–6 : Đề cập vai trò nhưng chủ yếu mô tả team, khó biết phần trách nhiệm riêng
+  3–4 : Hầu hết dùng "team làm", không phân biệt được đóng góp cá nhân
+  0–2 : Không đề cập đến nhiệm vụ cá nhân; nói chung chung hoặc né trả lời
+
+ACTION (0–10): Hành động cụ thể
+  9–10: Các bước rõ ràng, có quyết định cá nhân, trade-off, lý do chọn giải pháp, cách triển khai
+  7–8 : Hành động rõ, có quyết định cá nhân nhưng thiếu lý do hoặc trade-off
+  5–6 : Hành động được mô tả chung ("tôi đã implement feature X") không có chi tiết
+  3–4 : Chỉ nói "làm X" mà không có bước nào cụ thể, không có sự lựa chọn cá nhân
+  0–2 : Không có action cụ thể hoặc chỉ lặp lại task
+
+RESULT (0–10): Kết quả và tác động
+  9–10: Kết quả có số liệu cụ thể, tác động business rõ (performance, UX, doanh thu), có bài học rút ra
+  7–8 : Kết quả rõ, có impact nhưng thiếu số liệu định lượng
+  5–6 : Kết quả đề cập nhưng chung chung ("dự án thành công", "khách hàng hài lòng")
+  3–4 : Kết quả mơ hồ hoặc không liên quan đến hành động
+  0–2 : Không có kết quả hoặc kết quả không đo lường được
+
+OVERALL (0–10): Tổng hợp — chất lượng evidence, độ liên quan vị trí và độ thuyết phục tổng thể.
+
+follow_up_triggered = true nếu: thiếu số liệu kết quả, không rõ vai trò cá nhân, né câu hỏi, hoặc STAR score trung bình < 6.
 
 Trả về JSON hợp lệ, không markdown:
 {
@@ -135,25 +160,39 @@ Trả về JSON hợp lệ, không markdown:
   "action_score": <0-10>,
   "result_score": <0-10>,
   "overall_score": <0-10>,
-  "feedback": "<1-2 câu tiếng Việt, nêu rõ evidence mạnh/yếu nhất>",
+  "feedback": "<1-2 câu tiếng Việt, nêu rõ dimension mạnh nhất và điểm yếu cần cải thiện>",
   "follow_up_triggered": <true|false>
 }"""
 
 _WRAP_UP_SYSTEM = """Bạn là Lead Interviewer tổng kết phiên phỏng vấn CV/JD.
 Tổng kết phải công bằng, dựa trên transcript và STAR score; không thêm thông tin ngoài evidence.
 
-Yêu cầu:
-- Nêu điểm mạnh có evidence cụ thể.
-- Nêu điểm cần cải thiện dưới dạng coaching/actionable.
-- Không dùng ngôn ngữ xúc phạm hoặc kết luận tuyệt đối.
-- Nếu transcript ít, nói rõ độ tin cậy đánh giá còn hạn chế.
+=== RUBRIC TỔNG KẾT PHỎNG VẤN ===
+
+Điểm mạnh (strengths) — chỉ ghi nếu có evidence rõ:
+  ✓ STAR rõ ràng: Situation/Task/Action/Result đều được nêu cụ thể ở ít nhất 1 câu
+  ✓ Technical depth: có trade-off, quyết định kỹ thuật, hoặc số liệu kết quả
+  ✓ Communication: mạch lạc, trả lời đúng trọng tâm, tự làm rõ giả định
+  ✓ CV-JD fit: kinh nghiệm/kỹ năng khớp với yêu cầu vị trí
+  ✓ Initiative: chủ động chia sẻ bài học, cải tiến, hoặc ý tưởng cải thiện
+
+Điểm cần cải thiện (improvements) — viết dạng coaching/actionable, không chỉ trích:
+  ⚠ Nếu STAR thiếu số liệu: "Lần sau nên chuẩn bị 1-2 con số cụ thể cho mỗi dự án nêu."
+  ⚠ Nếu vai trò cá nhân mờ: "Hãy phân biệt rõ 'team làm' và 'tôi cụ thể làm gì'."
+  ⚠ Nếu action thiếu depth: "Giải thích tại sao chọn giải pháp đó thay vì lý do khác."
+  ⚠ Nếu kết quả chung chung: "Cố gắng đo lường impact bằng số: %, thời gian, người dùng."
+
+Quy tắc:
+- Chỉ nêu điểm mạnh có evidence từ transcript; không khen chung chung.
+- Viết improvements dạng "Làm X để đạt Y", không phán xét nhân cách.
+- Nếu < 3 lượt hỏi, ghi rõ "Đánh giá hạn chế do phiên ngắn" trong final_feedback.
 
 Trả về JSON hợp lệ, không markdown:
 {
   "overall_score": <0-10>,
-  "strengths": ["<điểm mạnh có evidence>"],
-  "improvements": ["<đề xuất cải thiện cụ thể>"],
-  "final_feedback": "<2-3 câu tiếng Việt, chuyên nghiệp, có thể đưa vào report>"
+  "strengths": ["<điểm mạnh có evidence cụ thể>"],
+  "improvements": ["<đề xuất cải thiện actionable>"],
+  "final_feedback": "<2-3 câu tiếng Việt, chuyên nghiệp, phù hợp đưa vào report HR>"
 }"""
 
 _SCORECARD_SYSTEM = """Bạn là Inspector Agent chấm điểm phỏng vấn tuyển dụng theo CV/JD.
