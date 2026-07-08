@@ -55,10 +55,25 @@ fi
 # ── 4. Tạo thư mục nginx certs (cho HTTPS sau này) ───────────────────────────
 mkdir -p "$APP_DIR/nginx/certs"
 
-# ── 5. Build và chạy Docker Compose production ───────────────────────────────
+# ── 5. Tạo swap file nếu RAM < 3GB (bảo vệ droplet nhỏ khỏi OOM kill) ────────
+TOTAL_RAM_MB=$(awk '/MemTotal/ { printf "%d\n", $2/1024 }' /proc/meminfo)
+SWAP_FILE="/swapfile"
+if [ "$TOTAL_RAM_MB" -lt 3000 ] && [ ! -f "$SWAP_FILE" ]; then
+    log "RAM chỉ có ${TOTAL_RAM_MB}MB — tạo swap 4GB để tránh OOM trong lúc build..."
+    fallocate -l 4G "$SWAP_FILE"
+    chmod 600 "$SWAP_FILE"
+    mkswap "$SWAP_FILE"
+    swapon "$SWAP_FILE"
+    echo "$SWAP_FILE none swap sw 0 0" >> /etc/fstab
+    log "Swap 4GB đã bật (tổng: $(free -h | awk '/Swap/ {print $2}'))"
+else
+    log "RAM ${TOTAL_RAM_MB}MB — swap không cần thiết hoặc đã có"
+fi
+
+# ── 6. Build và chạy Docker Compose production ───────────────────────────────
 log "Build Docker images..."
 cd "$APP_DIR"
-docker compose -f docker-compose.prod.yml build --no-cache
+docker compose -f docker-compose.prod.yml build
 
 log "Dừng containers cũ (nếu có)..."
 docker compose -f docker-compose.prod.yml down --remove-orphans || true
@@ -66,7 +81,7 @@ docker compose -f docker-compose.prod.yml down --remove-orphans || true
 log "Khởi động toàn bộ stack..."
 docker compose -f docker-compose.prod.yml up -d
 
-# ── 6. Chạy database migration ───────────────────────────────────────────────
+# ── 7. Chạy database migration ───────────────────────────────────────────────
 log "Chờ PostgreSQL sẵn sàng (15s)..."
 sleep 15
 
@@ -74,7 +89,7 @@ log "Chạy Alembic migration..."
 docker compose -f docker-compose.prod.yml exec -T backend \
     uv run --no-sync alembic upgrade head
 
-# ── 7. Kiểm tra health ────────────────────────────────────────────────────────
+# ── 8. Kiểm tra health ────────────────────────────────────────────────────────
 log "Kiểm tra health endpoint..."
 sleep 5
 if curl -sf http://localhost/health > /dev/null; then
@@ -83,7 +98,7 @@ else
     warn "⚠️  Health check thất bại — xem logs: docker compose -f docker-compose.prod.yml logs backend"
 fi
 
-# ── 8. Tóm tắt ───────────────────────────────────────────────────────────────
+# ── 9. Tóm tắt ───────────────────────────────────────────────────────────────
 DROPLET_IP=$(curl -sf http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null || echo "YOUR_DROPLET_IP")
 echo ""
 echo -e "${GREEN}============================================${NC}"

@@ -42,6 +42,10 @@ RUN .venv/bin/pip install --no-cache-dir \
     --index-url https://download.pytorch.org/whl/cpu \
     --force-reinstall
 
+# Remove PaddlePaddle/PaddleOCR — CV OCR is MVP mock (uses pymupdf), not needed in prod.
+# Saves ~700 MB from the final image.
+RUN .venv/bin/pip uninstall -y paddlepaddle paddleocr paddle2onnx 2>/dev/null || true
+
 EXPOSE 8000
 
 CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
