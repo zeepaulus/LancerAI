@@ -36,15 +36,15 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 # Replace CUDA torch with CPU-only build (saves ~3-4 GB on CPU-only servers).
-# Must run AFTER uv sync so uv doesn't overwrite it.
-RUN .venv/bin/pip install --no-cache-dir \
+# uv does not install pip into .venv by default — use 'uv pip' instead.
+RUN uv pip install --no-cache-dir \
+    --python .venv \
     torch==2.5.1+cpu torchaudio==2.5.1+cpu \
-    --index-url https://download.pytorch.org/whl/cpu \
-    --force-reinstall
+    --index-url https://download.pytorch.org/whl/cpu
 
 # Remove PaddlePaddle/PaddleOCR — CV OCR is MVP mock (uses pymupdf), not needed in prod.
 # Saves ~700 MB from the final image.
-RUN .venv/bin/pip uninstall -y paddlepaddle paddleocr paddle2onnx 2>/dev/null || true
+RUN uv pip uninstall --python .venv paddlepaddle paddleocr paddle2onnx 2>/dev/null || true
 
 EXPOSE 8000
 
