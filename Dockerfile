@@ -35,6 +35,13 @@ COPY migration/ ./migration/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
+# Replace CUDA torch with CPU-only build (saves ~3-4 GB on CPU-only servers).
+# Must run AFTER uv sync so uv doesn't overwrite it.
+RUN .venv/bin/pip install --no-cache-dir \
+    torch==2.5.1+cpu torchaudio==2.5.1+cpu \
+    --index-url https://download.pytorch.org/whl/cpu \
+    --force-reinstall
+
 EXPOSE 8000
 
 CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
