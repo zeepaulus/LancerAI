@@ -43,7 +43,7 @@ CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "
 # Stage: frontend — React + Vite (port 3000)
 # Build: docker build --target frontend -t lancerai-frontend .
 # =============================================================================
-FROM node:18-alpine AS frontend
+FROM node:22-alpine AS frontend
 
 WORKDIR /app
 
@@ -64,7 +64,7 @@ CMD ["npm", "run", "dev"]
 # Stage: frontend-prod — Build static assets, serve via nginx (port 3000)
 # Dùng cho production: VITE_API_BASE_URL="" để gọi API relative qua Nginx proxy
 # =============================================================================
-FROM node:18-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 
 WORKDIR /app
 
