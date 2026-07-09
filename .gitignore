@@ -43,7 +43,7 @@ tests/.chromadb_pytest_data/
 *.gguf
 
 # Data & local DB artifacts
-data/
+/data/
 *.db
 *.sqlite3
 test_chroma_*/
