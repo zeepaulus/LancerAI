@@ -22,22 +22,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml uv.lock README.md ./
 
 # Use Docker BuildKit cache to speed up subsequent downloads if dependencies change
-# First, install dependencies without the project itself to maximize layer caching
+# Skip torch/torchaudio during dependency pre-install — we install CPU-only builds below.
+# This prevents uv from ever writing CUDA wheels (~4 GB) to disk on CPU-only servers.
 RUN --mount=type=cache,target=/root/.cache/uv \
     pip install --no-cache-dir uv && \
-    uv sync --frozen --no-dev --no-install-project
+    uv sync --frozen --no-dev --no-install-project \
+        --no-install-package torch \
+        --no-install-package torchaudio
 
 # Copy the actual application code, migrations, and alembic.ini
 COPY app/ ./app/
 COPY alembic.ini ./
 COPY migration/ ./migration/
 
-# Sync the project itself
+# Sync the project itself — still skip torch/torchaudio to avoid CUDA wheels.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev \
+        --no-install-package torch \
+        --no-install-package torchaudio
 
-# Replace CUDA torch with CPU-only build (saves ~3-4 GB on CPU-only servers).
-# uv does not install pip into .venv by default — use 'uv pip' instead.
+# Install CPU-only torch/torchaudio explicitly (replaces CUDA variant from uv.lock).
+# Must run AFTER uv sync so the rest of the .venv is fully populated.
 RUN uv pip install --no-cache-dir \
     --python .venv \
     torch==2.5.1+cpu torchaudio==2.5.1+cpu \

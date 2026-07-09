@@ -23,8 +23,9 @@ dependencies = [
     "redis>=5.2.0",
     # Module 1: CV Extraction
     "pymupdf>=1.24.0",
-    "paddleocr>=2.8.0",
-    "paddlepaddle>=2.6.0",
+    # paddleocr and paddlepaddle are intentionally excluded from production builds.
+    # They pull CUDA-linked binaries (~700 MB) and are replaced by pymupdf in prod.
+    # See Dockerfile: uv pip uninstall paddlepaddle paddleocr paddle2onnx
     # Module 2: Intelligence (LangGraph Multi-Agent)
     "langgraph>=0.2.0",
     "langchain-core>=0.3.0",
@@ -109,3 +110,15 @@ dev-dependencies = [
     "pre-commit>=4.0.0",
     "aiosqlite>=0.22.1",
 ]
+
+# Force torch and torchaudio to always resolve from the CPU-only wheel index.
+# This prevents uv sync from ever downloading the multi-GB CUDA distribution,
+# which would exhaust disk space during Docker builds on CPU-only servers.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
