@@ -274,19 +274,74 @@ class VoiceSTTConnector:
     # Public API — Transcription
     # ------------------------------------------------------------------
 
+    async def _transcribe_groq(self, audio_bytes: bytes, sample_rate: int) -> str | None:
+        """Call Groq Cloud speech-to-text API (whisper-large-v3-turbo)."""
+        from app.core.settings import get_settings
+        import io
+        import wave
+        import httpx
+        import os
+
+        s = get_settings()
+        api_key = s.llm_cloud_api_key
+        if not api_key or api_key == "your-groq-api-key":
+            api_key = os.getenv("GROQ_API_KEY") or ""
+
+        if not api_key or any(marker in api_key.lower() for marker in ["your-", "placeholder", "example"]):
+            return None
+
+        try:
+            # Resample audio to 16kHz if needed before converting to WAV
+            audio = _pcm_bytes_to_float32(audio_bytes)
+            if sample_rate != SAMPLE_RATE:
+                audio = _resample(audio, sample_rate, SAMPLE_RATE)
+            
+            # Convert float32 array back to int16 bytes
+            pcm_int16 = (audio * 32768.0).clip(-32768, 32767).astype(np.int16).tobytes()
+
+            # Create WAV in memory
+            wav_buf = io.BytesIO()
+            with wave.open(wav_buf, "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)  # 16-bit PCM = 2 bytes
+                wav_file.setframerate(SAMPLE_RATE)
+                wav_file.writeframes(pcm_int16)
+
+            wav_bytes = wav_buf.getvalue()
+            files = {"file": ("audio.wav", wav_bytes, "audio/wav")}
+            data = {
+                "model": "whisper-large-v3-turbo",
+                "language": self._language,
+            }
+            headers = {"Authorization": f"Bearer {api_key}"}
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    "https://api.groq.com/openai/v1/audio/transcriptions",
+                    headers=headers,
+                    files=files,
+                    data=data,
+                )
+                if response.status_code == 200:
+                    res_json = response.json()
+                    text = res_json.get("text", "").strip()
+                    logger.info("[STT] Groq transcription succeeded (model=whisper-large-v3-turbo)")
+                    return text
+                else:
+                    logger.warning(
+                        "[STT] Groq transcription failed with status %d: %s",
+                        response.status_code,
+                        response.text,
+                    )
+        except Exception as exc:
+            logger.warning("[STT] Groq transcription failed, falling back to local: %s", exc)
+
+        return None
+
     async def transcribe(self, audio_bytes: bytes, sample_rate: int = SAMPLE_RATE) -> str:
         """Transcribe a complete PCM Int16 mono buffer to UTF-8 text.
 
-        The call is offloaded to a thread executor so the async event loop
-        is not blocked during inference.
-
-        Args:
-            audio_bytes: Raw PCM Int16 mono bytes.
-            sample_rate: Sample rate of the incoming audio. Will be
-                resampled to 16 kHz if different.
-
-        Returns:
-            Stripped transcription string (empty string if nothing detected).
+        Attempts Groq API first, falling back to local faster-whisper.
         """
         audio = _pcm_bytes_to_float32(audio_bytes)
         duration_seconds = len(audio) / max(1, sample_rate)
@@ -298,6 +353,11 @@ class VoiceSTTConnector:
                 audio_rms,
             )
             return ""
+
+        # Try Groq API transcription first
+        groq_text = await self._transcribe_groq(audio_bytes, sample_rate)
+        if groq_text is not None:
+            return groq_text
 
         self._ensure_whisper()
         loop = asyncio.get_running_loop()

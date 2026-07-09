@@ -300,11 +300,11 @@ class LLMConnector:
             finish_reason = choice.get("finish_reason")
             logger.info("[LLM] Response received: len=%d, finish_reason=%s", len(content), finish_reason)
             return typing.cast(str, content)
-        except httpx.HTTPStatusError as exc:
-            logger.error("[LLM] HTTP error %s — %s", exc.response.status_code, exc.response.text[:200])
-            raise
-        except Exception:
-            logger.exception("[LLM] _call_llm failed")
+        except Exception as exc:
+            if use_cloud or use_nvidia:
+                logger.warning("[LLM] Cloud/Nvidia call failed: %s. Falling back to local Ollama.", exc)
+                return await self._call_llm(messages, use_cloud=False, use_nvidia=False, json_mode=json_mode)
+            logger.exception("[LLM] Local Ollama call failed too")
             raise
 
     # ------------------------------------------------------------------
@@ -380,13 +380,13 @@ class LLMConnector:
         use_cloud: bool = False,
         use_nvidia: bool = False,
     ) -> AsyncGenerator[str, None]:
-        use_cloud, use_nvidia = self._resolve_nvidia(use_cloud, use_nvidia)
-        payload = self._build_chat_payload(messages, use_cloud, use_nvidia, stream=True)
-        url = self._chat_url(use_cloud, use_nvidia)
+        resolved_cloud, resolved_nvidia = self._resolve_nvidia(use_cloud, use_nvidia)
+        payload = self._build_chat_payload(messages, resolved_cloud, resolved_nvidia, stream=True)
+        url = self._chat_url(resolved_cloud, resolved_nvidia)
 
         try:
             async with self._client.stream(
-                "POST", url, json=payload, headers=self._headers(use_cloud, use_nvidia)
+                "POST", url, json=payload, headers=self._headers(resolved_cloud, resolved_nvidia)
             ) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
@@ -402,12 +402,14 @@ class LLMConnector:
                             yield delta
                     except (json.JSONDecodeError, KeyError, IndexError):
                         continue
-        except httpx.HTTPStatusError as exc:
-            logger.error("[LLM] Stream HTTP error %s — %s", exc.response.status_code, exc.response.text[:200])
-            raise
         except Exception as exc:
-            logger.error("[LLM] generate_chat_stream failed: %s", exc)
-            raise
+            if resolved_cloud or resolved_nvidia:
+                logger.warning("[LLM] Cloud/Nvidia stream call failed: %s. Falling back to local Ollama stream.", exc)
+                async for token in self.generate_chat_stream(messages, use_cloud=False, use_nvidia=False):
+                    yield token
+            else:
+                logger.error("[LLM] Local Ollama stream failed too: %s", exc)
+                raise
 
     # ------------------------------------------------------------------
     # Embeddings
