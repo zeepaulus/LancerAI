@@ -179,6 +179,7 @@ const ChatPage = () => {
     const sessionInfoRef = useRef(null);
     const reportRedirectingRef = useRef(false);
     const cameraAnalysisRef = useRef(null); // interval ID for camera anomaly detection
+    const prevPixelsRef = useRef(null); // previous frame pixels for motion detection
 
     useEffect(() => {
         phaseRef.current = phase;
@@ -390,8 +391,31 @@ const ChatPage = () => {
                 }, 20000);
             }
 
+            // ── Motion check (works in all browsers via frame difference) ─────
+            if (prevPixelsRef.current) {
+                let diff = 0;
+                for (let i = 0; i < pixels.length; i += 4) {
+                    diff += Math.abs(pixels[i] - prevPixelsRef.current[i]) +
+                            Math.abs(pixels[i + 1] - prevPixelsRef.current[i + 1]) +
+                            Math.abs(pixels[i + 2] - prevPixelsRef.current[i + 2]);
+                }
+                const avgDiff = diff / (160 * 90 * 3);
+                if (avgDiff > 18) {
+                    sendBehaviorEvent(ws, {
+                        kind: 'restless_motion',
+                        severity: 'low',
+                        confidence: 0.8,
+                        detail: `Ứng viên loay hoay, cử động nhiều (chênh lệch chuyển động ${Math.round(avgDiff)}).`,
+                    }, 15000);
+                }
+            }
+            prevPixelsRef.current = new Uint8ClampedArray(pixels);
+
             // ── Face detection (Chrome/Edge with FaceDetector API) ───────────
-            if (!faceDetector) return;
+            if (!faceDetector) {
+                console.warn('[LancerAI Camera] Browser does not support native FaceDetector. Gaze/Face checks skipped. Enable experimental web platform features in chrome://flags to support it.');
+                return;
+            }
             let faces = [];
             try {
                 faces = await faceDetector.detect(video);
