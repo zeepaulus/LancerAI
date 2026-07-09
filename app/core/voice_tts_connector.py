@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import re
 import logging
 import subprocess
 import tempfile
@@ -24,6 +25,22 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 OUTPUT_SAMPLE_RATE = 24_000  # Hz
+
+# Regex to strip markdown / SSML-unsafe characters that crash edge-tts
+_MD_STRIP = re.compile(r"[\*#`~\[\]\(\)\|>]+")
+_MULTI_SPACE = re.compile(r"\s{2,}")
+
+
+def _sanitize_for_tts(text: str) -> str:
+    """Remove markdown formatting and special characters that edge-tts cannot handle.
+
+    Edge TTS returns "No audio was received" when the input contains
+    markdown bold/italic markers, heading hashes, backticks, etc.
+    """
+    cleaned = _MD_STRIP.sub(" ", text)
+    cleaned = cleaned.replace("\n", " ").replace("\r", " ")
+    cleaned = _MULTI_SPACE.sub(" ", cleaned).strip()
+    return cleaned
 
 
 def _mp3_bytes_to_pcm(mp3_bytes: bytes) -> bytes:
@@ -126,6 +143,10 @@ class VoiceTTSConnector:
 
         Routes to the configured engine; falls back to edge if unavailable.
         """
+        # Sanitize text to remove markdown/special chars that crash TTS engines
+        text = _sanitize_for_tts(text)
+        if not text:
+            return
         effective_voice = voice or self._voice
         if self._engine == "edge":
             async for chunk in self._stream_edge(text, effective_voice):
