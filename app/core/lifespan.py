@@ -48,10 +48,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # ── Seed Dummy Job Listings ──────────────────────────────────────────────
     try:
+        from datetime import datetime, UTC
         from sqlalchemy import select, func
         from app.core.database import _get_session_factory
         from app.models.job_listing import JobListing
-        from app.workers.crawler_worker import _async_save_job_listings
+        from app.core.providers.connectors import get_llm_connector, get_vector_repository
 
         session_factory = _get_session_factory()
         async with session_factory() as session:
@@ -147,8 +148,56 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                         "job_type": "Full-time"
                     }
                 ]
-                added, updated, skipped = await _async_save_job_listings(dummy_jobs)
-                logger.info("[startup] Seeding complete: added=%d, updated=%d, skipped=%d", added, updated, skipped)
+
+                llm = get_llm_connector()
+                vector_repo = get_vector_repository()
+
+                for job_data in dummy_jobs:
+                    job = JobListing(
+                        source=job_data["source"],
+                        source_url=job_data["source_url"],
+                        title=job_data["title"],
+                        company=job_data["company"],
+                        location=job_data["location"],
+                        description=job_data["description"],
+                        requirements=job_data["requirements"],
+                        salary_range=job_data["salary_range"],
+                        experience_level=job_data["experience_level"],
+                        job_type=job_data["job_type"],
+                        is_active=True,
+                        crawled_at=datetime.now(UTC),
+                        updated_at=datetime.now(UTC),
+                    )
+                    session.add(job)
+                    await session.flush()
+
+                    # Store embedding
+                    text_to_embed = (
+                        f"{job.title}\nCompany: {job.company}\nLocation: {job.location}\n"
+                        f"Salary: {job.salary_range}\nDescription: {job.description}\n"
+                        f"Requirements: {job.requirements}"
+                    )
+                    try:
+                        embedding = await llm.embed(text_to_embed[:4000])
+                        if embedding:
+                            await vector_repo.store_embedding(
+                                doc_id=job.id,
+                                text=text_to_embed,
+                                embedding=embedding,
+                                metadata={
+                                    "title": job.title,
+                                    "company": job.company,
+                                    "location": job.location,
+                                    "url": job.source_url,
+                                    "source_url": job.source_url,
+                                    "source": job.source,
+                                },
+                            )
+                    except Exception as embed_err:
+                        logger.warning("[startup] Failed to store embedding for %s: %s", job.title, embed_err)
+
+                await session.commit()
+                logger.info("[startup] Seeding complete.")
             else:
                 logger.info("[startup] job_listings table is already seeded (count=%d)", count)
     except Exception as e:

@@ -155,6 +155,7 @@ const InterviewReportPage = () => {
         behavior_score = 100,
         behavior_observations = [],
         transcript = [],
+        scorecard = {},
     } = report;
 
     const roundedConfidence = Math.round(Number(overall_confidence || 0));
@@ -200,15 +201,68 @@ const InterviewReportPage = () => {
                     <div className="span-12">
                         <AIResponsePanel
                             title="Tóm tắt đánh giá AI"
-                            subtitle={`Phiên ${session_id || 'hiện tại'} - nên xem lại trước khi ra quyết định`}
-                            footer={<StatusBadge tone={scoreTone(roundedConfidence)} compact>{roundedConfidence >= 80 ? 'Tín hiệu tốt' : roundedConfidence >= 60 ? 'Cần xem lại' : 'Rủi ro cao'}</StatusBadge>}
+                            subtitle={`Phiên ${session_id || 'hiện tại'} - Kết luận từ hội đồng AI`}
+                            footer={<StatusBadge tone={scoreTone(roundedConfidence)} compact>{roundedConfidence >= 80 ? 'Tín hiệu tốt' : roundedConfidence >= 60 ? 'Cần xem xét' : 'Rủi ro cao'}</StatusBadge>}
                         >
-                            <p className="ui-copy">
-                                Ứng viên đạt điểm tổng quan <strong>{roundedConfidence}/100</strong>.
-                                Hãy xem transcript và các ghi chú cải thiện bên dưới trước khi chấp nhận đánh giá của AI.
+                            {scorecard?.headline && (
+                                <h3 className="title-md ui-row-gap-bottom" style={{ color: 'var(--color-brand-primary)', fontStyle: 'italic', marginBottom: '10px' }}>
+                                    "{scorecard.headline}"
+                                </h3>
+                            )}
+                            <p className="ui-copy" style={{ whiteSpace: 'pre-wrap' }}>
+                                {scorecard?.summary || 'Ứng viên đạt điểm tổng quan ' + roundedConfidence + '/100. Hãy xem transcript và các ghi chú cải thiện bên dưới trước khi chấp nhận đánh giá của AI.'}
                             </p>
+                            {scorecard?.next_steps && (
+                                <div className="card ui-card-compact" style={{ marginTop: '15px', backgroundColor: 'var(--color-bg-neutral-subtle)', borderLeft: '4px solid var(--color-brand-primary)', padding: '12px' }}>
+                                    <strong>Khuyến nghị bước tiếp theo:</strong>
+                                    <p className="caption" style={{ marginTop: '5px' }}>{scorecard.next_steps}</p>
+                                </div>
+                            )}
                         </AIResponsePanel>
                     </div>
+
+                    {scorecard?.red_flags?.length > 0 && (
+                        <div className="span-12">
+                            <Alert tone="danger" title="Cảnh báo Red Flags (Điểm cảnh cáo nghiêm trọng)">
+                                <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                                    {scorecard.red_flags.map((flag, idx) => (
+                                        <li key={idx} className="ui-copy">{flag}</li>
+                                    ))}
+                                </ul>
+                            </Alert>
+                        </div>
+                    )}
+
+                    {scorecard?.competencies?.length > 0 && (
+                        <Panel className="span-12" title="Bảng đánh giá năng lực chi tiết" subtitle="Đánh giá chi tiết của hội đồng AI cho từng tiêu chí tuyển dụng.">
+                            <div className="report-note-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+                                {scorecard.competencies.map((comp, idx) => {
+                                    const percentage = comp.score * 20; // 0-5 scaled to 0-100%
+                                    return (
+                                        <div key={idx} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '15px' }}>
+                                            <div className="ui-spread ui-row-gap-bottom">
+                                                <strong>{comp.name}</strong>
+                                                <StatusBadge tone={scoreTone(percentage)} compact>
+                                                    {comp.score.toFixed(1)} / 5.0
+                                                </StatusBadge>
+                                            </div>
+                                            <ScoreBar value={percentage} tone="auto" />
+                                            {comp.rationale && (
+                                                <p className="caption" style={{ marginTop: '5px' }}>
+                                                    <strong>Nhận xét:</strong> {comp.rationale}
+                                                </p>
+                                            )}
+                                            {comp.evidence && (
+                                                <blockquote className="cv-opt-quote" style={{ margin: '5px 0 0 0', padding: '8px 12px', fontSize: '0.85rem', borderLeft: '3px solid var(--color-brand-primary)' }}>
+                                                    <strong>Bằng chứng:</strong> {comp.evidence}
+                                                </blockquote>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </Panel>
+                    )}
 
                     <Panel className="span-6" title="Tín hiệu toàn vẹn phiên" subtitle="Ghi nhận từ: tab switching, màn hình phụ, camera (ánh sáng, khuôn mặt). Không phân tích ánh nhìn hay biểu cảm.">
                         {behavior_observations.length === 0 ? (
