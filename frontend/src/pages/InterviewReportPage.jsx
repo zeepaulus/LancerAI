@@ -1,17 +1,46 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Layout/Navbar';
+import {
+    AIResponsePanel,
+    Alert,
+    EmptyState,
+    MetricCard,
+    Page,
+    PageHero,
+    Panel,
+    ProgressCard,
+    ScoreBar,
+    SkeletonRows,
+    StatusBadge,
+} from '../components/Common/AppUI';
+import { EvaluationScoreGraphic } from '../components/Common/Visuals';
 import { getReport } from '../api/interview';
 
-/**
- * InterviewReportPage — STAR-scored interview report.
- * Receives report data via location.state.
- */
+function scoreTone(score) {
+    if (score >= 80) return 'success';
+    if (score >= 60) return 'warning';
+    return 'danger';
+}
+
+function severityTone(severity) {
+    if (severity === 'high' || severity === 'critical') return 'danger';
+    if (severity === 'medium') return 'warning';
+    return 'neutral';
+}
+
+function speakerLabel(role) {
+    if (role === 'candidate') return 'Ứng viên';
+    if (role === 'interviewer') return 'Người phỏng vấn AI';
+    return 'Hệ thống';
+}
+
 const InterviewReportPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const initialReport = location.state?.report || null;
     const sessionIdFromState = location.state?.sessionId || location.state?.viewReportId || initialReport?.session_id || '';
+
     const [report, setReport] = useState(initialReport);
     const [loading, setLoading] = useState(Boolean(!initialReport && sessionIdFromState));
     const [error, setError] = useState('');
@@ -23,15 +52,12 @@ const InterviewReportPage = () => {
         setLoading(true);
         getReport(sessionIdFromState)
             .then((data) => {
-                if (mounted) {
-                    setReport(data);
-                    setError('');
-                }
+                if (!mounted) return;
+                setReport(data);
+                setError('');
             })
             .catch((err) => {
-                if (mounted) {
-                    setError(err.message || 'Khong the tai bao cao phong van.');
-                }
+                if (mounted) setError(err.message || 'Could not load the interview report.');
             })
             .finally(() => {
                 if (mounted) setLoading(false);
@@ -42,279 +68,207 @@ const InterviewReportPage = () => {
         };
     }, [report, sessionIdFromState]);
 
+    const avgSTAR = useMemo(() => {
+        const scores = report?.star_scores || [];
+        if (scores.length === 0) return null;
+
+        const total = scores.reduce((acc, item) => ({
+            situation: acc.situation + Number(item.situation || 0),
+            task: acc.task + Number(item.task || 0),
+            action: acc.action + Number(item.action || 0),
+            result: acc.result + Number(item.result || 0),
+        }), { situation: 0, task: 0, action: 0, result: 0 });
+
+        return Object.fromEntries(Object.entries(total).map(([key, value]) => [key, value / scores.length]));
+    }, [report]);
+
     if (loading) {
         return (
-            <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
+            <div className="app-screen">
                 <Navbar />
-                <div style={styles.container}>
-                    <div style={{textAlign: 'center', padding: 'var(--sp-section) 0'}}>
-                        <p className="title-md">Dang tai bao cao...</p>
-                        <p style={{color: 'var(--muted)', marginBottom: 'var(--sp-lg)'}}>Vui long doi trong giay lat.</p>
-                    </div>
-                </div>
+                <Page narrow>
+                    <PageHero
+                        kicker="Báo cáo phỏng vấn"
+                        title="AI đang chuẩn bị báo cáo"
+                        description="Đang tải điểm đánh giá, tín hiệu phiên, transcript và gợi ý cải thiện."
+                        visual={<EvaluationScoreGraphic />}
+                        tone="analytics"
+                    />
+                    <Panel title="Đang tải báo cáo" subtitle="Báo cáo sẽ hiển thị ngay khi sẵn sàng.">
+                        <SkeletonRows rows={6} />
+                    </Panel>
+                </Page>
             </div>
         );
     }
 
     if (!report) {
         return (
-            <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
+            <div className="app-screen">
                 <Navbar />
-                <div style={styles.container}>
-                    <div style={{textAlign: 'center', padding: 'var(--sp-section) 0'}}>
-                        <p className="title-md">Không tìm thấy báo cáo</p>
-                        <p style={{color: 'var(--muted)', marginBottom: 'var(--sp-lg)'}}>Vui lòng hoàn thành một buổi phỏng vấn trước.</p>
-                        <button className="btn-primary" onClick={() => navigate('/interview')}>Về trang Phỏng vấn</button>
-                    </div>
-                </div>
+                <Page narrow>
+                    {error && (
+                        <div className="ui-section-gap-bottom">
+                            <Alert tone="danger" title="Không tải được báo cáo">{error}</Alert>
+                        </div>
+                    )}
+                    <EmptyState
+                        visual={<EvaluationScoreGraphic />}
+                        title="Chưa có báo cáo phỏng vấn"
+                        description="Hãy hoàn tất một phiên phỏng vấn giọng nói trước, sau đó quay lại để xem đánh giá và transcript."
+                        action={<button className="btn-primary" onClick={() => navigate('/interview')}>Bắt đầu phỏng vấn</button>}
+                    />
+                </Page>
             </div>
         );
     }
 
     const {
         session_id,
-        overall_confidence,
-        total_questions,
-        star_scores,
-        logic_issues,
-        improvement_suggestions,
+        overall_confidence = 0,
+        total_questions = 0,
+        logic_issues = [],
+        improvement_suggestions = [],
         behavior_score = 100,
         behavior_observations = [],
-        scorecard = {},
-        interview_plan = {},
         transcript = [],
     } = report;
 
-    const avgSTAR = star_scores?.length > 0
-        ? star_scores.reduce((acc, s) => ({
-            situation: acc.situation + s.situation,
-            task: acc.task + s.task,
-            action: acc.action + s.action,
-            result: acc.result + s.result,
-        }), { situation: 0, task: 0, action: 0, result: 0 })
-        : null;
-
-    if (avgSTAR && star_scores.length > 0) {
-        const n = star_scores.length;
-        avgSTAR.situation /= n;
-        avgSTAR.task /= n;
-        avgSTAR.action /= n;
-        avgSTAR.result /= n;
-    }
-
-    const getConfidenceColor = (score) =>
-        score >= 70 ? 'var(--gradient-mint)' : score >= 40 ? 'var(--gradient-peach)' : 'var(--gradient-rose)';
+    const roundedConfidence = Math.round(Number(overall_confidence || 0));
+    const roundedBehavior = Math.round(Number(behavior_score || 0));
 
     return (
-        <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
+        <div className="app-screen">
             <Navbar />
-            <div style={styles.container}>
-                <button className="btn-tertiary" style={{marginBottom: 'var(--sp-base)'}} onClick={() => navigate('/interview')}>← Về trang Phỏng vấn</button>
-
-                <p className="caption-uppercase" style={{color: 'var(--muted)', marginBottom: 'var(--sp-xs)'}}>BÁO CÁO PHỎNG VẤN</p>
-                <h1 className="display-sm" style={{marginBottom: 'var(--sp-xxs)'}}>Kết quả đánh giá</h1>
-                <p style={{color: 'var(--muted)', fontSize: '13px', marginBottom: 'var(--sp-xl)'}}>
-                    Session: <code style={{backgroundColor: 'var(--surface-strong)', padding: '2px 6px', borderRadius: 'var(--rounded-xs)', fontSize: '11px'}}>{session_id}</code>
-                </p>
-
-                {/* Confidence Score */}
-                <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)', textAlign: 'center'}}>
-                    <p className="caption-uppercase" style={{color: 'var(--muted)', marginBottom: 'var(--sp-sm)'}}>ĐỘ TỰ TIN TỔNG THỂ</p>
-                    <div style={{fontSize: '56px', fontWeight: 300, fontFamily: 'var(--font-display)', color: 'var(--ink)'}}>
-                        {Math.round(overall_confidence)}
-                        <span style={{fontSize: '20px', color: 'var(--muted)'}}>/100</span>
+            <Page wide>
+                <PageHero
+                    kicker="Báo cáo phỏng vấn"
+                    title="Đánh giá dựa trên bằng chứng"
+                    description="Xem điểm tổng quan, nhận xét, tín hiệu phiên và transcript trước khi đưa ra quyết định."
+                    visual={<EvaluationScoreGraphic score={roundedConfidence} />}
+                    tone="analytics"
+                    actions={(
+                        <>
+                            <button className="btn-outline" onClick={() => navigate('/interview')}>Phỏng vấn lại</button>
+                            <button className="btn-primary" onClick={() => navigate('/dashboard')}>Dashboard</button>
+                        </>
+                    )}
+                >
+                    <div className="hero-progress-grid">
+                        <ProgressCard label="Điểm tổng quan" value={roundedConfidence} detail="Tín hiệu đánh giá chung." tone={scoreTone(roundedConfidence)} />
+                        <ProgressCard label="Độ ổn định phiên" value={roundedBehavior} detail="Tín hiệu trình duyệt và phiên." tone={scoreTone(roundedBehavior)} />
                     </div>
-                    <div style={{...styles.progressBar, marginTop: 'var(--sp-sm)', maxWidth: '300px', marginLeft: 'auto', marginRight: 'auto'}}>
-                        <div style={{height: '100%', width: `${overall_confidence}%`, backgroundColor: getConfidenceColor(overall_confidence), borderRadius: 'var(--rounded-pill)', transition: 'width 0.5s ease'}}></div>
+                </PageHero>
+
+                {error && (
+                    <div className="ui-section-gap-bottom">
+                        <Alert tone="warning" title="Báo cáo có cảnh báo">{error}</Alert>
                     </div>
-                    <p style={{color: 'var(--muted)', fontSize: '13px', marginTop: 'var(--sp-sm)'}}>Tổng câu hỏi: {total_questions}</p>
+                )}
+
+                <div className="metric-grid ui-section-gap-bottom">
+                    <MetricCard label="Điểm tổng quan" value={`${roundedConfidence}/100`} detail="Tín hiệu phỏng vấn chung" tone={scoreTone(roundedConfidence)} />
+                    <MetricCard label="Số lượt hỏi" value={total_questions || transcript.length || 0} detail="Bằng chứng đã ghi nhận" tone="brand" />
+                    <MetricCard label="Độ ổn định" value={`${roundedBehavior}/100`} detail="Tín hiệu phiên" tone={scoreTone(roundedBehavior)} />
+                    <MetricCard label="Ghi chú" value={logic_issues.length + improvement_suggestions.length} detail="Vấn đề và gợi ý" tone="ai" />
                 </div>
 
-                {behavior_observations.length > 0 && (
-                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
-                        <h3 className="title-md" style={{marginBottom: 'var(--sp-sm)'}}>Quan sát hành vi</h3>
-                        <div style={{display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: 'var(--sp-base)'}}>
-                            <span style={{fontSize: '32px', fontWeight: 300, fontFamily: 'var(--font-display)', color: 'var(--ink)'}}>
-                                {Math.round(behavior_score)}
-                            </span>
-                            <span style={{fontSize: '14px', color: 'var(--muted)'}}>/100 điểm hành vi</span>
-                        </div>
-                        <div style={styles.behaviorList}>
-                            {behavior_observations.map((obs, i) => (
-                                <div key={`${obs.kind}-${i}`} style={styles.behaviorItem}>
-                                    <div style={{display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-sm)'}}>
-                                        <strong style={{color: 'var(--ink)'}}>{obs.label}</strong>
-                                        <span style={styles.behaviorSeverity(obs.severity)}>{obs.severity}</span>
-                                    </div>
-                                    {(obs.suggestion || obs.detail) && (
-                                        <p style={{color: 'var(--muted)', fontSize: '13px', margin: '6px 0 0'}}>
-                                            {obs.suggestion || obs.detail}
-                                        </p>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
+                <div className="dashboard-grid">
+                    <div className="span-12">
+                        <AIResponsePanel
+                            title="Tóm tắt đánh giá AI"
+                            subtitle={`Phiên ${session_id || 'hiện tại'} - nên xem lại trước khi ra quyết định`}
+                            footer={<StatusBadge tone={scoreTone(roundedConfidence)} compact>{roundedConfidence >= 80 ? 'Tín hiệu tốt' : roundedConfidence >= 60 ? 'Cần xem lại' : 'Rủi ro cao'}</StatusBadge>}
+                        >
+                            <p className="ui-copy">
+                                Ứng viên đạt điểm tổng quan <strong>{roundedConfidence}/100</strong>.
+                                Hãy xem transcript và các ghi chú cải thiện bên dưới trước khi chấp nhận đánh giá của AI.
+                            </p>
+                        </AIResponsePanel>
                     </div>
-                )}
 
-                {scorecard?.competencies?.length > 0 && (
-                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
-                        <h3 className="title-md" style={{marginBottom: 'var(--sp-sm)'}}>Scorecard theo năng lực</h3>
-                        <div style={{display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-sm)', marginBottom: 'var(--sp-base)'}}>
-                            <span style={{fontSize: '28px', fontWeight: 300, fontFamily: 'var(--font-display)', color: 'var(--ink)'}}>
-                                {Number(scorecard.overall_score || 0).toFixed(1)}/5
-                            </span>
-                            <span className="badge-pill" style={{background: 'var(--surface-strong)', color: 'var(--ink)'}}>
-                                {scorecard.recommendation || 'n/a'}
-                            </span>
-                        </div>
-                        <div style={styles.behaviorList}>
-                            {scorecard.competencies.map((item, i) => (
-                                <div key={`${item.name}-${i}`} style={styles.behaviorItem}>
-                                    <div style={{display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-sm)'}}>
-                                        <strong style={{color: 'var(--ink)'}}>{item.name}</strong>
-                                        <span style={{fontWeight: 600, color: 'var(--primary)'}}>{Number(item.score || 0).toFixed(1)}/5</span>
-                                    </div>
-                                    <p style={{color: 'var(--muted)', fontSize: '13px', margin: '6px 0 0'}}>
-                                        Weight {Math.round((item.weight || 0) * 100)}% · {item.rationale || item.evidence}
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {interview_plan?.question_plan?.length > 0 && (
-                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
-                        <h3 className="title-md" style={{marginBottom: 'var(--sp-base)'}}>Kế hoạch phỏng vấn</h3>
-                        <div style={styles.behaviorList}>
-                            {interview_plan.question_plan.map((item, i) => (
-                                <div key={`${item.stage}-${i}`} style={styles.behaviorItem}>
-                                    <strong style={{color: 'var(--ink)'}}>{i + 1}. {item.goal || item.stage}</strong>
-                                    <p style={{color: 'var(--muted)', fontSize: '13px', margin: '6px 0 0'}}>
-                                        {item.question}
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {transcript?.length > 0 && (
-                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
-                        <h3 className="title-md" style={{marginBottom: 'var(--sp-base)'}}>Transcript hội thoại</h3>
-                        <div style={styles.transcriptList}>
-                            {transcript.map((turn, i) => (
-                                <div key={`${turn.role}-${i}`} style={styles.transcriptItem(turn.role)}>
-                                    <strong>{turn.role === 'candidate' ? 'Ứng viên' : turn.role === 'interviewer' ? 'AI phỏng vấn' : 'Hệ thống'}</strong>
-                                    <p style={{margin: '6px 0 0', whiteSpace: 'pre-wrap'}}>{turn.content}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* STAR Scores */}
-                {avgSTAR && (
-                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
-                        <h3 className="title-md" style={{marginBottom: 'var(--sp-base)'}}>⭐ Điểm STAR trung bình</h3>
-                        <div style={styles.starGrid}>
-                            {[
-                                { key: 'S', label: 'Situation', score: avgSTAR.situation },
-                                { key: 'T', label: 'Task', score: avgSTAR.task },
-                                { key: 'A', label: 'Action', score: avgSTAR.action },
-                                { key: 'R', label: 'Result', score: avgSTAR.result },
-                            ].map(s => (
-                                <div key={s.key} style={styles.starItem}>
-                                    <div style={styles.starLetter}>{s.key}</div>
-                                    <div style={{flex: 1}}>
-                                        <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-xxs)'}}>
-                                            <span style={{fontSize: '14px', color: 'var(--ink)'}}>{s.label}</span>
-                                            <span style={{fontSize: '14px', fontWeight: 500, color: 'var(--ink)'}}>{s.score.toFixed(1)}/10</span>
+                    <Panel className="span-6" title="Tín hiệu phiên" subtitle="Chỉ dùng như dữ liệu hỗ trợ, không thay thế đánh giá của người thật.">
+                        {behavior_observations.length === 0 ? (
+                            <EmptyState title="Không có cảnh báo" description="Không ghi nhận tín hiệu bất thường đáng chú ý trong phiên." />
+                        ) : (
+                            <div className="ui-stack ui-stack--md">
+                                {behavior_observations.map((item, index) => (
+                                    <article key={`${item.kind}-${index}`} className="card ui-card-compact">
+                                        <div className="ui-spread ui-row-gap-bottom">
+                                            <strong>{item.label || item.kind?.replaceAll('_', ' ') || 'Quan sát'}</strong>
+                                            <StatusBadge tone={severityTone(item.severity)} compact>{item.severity || 'thông tin'}</StatusBadge>
                                         </div>
-                                        <div style={styles.progressBar}>
-                                            <div style={{height: '100%', width: `${s.score * 10}%`, backgroundColor: getConfidenceColor(s.score * 10), borderRadius: 'var(--rounded-pill)'}}></div>
+                                        <p className="caption">{item.suggestion || item.detail || 'Không có mô tả chi tiết.'}</p>
+                                    </article>
+                                ))}
+                            </div>
+                        )}
+                    </Panel>
+
+                    {avgSTAR && (
+                        <Panel className="span-12" title="Điểm STAR trung bình" subtitle="Điểm được tính trung bình từ các câu trả lời trong phiên.">
+                            <div className="report-star-grid">
+                                {[
+                                    ['Bối cảnh', avgSTAR.situation],
+                                    ['Nhiệm vụ', avgSTAR.task],
+                                    ['Hành động', avgSTAR.action],
+                                    ['Kết quả', avgSTAR.result],
+                                ].map(([label, value]) => (
+                                    <div key={label} className="card ui-card-compact">
+                                        <div className="ui-spread ui-row-gap-bottom">
+                                            <strong>{label}</strong>
+                                            <StatusBadge tone={scoreTone(value * 10)} compact>{value.toFixed(1)}/10</StatusBadge>
                                         </div>
+                                        <ScoreBar value={value * 10} tone="auto" />
                                     </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                                ))}
+                            </div>
+                        </Panel>
+                    )}
 
-                {/* Logic Issues */}
-                {logic_issues?.length > 0 && (
-                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
-                        <h3 className="title-md" style={{marginBottom: 'var(--sp-base)'}}>⚠️ Vấn đề logic phát hiện</h3>
-                        <ul style={styles.issueList}>
-                            {logic_issues.map((issue, i) => <li key={i}>{issue}</li>)}
-                        </ul>
-                    </div>
-                )}
+                    <Panel className="span-12" title="Ghi chú đánh giá" subtitle="Các vấn đề và gợi ý cải thiện được AI ghi nhận.">
+                        {logic_issues.length === 0 && improvement_suggestions.length === 0 ? (
+                            <EmptyState title="Không có ghi chú" description="AI không ghi nhận vấn đề hoặc gợi ý cải thiện trong phiên này." />
+                        ) : (
+                            <div className="report-note-grid">
+                                {logic_issues.length > 0 && (
+                                    <div>
+                                        <h3 className="title-sm">Vấn đề cần lưu ý</h3>
+                                        <ul className="report-note-list">
+                                            {logic_issues.map((issue, index) => <li key={`${issue}-${index}`}>{issue}</li>)}
+                                        </ul>
+                                    </div>
+                                )}
+                                {improvement_suggestions.length > 0 && (
+                                    <div>
+                                        <h3 className="title-sm">Gợi ý cải thiện</h3>
+                                        <ul className="report-note-list">
+                                            {improvement_suggestions.map((suggestion, index) => <li key={`${suggestion}-${index}`}>{suggestion}</li>)}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </Panel>
 
-                {/* Improvement Suggestions */}
-                {improvement_suggestions?.length > 0 && (
-                    <div className="card" style={{padding: 'var(--sp-xl)', marginBottom: 'var(--sp-lg)'}}>
-                        <h3 className="title-md" style={{marginBottom: 'var(--sp-base)'}}>💡 Gợi ý cải thiện</h3>
-                        <ul style={styles.issueList}>
-                            {improvement_suggestions.map((sug, i) => <li key={i}>{sug}</li>)}
-                        </ul>
-                    </div>
-                )}
-
-                <div style={{display: 'flex', gap: 'var(--sp-sm)'}}>
-                    <button className="btn-primary" onClick={() => navigate('/interview')}>Phỏng vấn lại</button>
-                    <button className="btn-outline" onClick={() => navigate('/dashboard')}>Về Dashboard</button>
+                    <Panel className="span-12" title="Transcript" subtitle="Nội dung hội thoại được dùng làm bằng chứng đánh giá.">
+                        {transcript.length === 0 ? (
+                            <EmptyState title="Chưa có transcript" description="Báo cáo không có nội dung hội thoại." />
+                        ) : (
+                            <div className="report-transcript-list">
+                                {transcript.map((turn, index) => (
+                                    <div key={`${turn.role}-${index}`} className={`report-transcript-item report-transcript-item--${turn.role === 'candidate' ? 'candidate' : 'system'}`}>
+                                        <strong>{speakerLabel(turn.role)}</strong>
+                                        <p>{turn.content}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </Panel>
                 </div>
-            </div>
+            </Page>
         </div>
     );
-};
-
-const styles = {
-    container: { maxWidth: '800px', margin: '0 auto', padding: 'var(--sp-xl) var(--sp-lg)' },
-    progressBar: { width: '100%', height: '8px', backgroundColor: 'var(--hairline)', borderRadius: 'var(--rounded-pill)', overflow: 'hidden' },
-    starGrid: { display: 'flex', flexDirection: 'column', gap: 'var(--sp-base)' },
-    starItem: { display: 'flex', alignItems: 'center', gap: 'var(--sp-base)' },
-    starLetter: {
-        width: '36px', height: '36px', borderRadius: 'var(--rounded-full)',
-        backgroundColor: 'var(--surface-strong)', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', fontWeight: 600, fontSize: '14px', color: 'var(--ink)', flexShrink: 0,
-    },
-    issueList: { paddingLeft: 'var(--sp-lg)', color: 'var(--body)', fontSize: '14px', lineHeight: 1.8 },
-    behaviorList: { display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' },
-    behaviorItem: {
-        padding: 'var(--sp-sm)',
-        border: '1px solid var(--hairline)',
-        borderRadius: 'var(--rounded-md)',
-        background: 'var(--canvas-soft)',
-    },
-    transcriptList: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--sp-sm)',
-        maxHeight: '420px',
-        overflowY: 'auto',
-    },
-    transcriptItem: (role) => ({
-        padding: 'var(--sp-sm)',
-        border: '1px solid var(--hairline)',
-        borderRadius: 'var(--rounded-md)',
-        background: role === 'candidate' ? 'var(--surface-strong)' : 'var(--canvas-soft)',
-        color: 'var(--body)',
-        fontSize: '14px',
-        lineHeight: 1.6,
-    }),
-    behaviorSeverity: (severity) => ({
-        fontSize: '11px',
-        padding: '3px 8px',
-        borderRadius: 'var(--rounded-pill)',
-        border: '1px solid var(--hairline)',
-        background: severity === 'high' ? 'var(--gradient-rose)' : severity === 'medium' ? 'var(--gradient-peach)' : 'var(--surface-strong)',
-        color: 'var(--ink)',
-        textTransform: 'capitalize',
-        whiteSpace: 'nowrap',
-    }),
 };
 
 export default InterviewReportPage;

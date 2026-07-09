@@ -21,3 +21,16 @@ def test_unknown_behavior_event_is_still_normalised() -> None:
 
     assert event is not None
     assert event.label == "custom signal"
+
+
+def test_camera_unavailable_is_neutral_because_camera_is_optional() -> None:
+    summary = summarize_behavior(
+        [
+            {"kind": "camera_unavailable", "severity": "info", "confidence": 1.0},
+        ]
+    )
+
+    assert summary.score == 86.0
+    assert summary.observations[0].kind == "camera_unavailable"
+    assert summary.observations[0].sentiment == "neutral"
+    assert summary.observations[0].category == "system"

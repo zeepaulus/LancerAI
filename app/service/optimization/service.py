@@ -77,10 +77,7 @@ class OptimizationService:
         initial_state: dict[str, Any] = {
             "cv_id": cv_id,
             "raw_cv_data": extracted_data,
-            "target_job_title": (
-                target_job_title
-                or extracted_data.get("personal_info", {}).get("title", "Software Engineer")
-            ),
+            "target_job_title": target_job_title.strip(),
             "target_industry": target_industry,
             "mode": mode,  # "standard" | "roast"
             # Initialise append-only lists to empty so reducers don't crash
@@ -119,6 +116,16 @@ class OptimizationService:
 
         # 5. Persist optimized data back to CVRecord
         await self._cv_repo.update(session, cv_id, optimized_data=optimized_cv)
+        await session.commit()
+
+        # Persist new analytics columns (additive — does not affect existing logic)
+        await self._cv_repo.update(
+            session,
+            cv_id,
+            audit_score=audit_score,
+            optimization_mode=mode,
+            status="optimized",
+        )
         await session.commit()
 
         logger.info(

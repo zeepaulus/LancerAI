@@ -1,98 +1,149 @@
 #!/usr/bin/env bash
-# =============================================================================
-# deploy.sh — Deploy LancerAI lên DigitalOcean Droplet
-# Chạy script này TRÊN DROPLET (sau khi SSH vào):
+# Deploy LancerAI on a Docker host.
+#
+# Defaults target the Bao-version branch:
 #   bash deploy.sh
-# Hoặc từ máy local (thay YOUR_DROPLET_IP):
-#   ssh root@YOUR_DROPLET_IP 'bash -s' < deploy.sh
-# =============================================================================
+#
+# Override when needed:
+#   BRANCH=main APP_DIR=/opt/lancerai bash deploy.sh
+
 set -euo pipefail
 
-REPO_URL="https://github.com/zeepaulus/LancerAI.git"
-APP_DIR="/opt/lancerai"
-BRANCH="Bao-version"
+REPO_URL="${REPO_URL:-https://github.com/zeepaulus/LancerAI.git}"
+APP_DIR="${APP_DIR:-/opt/lancerai}"
+BRANCH="${BRANCH:-Bao-version}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-lancerai}"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
-log()  { echo -e "${GREEN}[+]${NC} $*"; }
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+log() { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
-err()  { echo -e "${RED}[x]${NC} $*" >&2; exit 1; }
+err() { echo -e "${RED}[x]${NC} $*" >&2; exit 1; }
 
-# ── 1. Cài Docker nếu chưa có ────────────────────────────────────────────────
-if ! command -v docker &>/dev/null; then
-    log "Cài Docker..."
+require_cmd() {
+    command -v "$1" >/dev/null 2>&1 || err "Missing required command: $1"
+}
+
+compose() {
+    docker compose -f "$COMPOSE_FILE" --project-name "$COMPOSE_PROJECT_NAME" "$@"
+}
+
+wait_for_container_healthy() {
+    local container_name="$1"
+    local timeout_seconds="${2:-120}"
+    local started_at
+    started_at="$(date +%s)"
+
+    while true; do
+        local status
+        status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_name" 2>/dev/null || true)"
+        if [ "$status" = "healthy" ] || [ "$status" = "running" ]; then
+            log "$container_name is $status"
+            return 0
+        fi
+        if [ "$status" = "unhealthy" ]; then
+            docker logs --tail=80 "$container_name" || true
+            err "$container_name became unhealthy"
+        fi
+        if [ $(( $(date +%s) - started_at )) -ge "$timeout_seconds" ]; then
+            docker logs --tail=80 "$container_name" || true
+            err "Timed out waiting for $container_name to become healthy"
+        fi
+        sleep 3
+    done
+}
+
+wait_for_http() {
+    local url="$1"
+    local timeout_seconds="${2:-90}"
+    local started_at
+    started_at="$(date +%s)"
+
+    until curl -fsS "$url" >/dev/null; do
+        if [ $(( $(date +%s) - started_at )) -ge "$timeout_seconds" ]; then
+            err "Timed out waiting for $url"
+        fi
+        sleep 3
+    done
+    log "$url is reachable"
+}
+
+require_cmd git
+require_cmd curl
+
+if ! command -v docker >/dev/null 2>&1; then
+    log "Installing Docker..."
     curl -fsSL https://get.docker.com | sh
     systemctl enable --now docker
-    log "Docker đã cài xong: $(docker --version)"
-else
-    log "Docker đã có: $(docker --version)"
 fi
 
-# ── 2. Clone / pull code ─────────────────────────────────────────────────────
+docker compose version >/dev/null 2>&1 || err "Docker Compose v2 plugin is required"
+
 if [ -d "$APP_DIR/.git" ]; then
-    log "Cập nhật code từ GitHub..."
+    log "Updating $APP_DIR from origin/$BRANCH..."
     cd "$APP_DIR"
-    git fetch origin
-    git checkout "$BRANCH"
-    git pull origin "$BRANCH"
+    git fetch origin "$BRANCH"
+    if [ "$(git rev-parse --abbrev-ref HEAD)" != "$BRANCH" ]; then
+        git checkout "$BRANCH"
+    fi
+    git pull --ff-only origin "$BRANCH"
 else
-    log "Clone repo từ GitHub..."
-    git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+    log "Cloning $REPO_URL ($BRANCH) to $APP_DIR..."
+    git clone --branch "$BRANCH" --single-branch "$REPO_URL" "$APP_DIR"
     cd "$APP_DIR"
 fi
 
-# ── 3. Kiểm tra .env ─────────────────────────────────────────────────────────
 if [ ! -f "$APP_DIR/.env" ]; then
-    warn ".env chưa tồn tại. Tạo từ template..."
+    warn ".env not found. Creating it from .env.production.example."
     cp "$APP_DIR/.env.production.example" "$APP_DIR/.env"
-    err "Hãy điền đầy đủ thông tin trong $APP_DIR/.env rồi chạy lại script!"
+    err "Edit $APP_DIR/.env with real secrets/domains, then run deploy.sh again."
 fi
 
-# Cảnh báo nếu còn giá trị placeholder
-if grep -q "REPLACE_" "$APP_DIR/.env"; then
-    err ".env vẫn còn giá trị 'REPLACE_*'. Hãy điền thông tin thật trước khi deploy!"
+if grep -Eq 'REPLACE_|YOUR_DROPLET_IP|changeme' "$APP_DIR/.env"; then
+    err ".env still contains placeholder values. Replace them before deploying."
 fi
 
-# ── 4. Tạo thư mục nginx certs (cho HTTPS sau này) ───────────────────────────
 mkdir -p "$APP_DIR/nginx/certs"
 
-# ── 5. Build và chạy Docker Compose production ───────────────────────────────
-log "Build Docker images..."
-cd "$APP_DIR"
-docker compose -f docker-compose.prod.yml build --no-cache
+log "Building production images..."
+compose build --pull backend frontend
 
-log "Dừng containers cũ (nếu có)..."
-docker compose -f docker-compose.prod.yml down --remove-orphans || true
+log "Stopping old containers..."
+compose down --remove-orphans || true
 
-log "Khởi động toàn bộ stack..."
-docker compose -f docker-compose.prod.yml up -d
+log "Starting infrastructure services..."
+compose up -d postgres redis chromadb neo4j
 
-# ── 6. Chạy database migration ───────────────────────────────────────────────
-log "Chờ PostgreSQL sẵn sàng (15s)..."
-sleep 15
+log "Starting backend..."
+compose up -d backend
+wait_for_container_healthy lancerai-backend 180
 
-log "Chạy Alembic migration..."
-docker compose -f docker-compose.prod.yml exec -T backend \
-    uv run --no-sync alembic upgrade head
+log "Running database migrations..."
+compose exec -T backend uv run --no-sync alembic upgrade head
 
-# ── 7. Kiểm tra health ────────────────────────────────────────────────────────
-log "Kiểm tra health endpoint..."
-sleep 5
-if curl -sf http://localhost/health > /dev/null; then
-    log "✅ Backend đang chạy tại http://localhost/health"
-else
-    warn "⚠️  Health check thất bại — xem logs: docker compose -f docker-compose.prod.yml logs backend"
-fi
+log "Starting worker, frontend, and nginx..."
+compose up -d celery_worker frontend nginx
+wait_for_container_healthy lancerai-frontend 90
+wait_for_container_healthy lancerai-nginx 90
 
-# ── 8. Tóm tắt ───────────────────────────────────────────────────────────────
-DROPLET_IP=$(curl -sf http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null || echo "YOUR_DROPLET_IP")
+log "Checking public health endpoint..."
+wait_for_http "http://localhost/health" 90
+
+DROPLET_IP="$(curl -sf http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null || echo "YOUR_SERVER_IP")"
+
 echo ""
 echo -e "${GREEN}============================================${NC}"
-echo -e "${GREEN}  🚀 LancerAI deployed thành công!${NC}"
+echo -e "${GREEN}  LancerAI deployment completed${NC}"
 echo -e "${GREEN}============================================${NC}"
+echo -e "  Branch:     $BRANCH"
 echo -e "  Frontend:   http://$DROPLET_IP"
 echo -e "  API Docs:   http://$DROPLET_IP/docs"
 echo -e "  Health:     http://$DROPLET_IP/health"
 echo ""
-echo -e "  Xem logs:  docker compose -f $APP_DIR/docker-compose.prod.yml logs -f"
-echo -e "  Dừng:      docker compose -f $APP_DIR/docker-compose.prod.yml down"
+echo -e "  Logs:       docker compose -f $APP_DIR/$COMPOSE_FILE logs -f"
+echo -e "  Stop:       docker compose -f $APP_DIR/$COMPOSE_FILE down"
 echo -e "${GREEN}============================================${NC}"

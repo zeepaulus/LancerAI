@@ -32,6 +32,19 @@ class AuthLoginRequest(BaseModel):
     password: str = Field(..., min_length=8)
 
 
+class UserProfileUpdateRequest(BaseModel):
+    """Payload for updating the current user's visible profile."""
+
+    display_name: str = Field(..., min_length=1, max_length=120)
+
+
+class PasswordChangeRequest(BaseModel):
+    """Payload for changing the current user's password."""
+
+    current_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
 class CVUploadRequest(BaseModel):
     """Metadata accompanying a CV file upload."""
 

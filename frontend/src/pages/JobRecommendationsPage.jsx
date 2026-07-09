@@ -1,12 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Layout/Navbar';
+import {
+    EmptyState,
+    MatchScoreCard,
+    Page,
+    PageHero,
+    Panel,
+    SearchFilterBar,
+    SkeletonRows,
+    StatusBadge,
+} from '../components/Common/AppUI';
+import { ProductMockupGraphic } from '../components/Common/Visuals';
 import { getRecommendations } from '../api/matching';
 
-/**
- * JobRecommendationsPage — Ranked job list based on CV.
- * Calls GET /jobs/recommendations/{cv_id}
- */
 const JobRecommendationsPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -24,91 +31,94 @@ const JobRecommendationsPage = () => {
         setLoading(true);
         setError('');
         try {
-            const data = await getRecommendations(cvId, 10);
-            setJobs(data || []);
+            setJobs(await getRecommendations(cvId, 10) || []);
         } catch (err) {
-            setError(err.message || 'Không thể tải gợi ý.');
+            setError(err.message || 'Không thể tải gợi ý việc làm.');
         } finally {
             setLoading(false);
         }
     };
 
-    if (!cvId) {
-        return (
-            <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
-                <Navbar />
-                <div style={styles.container}>
-                    <div style={{textAlign: 'center', padding: 'var(--sp-section) 0'}}>
-                        <p className="title-md">Cần upload CV trước</p>
-                        <p style={{color: 'var(--muted)', marginBottom: 'var(--sp-lg)'}}>Hệ thống sẽ gợi ý việc làm dựa trên CV.</p>
-                        <button className="btn-primary" onClick={() => navigate('/cv-upload')}>Upload CV</button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
-        <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
+        <div className="app-screen">
             <Navbar />
-            <div style={styles.container}>
-                <button className="btn-tertiary" style={{marginBottom: 'var(--sp-base)'}} onClick={() => navigate(-1)}>← Quay lại</button>
+            <Page wide>
+                <PageHero
+                    kicker="Gợi ý việc làm"
+                    title="Vai trò phù hợp với CV này"
+                    description="Xem danh sách việc làm được xếp hạng, rồi mở so khớp để đọc chi tiết điểm phù hợp."
+                    visual={<ProductMockupGraphic variant="match" />}
+                    tone="match"
+                    actions={<button className="btn-outline" onClick={() => navigate('/job-matching', { state: { cvId } })}>Mở so khớp</button>}
+                />
 
-                <p className="caption-uppercase" style={{color: 'var(--muted)', marginBottom: 'var(--sp-xs)'}}>GỢI Ý VIỆC LÀM</p>
-                <h1 className="display-sm" style={{marginBottom: 'var(--sp-xl)'}}>Công việc phù hợp với CV</h1>
+                {!cvId ? (
+                    <EmptyState
+                        visual={<ProductMockupGraphic variant="match" />}
+                        title="Cần tải CV trước"
+                        description="Gợi ý việc làm cần dữ liệu CV đã trích xuất để xếp hạng vai trò phù hợp."
+                        action={<button className="btn-primary" onClick={() => navigate('/cv-upload')}>Tải CV</button>}
+                    />
+                ) : (
+                    <div className="split-grid">
+                        <Panel title="Việc làm được gợi ý" subtitle="Mở so khớp để xem vì sao một vai trò phù hợp hoặc chưa phù hợp.">
+                            <SearchFilterBar>
+                                <StatusBadge tone="brand">{jobs.length} gợi ý</StatusBadge>
+                                <button className="btn-outline" onClick={fetchJobs} disabled={loading}>Tải lại</button>
+                            </SearchFilterBar>
 
-                {loading && (
-                    <div style={{textAlign: 'center', padding: 'var(--sp-xxl)'}}>
-                        <p className="title-sm" style={{color: 'var(--muted)'}}>Đang tìm kiếm...</p>
-                    </div>
-                )}
-
-                {error && (
-                    <div className="card" style={{padding: 'var(--sp-lg)', textAlign: 'center'}}>
-                        <p style={{color: 'var(--semantic-error)'}}>{error}</p>
-                        <button className="btn-outline" style={{marginTop: 'var(--sp-sm)'}} onClick={fetchJobs}>Thử lại</button>
-                    </div>
-                )}
-
-                {!loading && !error && jobs.length === 0 && (
-                    <div className="card" style={{padding: 'var(--sp-xl)', textAlign: 'center'}}>
-                        <p style={{color: 'var(--muted)'}}>Không tìm thấy gợi ý việc làm phù hợp.</p>
-                    </div>
-                )}
-
-                <div style={styles.jobList}>
-                    {jobs.map((job, i) => (
-                        <div key={job.job_id || i} className="card" style={styles.jobCard}>
-                            <div style={styles.jobMain}>
-                                <div style={{flex: 1}}>
-                                    <h3 className="title-sm" style={{marginBottom: 'var(--sp-xxs)'}}>{job.title}</h3>
-                                    <p style={{color: 'var(--body)', fontSize: '14px'}}>{job.company}</p>
-                                    <p style={{color: 'var(--muted)', fontSize: '13px', marginTop: 'var(--sp-xxs)'}}>📍 {job.location}</p>
-                                </div>
-                                <div style={styles.scoreCol}>
-                                    <span style={{fontSize: '24px', fontWeight: 300, fontFamily: 'var(--font-display)', color: 'var(--ink)'}}>{Math.round(job.match_score)}</span>
-                                    <span style={{fontSize: '11px', color: 'var(--muted)'}}>% phù hợp</span>
-                                </div>
+                            <div className="ui-section-gap">
+                                {loading ? (
+                                    <SkeletonRows rows={6} />
+                                ) : error ? (
+                                    <EmptyState title="Không thể tải gợi ý" description={error} action={<button className="btn-outline" onClick={fetchJobs}>Thử lại</button>} />
+                                ) : jobs.length === 0 ? (
+                                    <EmptyState title="Chưa tìm thấy việc làm phù hợp" description="Hãy tối ưu CV hoặc so khớp với một JD cụ thể." />
+                                ) : (
+                                    <div className="recommendation-list">
+                                        {jobs.map((job, index) => {
+                                            const score = Math.round(Number(job.match_score || 0));
+                                            return (
+                                                <article key={job.job_id || index} className="recommendation-card">
+                                                    <div className="recommendation-card__header">
+                                                        <div>
+                                                            <h3 className="title-sm">{job.title || 'Recommended role'}</h3>
+                                                            <p className="caption">{[job.company, job.location].filter(Boolean).join(' - ') || 'Company not provided'}</p>
+                                                        </div>
+                                                        <StatusBadge tone={score >= 70 ? 'success' : score >= 40 ? 'warning' : 'danger'}>{score}% fit</StatusBadge>
+                                                    </div>
+                                                    <div className="ui-section-gap">
+                                                        <MatchScoreCard
+                                                            score={score}
+                                                            title="Mức phù hợp"
+                                                            description="Mở so khớp để so sánh vai trò này với CV chi tiết hơn."
+                                                            actions={(
+                                                                <>
+                                                                    <button className="btn-primary" onClick={() => navigate('/job-matching', { state: { cvId } })}>Xem so khớp</button>
+                                                                    {job.url && <a href={job.url} target="_blank" rel="noopener noreferrer" className="btn-outline">Xem tin tuyển dụng</a>}
+                                                                </>
+                                                            )}
+                                                        />
+                                                    </div>
+                                                </article>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
-                            {job.url && (
-                                <a href={job.url} target="_blank" rel="noopener noreferrer" className="btn-outline" style={{fontSize: '13px', height: '32px', padding: '6px 14px', marginTop: 'var(--sp-sm)', display: 'inline-flex'}}>
-                                    Xem chi tiết →
-                                </a>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            </div>
+                        </Panel>
+
+                        <Panel title="Cách dùng gợi ý" subtitle="Danh sách này chỉ là danh sách rút gọn, không phải quyết định ứng tuyển tự động.">
+                            <ProductMockupGraphic variant="match" />
+                            <p className="caption ui-section-gap">
+                                Chọn một vai trò, xem điểm so khớp với JD, rồi luyện câu hỏi cho các kỹ năng còn thiếu.
+                            </p>
+                        </Panel>
+                    </div>
+                )}
+            </Page>
         </div>
     );
-};
-
-const styles = {
-    container: { maxWidth: '800px', margin: '0 auto', padding: 'var(--sp-xl) var(--sp-lg)' },
-    jobList: { display: 'flex', flexDirection: 'column', gap: 'var(--sp-sm)' },
-    jobCard: { padding: 'var(--sp-lg)' },
-    jobMain: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--sp-lg)' },
-    scoreCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 },
 };
 
 export default JobRecommendationsPage;

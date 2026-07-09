@@ -20,11 +20,15 @@ _VAGUE_TERMS = {
     "phụ trách", "tham gia", "hỗ trợ", "làm việc với", "biết về", "có kiến thức",
 }
 _TECH_SKILLS = {
+    "communication": {"communication", "communicate", "giao tiep", "giao tiếp"},
     "python": {"python"},
     "java": {"java"},
     "javascript": {"javascript", "js"},
     "typescript": {"typescript", "ts"},
+    "html/css": {"html", "css", "html/css", "tailwind", "sass", "scss"},
     "react": {"react", "reactjs", "react.js"},
+    "vue": {"vue", "vuejs", "vue.js"},
+    "ui/ux": {"ui/ux", "ux/ui", "ui", "ux", "figma"},
     "node.js": {"node", "nodejs", "node.js"},
     "fastapi": {"fastapi"},
     "django": {"django"},
@@ -41,7 +45,19 @@ _TECH_SKILLS = {
     "machine learning": {"machine learning", "ml"},
     "llm": {"llm", "large language model", "langchain", "rag"},
     "data analysis": {"data analysis", "analytics", "bi"},
+    "etl": {"etl", "data pipeline", "pipeline"},
     "ci/cd": {"ci/cd", "github actions", "gitlab ci", "jenkins"},
+    "git": {"git", "github", "gitlab"},
+    "linux": {"linux", "ubuntu", "debian"},
+    "mobile": {"mobile", "android", "ios", "flutter", "react native"},
+    "android": {"android", "kotlin"},
+    "ios": {"ios", "swift"},
+    "flutter": {"flutter", "dart"},
+    "react native": {"react native", "react-native"},
+    "testing": {"testing", "unit test", "integration test", "jest", "pytest", "vitest"},
+    "problem solving": {"problem solving", "problem-solving", "debugging", "troubleshooting"},
+    "ownership": {"ownership", "owned", "owner", "chịu trách nhiệm", "phụ trách"},
+    "learning agility": {"learning agility", "self-learning", "tự học", "hoc nhanh", "học nhanh"},
 }
 _ROLE_SKILLS = {
     "frontend": ["JavaScript", "TypeScript", "React", "HTML/CSS", "Testing", "UI/UX"],
@@ -51,6 +67,9 @@ _ROLE_SKILLS = {
     "ai": ["Python", "Machine Learning", "LLM", "RAG", "Data Analysis"],
     "devops": ["Docker", "Kubernetes", "CI/CD", "AWS", "Linux"],
     "mobile": ["Mobile", "Android", "iOS", "Flutter", "React Native"],
+    "software engineer": ["JavaScript", "Python", "SQL", "Git", "Testing", "Problem Solving"],
+    "software": ["JavaScript", "Python", "SQL", "Git", "Testing", "Problem Solving"],
+    "developer": ["JavaScript", "Python", "SQL", "Git", "Testing", "Problem Solving"],
 }
 
 
@@ -90,7 +109,7 @@ def build_cv_scorecard(
     competencies = _competencies(required_skills, missing_skills)
 
     return {
-        "version": "cv_scorecard_v1",
+        "version": "cv_scorecard_v2",
         "overall_score": overall,
         "grade": _grade(overall),
         "target_role": target_job_title or jd_data.get("title") or "",
@@ -131,10 +150,12 @@ def _infer_required_skills(
         return explicit[:10]
 
     text = f"{target_job_title} {target_industry}".lower()
+    if not target_job_title.strip() and not jd_data:
+        return []
     for role_key, skills in _ROLE_SKILLS.items():
         if role_key in text:
             return skills
-    return ["Communication", "Problem Solving", "Ownership", "Learning Agility"]
+    return []
 
 
 def _match_skills(cv_skills: list[str], required_skills: list[str], flat_text: str) -> tuple[list[str], list[str]]:
@@ -147,13 +168,20 @@ def _match_skills(cv_skills: list[str], required_skills: list[str], flat_text: s
 def _profile_score(cv_data: dict[str, Any]) -> float:
     personal = cv_data.get("personal_info") if isinstance(cv_data.get("personal_info"), dict) else {}
     score = 0.0
-    for key in ("name", "email", "phone", "linkedin", "location"):
+    contact_weights = {
+        "name": 25.0,
+        "email": 25.0,
+        "phone": 20.0,
+        "linkedin": 15.0,
+        "location": 15.0,
+    }
+    for key, weight in contact_weights.items():
         if str(personal.get(key) or "").strip():
-            score += 12.0
+            score += weight
     if _first_text(cv_data, ("summary", "objective", "raw_text"), 300):
-        score += 30.0
-    if str(personal.get("headline") or personal.get("title") or "").strip():
         score += 10.0
+    if str(personal.get("headline") or personal.get("title") or "").strip():
+        score += 5.0
     return min(100.0, score)
 
 
@@ -191,19 +219,32 @@ def _impact_score(cv_data: dict[str, Any]) -> float:
 
 def _skills_score(cv_skills: list[str], required_skills: list[str], matched_skills: list[str]) -> float:
     breadth = min(1.0, len(cv_skills) / 10)
+    if not required_skills:
+        return round(breadth * 100, 1)
     alignment = len(matched_skills) / max(1, len(required_skills))
     return round((breadth * 35 + alignment * 65), 1)
 
 
 def _structure_score(cv_data: dict[str, Any]) -> float:
-    expected = ["personal_info", "education", "experience", "projects", "skills_matrix"]
-    present = sum(1 for key in expected if cv_data.get(key))
-    return round((present / len(expected)) * 100, 1)
+    score = 0.0
+    if cv_data.get("personal_info"):
+        score += 25.0
+    if cv_data.get("skills_matrix"):
+        score += 25.0
+    if cv_data.get("experience"):
+        score += 30.0
+    elif cv_data.get("projects"):
+        score += 20.0
+    if cv_data.get("education"):
+        score += 10.0
+    if cv_data.get("projects"):
+        score += 10.0
+    return round(min(100.0, score), 1)
 
 
 def _target_alignment_score(required_skills: list[str], matched_skills: list[str]) -> float:
     if not required_skills:
-        return 60.0
+        return 75.0
     return round((len(matched_skills) / max(1, len(required_skills))) * 100, 1)
 
 
@@ -243,7 +284,7 @@ def _issues(section_scores: dict[str, float], missing_skills: list[str], cv_data
         issues.append("Nhiều bullet còn thiếu số liệu, kết quả đo lường hoặc động từ hành động mạnh.")
     if section_scores["profile"] < 70:
         issues.append("Thông tin hồ sơ/summary chưa đủ mạnh để nhà tuyển dụng nắm nhanh định vị ứng viên.")
-    if not _project_names(cv_data):
+    if not _project_names(cv_data) and not cv_data.get("experience"):
         issues.append("Thiếu project nổi bật để chứng minh năng lực thực tế.")
     if section_scores["experience"] < 55:
         issues.append("Kinh nghiệm làm việc chưa đủ chi tiết hoặc thiếu bối cảnh vai trò.")

@@ -78,6 +78,21 @@ class CVExtractionResponse(BaseModel):
     languages: list[str] = Field(default_factory=list)
 
 
+class CVRecordSummaryResponse(BaseModel):
+    """Compact CV row for the authenticated user's CV history."""
+
+    cv_id: str
+    filename: str
+    status: str = "extracted"
+    candidate_name: str = ""
+    audit_score: float | None = None
+    optimization_mode: str | None = None
+    has_analysis: bool = False
+    skills_count: int = 0
+    experience_count: int = 0
+    created_at: str = ""
+
+
 # --- Module 2: Optimization ---
 class CVOptimizationResponse(BaseModel):
     """Result of the multi-agent optimization pipeline."""
@@ -111,6 +126,25 @@ class JobMatchResponse(BaseModel):
     semantic_score: float = Field(ge=0, le=100, description="Vector similarity score.")
     improvement_feedback: str = Field(default="", description="Human-readable LLM feedback.")
     missing_skills: list[SkillGap] = Field(default_factory=list, description="Prioritized missing skills.")
+
+
+class JobListingResponse(BaseModel):
+    """Frontend-friendly public job listing row."""
+
+    job_id: str
+    title: str
+    company: str = ""
+    location: str = ""
+    salary_range: str = ""
+    source: str = ""
+    source_url: str = ""
+    description: str = ""
+    requirements: dict[str, Any] = Field(default_factory=dict)
+    skills: list[str] = Field(default_factory=list)
+    experience_level: str | None = None
+    job_type: str | None = None
+    crawled_at: str = ""
+    updated_at: str = ""
 
 
 class JobRecommendationResponse(BaseModel):

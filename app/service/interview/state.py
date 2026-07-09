@@ -38,6 +38,11 @@ class STARScore(BaseModel):
     overall_score: float = Field(0.0, ge=0.0, le=10.0)
     feedback: str = ""
     follow_up_triggered: bool = False
+    ask_follow_up: bool = False
+    follow_up_question: str = ""
+    follow_up_reason: str = ""
+    evaluation_notes: str = ""
+    next_action: Literal["ask_next", "ask_follow_up", "wrap_up"] = "ask_next"
 
 
 class ChatMessage(BaseModel):
@@ -98,6 +103,11 @@ class InterviewState(BaseModel):
     total_questions: int = 0  # Estimated, flexible
     waiting_for_answer: bool = False
     latest_transcript: str = ""  # STT output from last user turn
+    follow_up_depth: int = 0
+    max_follow_ups_per_question: int = 1
+    pending_follow_up_question: str = ""
+    pending_follow_up_reason: str = ""
+    latest_evaluation_notes: str = ""
 
     # --- Final assessment ---
     overall_score: float = 0.0

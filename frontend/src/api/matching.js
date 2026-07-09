@@ -1,4 +1,4 @@
-import { JOB_MATCH_PATH, jobRecommendationsPath } from './paths';
+import { JOB_LISTINGS_PATH, JOB_MATCH_PATH, jobListingPath, jobRecommendationsPath } from './paths';
 import { apiJson } from './http';
 
 /**
@@ -12,6 +12,19 @@ export function matchCV(payload) {
         method: 'POST',
         body: payload,
     });
+}
+
+export function getJobListings(params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') query.set(key, value);
+    });
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return apiJson(`${JOB_LISTINGS_PATH}${suffix}`, { method: 'GET' });
+}
+
+export function getJobListing(jobId) {
+    return apiJson(jobListingPath(jobId), { method: 'GET' });
 }
 
 /**

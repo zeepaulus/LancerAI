@@ -11,6 +11,7 @@ ENV UV_LINK_MODE=copy
 # System deps: runtime-only libs needed by active packages.
 # Including libraries for OCR (PaddleOCR/OpenCV, Poppler for PDF, Tesseract)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl ffmpeg \
     libffi-dev shared-mime-info \
     libgl1 libglib2.0-0 libgomp1 \
     libsm6 libxext6 libxrender-dev \
@@ -43,7 +44,7 @@ CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "
 # Stage: frontend — React + Vite (port 3000)
 # Build: docker build --target frontend -t lancerai-frontend .
 # =============================================================================
-FROM node:18-alpine AS frontend
+FROM node:22-alpine AS frontend
 
 WORKDIR /app
 
@@ -52,7 +53,7 @@ COPY frontend/package*.json ./
 # Use Docker BuildKit cache for npm
 RUN --mount=type=cache,target=/app/.npm \
     npm set cache /app/.npm && \
-    npm install
+    npm ci
 
 COPY frontend/ .
 
@@ -64,14 +65,14 @@ CMD ["npm", "run", "dev"]
 # Stage: frontend-prod — Build static assets, serve via nginx (port 3000)
 # Dùng cho production: VITE_API_BASE_URL="" để gọi API relative qua Nginx proxy
 # =============================================================================
-FROM node:18-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 
 WORKDIR /app
 
 COPY frontend/package*.json ./
 RUN --mount=type=cache,target=/app/.npm \
     npm set cache /app/.npm && \
-    npm install
+    npm ci
 
 COPY frontend/ .
 

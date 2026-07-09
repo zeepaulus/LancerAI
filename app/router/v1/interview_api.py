@@ -34,6 +34,7 @@ from app.service.interview.planning import (
     build_manual_jd_data,
     infer_job_title,
     job_listing_to_jd_data,
+    normalise_it_role,
 )
 from app.service.interview.service import InterviewService
 
@@ -159,7 +160,7 @@ async def create_interview_session(
             )
         jd_data = job_listing_to_jd_data(job)
 
-    job_title = (payload.job_title or "").strip() or infer_job_title(cv_data, jd_data)
+    job_title = normalise_it_role((payload.job_title or "").strip() or infer_job_title(cv_data, jd_data))
     interview_plan = build_interview_plan(
         cv_data=cv_data,
         jd_data=jd_data,
@@ -399,10 +400,10 @@ async def interview_websocket(
     if not jd_data:
         stored_jd = setup_context.get("jd_data") if isinstance(setup_context, dict) else {}
         jd_data = stored_jd if isinstance(stored_jd, dict) else {}
-    job_title: str = str(
+    job_title: str = normalise_it_role(str(
         (setup_context.get("job_title") if isinstance(setup_context, dict) else "")
         or infer_job_title(cv_data, jd_data)
-    )
+    ))
     mode: str = session_record.mode
     try:
         stored_duration = setup_context.get("duration_minutes") if isinstance(setup_context, dict) else None

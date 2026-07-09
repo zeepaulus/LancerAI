@@ -16,6 +16,48 @@ from app.models.job_listing import JobListing
 from app.service.cv_analysis.scorecard import build_cv_scorecard
 from app.service.interview.scoring import DEFAULT_COMPETENCY_WEIGHTS
 
+IT_ROLE_OPTIONS = [
+    "Frontend Developer",
+    "Backend Developer",
+    "Fullstack Developer",
+    "AI Engineer",
+    "Data Analyst",
+    "Data Scientist",
+    "DevOps Engineer",
+    "QA Engineer",
+    "Mobile Developer",
+    "Software Engineer Intern",
+    "Fresher Software Engineer",
+]
+
+_IT_ROLE_KEYWORDS = {
+    "frontend": "Frontend Developer",
+    "front-end": "Frontend Developer",
+    "react": "Frontend Developer",
+    "backend": "Backend Developer",
+    "back-end": "Backend Developer",
+    "api": "Backend Developer",
+    "fullstack": "Fullstack Developer",
+    "full-stack": "Fullstack Developer",
+    "ai": "AI Engineer",
+    "machine learning": "AI Engineer",
+    "ml": "AI Engineer",
+    "data analyst": "Data Analyst",
+    "business intelligence": "Data Analyst",
+    "data scientist": "Data Scientist",
+    "devops": "DevOps Engineer",
+    "sre": "DevOps Engineer",
+    "qa": "QA Engineer",
+    "tester": "QA Engineer",
+    "testing": "QA Engineer",
+    "mobile": "Mobile Developer",
+    "android": "Mobile Developer",
+    "ios": "Mobile Developer",
+    "intern": "Software Engineer Intern",
+    "fresher": "Fresher Software Engineer",
+    "software": "Fresher Software Engineer",
+}
+
 
 def job_listing_to_jd_data(job: JobListing | None) -> dict[str, Any]:
     """Convert a JobListing ORM object into compact JD context."""
@@ -78,6 +120,22 @@ def infer_job_title(cv_data: dict[str, Any], jd_data: dict[str, Any] | None = No
     return "CV Interview"
 
 
+def normalise_it_role(job_title: str | None) -> str:
+    """Keep interview scope inside IT/software/data roles."""
+    title = (job_title or "").strip()
+    if not title:
+        return "Fresher Software Engineer"
+
+    lower = title.lower()
+    for option in IT_ROLE_OPTIONS:
+        if option.lower() == lower:
+            return option
+    for keyword, role in _IT_ROLE_KEYWORDS.items():
+        if keyword in lower:
+            return role
+    return "Fresher Software Engineer"
+
+
 def build_interview_plan(
     *,
     cv_data: dict[str, Any],
@@ -89,7 +147,7 @@ def build_interview_plan(
 ) -> dict[str, Any]:
     """Create a product-ready plan and evaluation brief for a live interview."""
     jd_data = jd_data or {}
-    target_role = (job_title or "").strip() or infer_job_title(cv_data, jd_data)
+    target_role = normalise_it_role((job_title or "").strip() or infer_job_title(cv_data, jd_data))
     candidate_name = _candidate_name(cv_data)
     cv_skills = _extract_cv_skills(cv_data)
     jd_skills = _extract_jd_skills(jd_data)
@@ -233,11 +291,11 @@ def _build_question_plan(
             ),
         },
         {
-            "stage": "project_star",
-            "goal": "Đánh giá STAR qua dự án thực tế",
+            "stage": "project_deep_dive",
+            "goal": "Đánh giá ownership và impact qua dự án thực tế",
             "question": (
-                f"Hãy chọn {main_project} và mô tả theo STAR: bối cảnh, nhiệm vụ, "
-                "hành động của bạn và kết quả đạt được."
+                f"Trong {main_project}, bạn trực tiếp chịu trách nhiệm phần nào "
+                "và kết quả quan trọng nhất đạt được là gì?"
             ),
         },
         {
@@ -363,11 +421,11 @@ def _build_question_plan(
             ),
         },
         {
-            "stage": "project_star",
-            "goal": "Đánh giá STAR qua dự án thực tế",
+            "stage": "project_deep_dive",
+            "goal": "Đánh giá ownership và impact qua dự án thực tế",
             "question": (
-                f"Hãy chọn {main_project} và mô tả theo STAR: bối cảnh, nhiệm vụ, "
-                "hành động của bạn và kết quả đạt được."
+                f"Trong {main_project}, bạn trực tiếp chịu trách nhiệm phần nào "
+                "và kết quả quan trọng nhất đạt được là gì?"
             ),
         },
         {

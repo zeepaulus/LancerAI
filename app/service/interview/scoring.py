@@ -118,21 +118,22 @@ def fallback_scorecard(
     if star_scores:
         avg_star_10 = sum(item.overall_score for item in star_scores) / len(star_scores)
 
-    star_5 = max(0.0, min(5.0, avg_star_10 / 2.0))
-    communication = 3.0 if transcript_turn_count >= 4 else 2.0
-    presence = max(0.0, min(5.0, behavior_summary.score / 20.0))
+    has_answer_evidence = bool(star_scores)
+    star_5 = max(0.0, min(5.0, avg_star_10 / 2.0)) if has_answer_evidence else 0.0
+    communication = 3.0 if transcript_turn_count >= 4 else (1.5 if transcript_turn_count > 0 else 0.0)
+    presence = max(0.0, min(5.0, behavior_summary.score / 20.0)) if transcript_turn_count > 0 else 0.0
 
     competencies = [
         CompetencyScore(
             name="CV-JD Fit",
-            score=star_5 or 2.5,
+            score=star_5,
             weight=DEFAULT_COMPETENCY_WEIGHTS["CV-JD Fit"],
             rationale="Ước lượng từ câu trả lời trong phiên phỏng vấn khi chưa có scorecard LLM.",
             evidence="Transcript phiên phỏng vấn.",
         ),
         CompetencyScore(
             name="Technical Depth",
-            score=star_5 or 2.5,
+            score=star_5,
             weight=DEFAULT_COMPETENCY_WEIGHTS["Technical Depth"],
             rationale="Ước lượng từ độ cụ thể của các câu trả lời đã được STAR-score.",
             evidence="Các câu trả lời ứng viên đã cung cấp.",

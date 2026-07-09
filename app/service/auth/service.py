@@ -99,6 +99,54 @@ class AuthService:
 
         return create_access_token(user.id, user.tenant_id, user.role.value)
 
+    async def update_profile(
+        self,
+        session: AsyncSession,
+        user: User,
+        *,
+        display_name: str,
+    ) -> User:
+        """Update mutable profile fields for the current user."""
+        cleaned_name = display_name.strip()
+        if not cleaned_name:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Display name is required.",
+            )
+
+        updated = await self._users.update(session, user.id, display_name=cleaned_name)
+        if updated is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found.",
+            )
+        await session.commit()
+        await session.refresh(updated)
+        return updated
+
+    async def change_password(
+        self,
+        session: AsyncSession,
+        user: User,
+        *,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        """Change password after verifying the existing credential."""
+        if not verify_password(current_password, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is incorrect.",
+            )
+        if current_password == new_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password must be different from the current password.",
+            )
+
+        await self._users.update(session, user.id, password_hash=hash_password(new_password))
+        await session.commit()
+
     async def resolve_token(self, session: AsyncSession, token: str) -> User:
         """Decode ``token`` and return the matching active User."""
         try:

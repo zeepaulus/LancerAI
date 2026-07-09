@@ -129,6 +129,25 @@ class MockExtractionService:
         results = await self._cv_repo.filter_by(session, id=cv_id, user_id=user_id)
         return results[0] if results else None
 
+    async def list_user_cvs(
+        self,
+        session: AsyncSession,
+        user_id: str,
+        limit: int = 50,
+    ) -> list[Any]:
+        from sqlalchemy import select
+
+        from app.models.cv_record import CVRecord
+
+        safe_limit = max(1, min(int(limit or 50), 100))
+        result = await session.execute(
+            select(CVRecord)
+            .where(CVRecord.user_id == user_id)
+            .order_by(CVRecord.created_at.desc())
+            .limit(safe_limit)
+        )
+        return list(result.scalars().all())
+
 
 def _override_get_extraction_service(
     cv_repo: Any = Depends(get_cv_repository),  # noqa: B008
@@ -190,6 +209,16 @@ class MockMatchingService:
                 )
             ],
         )
+
+    async def save_match_result(
+        self,
+        session: AsyncSession,
+        user_id: str,
+        cv_id: str,
+        result: JobMatchResponse,
+        job_id: str | None = None,
+    ) -> None:
+        return None
 
 
 def _override_get_matching_service() -> MockMatchingService:
@@ -452,6 +481,26 @@ class TestExtractionRoutes:
         resp = client_with_mock_user.get(f"/api/v1/extraction/cv/{cv_id}")
         assert resp.status_code == 200
         assert resp.json()["cv_id"] == cv_id
+
+    def test_uploaded_cv_appears_in_history(self, client_with_mock_user: TestClient) -> None:
+        """Upload -> history should return the same authenticated user's CV."""
+        upload = client_with_mock_user.post(
+            "/api/v1/extraction/cvs",
+            files={"file": ("history-cv.pdf", b"%PDF-1.4 stub", "application/pdf")},
+        )
+        assert upload.status_code == 201
+        cv_id = upload.json()["cv_id"]
+
+        resp = client_with_mock_user.get("/api/v1/extraction/cvs")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        history_item = next((item for item in body if item["cv_id"] == cv_id), None)
+        assert history_item is not None
+        assert history_item["filename"] == "history-cv.pdf"
+        assert history_item["candidate_name"] == upload.json()["personal_info"]["name"]
+        assert history_item["skills_count"] == 1
+        assert history_item["experience_count"] == 1
 
     def test_get_cv_not_found_returns_404(self, client_with_mock_user: TestClient) -> None:
         resp = client_with_mock_user.get("/api/v1/extraction/cv/nonexistent-id")

@@ -105,7 +105,7 @@ def _build_system_prompt(
 
 ## Quy trình
 1. Bắt đầu bằng lời chào ngắn và câu hỏi giới thiệu bản thân.
-2. Đặt các câu hỏi STAR (Tình huống, Nhiệm vụ, Hành động, Kết quả).
+2. Đặt câu hỏi để lấy evidence cụ thể; dùng STAR cho câu hỏi hành vi/project, dùng trade-off/edge case/kiểm chứng cho câu hỏi kỹ thuật.
 3. Lắng nghe và đặt câu hỏi tiếp nối nếu câu trả lời chưa rõ.
 4. Khi hết thời gian, thông báo kết thúc lịch sự.
 
@@ -170,15 +170,18 @@ def _build_system_prompt(
     return f"""Bạn là Senior Interviewer người Việt đang phỏng vấn ứng viên cho vị trí {job_title}.
 
 Mục tiêu phiên live:
-- Kiểm chứng năng lực thật trong CV, mức phù hợp với JD và khả năng trình bày theo STAR.
-- Hỏi sâu vào dự án, kinh nghiệm, kỹ năng, impact và khoảng trống CV/JD.
+- Kiểm chứng năng lực thật trong CV, mức phù hợp với JD và khả năng trình bày evidence rõ ràng.
+- Chỉ phỏng vấn trong phạm vi Information Technology: software engineering, frontend, backend, fullstack, AI/data, DevOps, QA, mobile.
+- Hỏi sâu vào dự án, kinh nghiệm, kỹ năng kỹ thuật, impact và khoảng trống CV/JD.
 - Tạo trải nghiệm tự nhiên như một buổi phỏng vấn thật trên web.
 
 Phong cách:
 - Tiếng Việt tự nhiên, lịch sự, ngắn gọn.
-- Mỗi lượt chỉ hỏi MỘT câu.
+- Mỗi lượt chỉ hỏi MỘT câu; câu hỏi phải rõ một ý chính, không hỏi gộp nhiều vấn đề.
 - Không đọc rubric, không nói điểm số, không kết luận tuyển dụng trong lúc phỏng vấn.
-- Khi ứng viên trả lời mơ hồ, hỏi follow-up về vai trò cá nhân, hành động cụ thể, trade-off hoặc kết quả đo được.
+- Khi hỏi dự án/hành vi, chỉ dùng STAR như khung tham chiếu nếu phù hợp; không ép mọi câu trả lời vào một mẫu trình bày.
+- Với câu hỏi kỹ thuật, ưu tiên cách tiếp cận, trade-off, edge case, cách kiểm chứng và tác động thực tế.
+- Khi ứng viên trả lời mơ hồ, chỉ hỏi tối đa một follow-up về điểm thiếu quan trọng nhất: vai trò cá nhân, hành động cụ thể, trade-off kỹ thuật hoặc kết quả đo được.
 - Khi câu trả lời đã đủ rõ, chuyển sang câu hỏi kế tiếp theo kế hoạch.
 - Nếu gần hết thời gian, chốt lịch sự thay vì mở chủ đề mới.
 
@@ -194,12 +197,12 @@ JD / yêu cầu vị trí:
 Luồng hỏi ưu tiên:
 1. Mở đầu ngắn và yêu cầu ứng viên giới thiệu trọng tâm phù hợp vị trí.
 2. Deep-dive vào kinh nghiệm/dự án nổi bật trong CV.
-3. Hỏi STAR để lấy evidence về trách nhiệm cá nhân, hành động và kết quả.
+3. Hỏi theo hướng evidence: trách nhiệm cá nhân, cách tiếp cận, trade-off, kiểm chứng và kết quả; mỗi câu chỉ tập trung một điểm.
 4. Kiểm tra kỹ năng/JD fit và các gap quan trọng.
 5. Quan sát cách giao tiếp, độ rõ ràng và khả năng phản biện.
 6. Kết thúc bằng cơ hội bổ sung nếu còn thời gian.
 
-Hãy bắt đầu ngay bằng lời chào ngắn và một câu hỏi mở đầu sát CV/vị trí."""
+Hãy bắt đầu ngay bằng lời chào ngắn và một câu hỏi mở đầu sát CV/vị trí, tối đa 32 từ."""
 
 
 def _build_planned_system_prompt(
@@ -225,8 +228,9 @@ def _build_planned_system_prompt(
         f"{plan_for_prompt(interview_plan or {})}\n\n"
         "Operating rules:\n"
         "- Bám interview plan nhưng phản ứng tự nhiên theo câu trả lời thực tế.\n"
-        "- Chỉ hỏi một câu mỗi lượt; câu hỏi tối đa khoảng 35 từ.\n"
+        "- Chỉ hỏi một câu mỗi lượt; câu hỏi tối đa 32 từ và chỉ kiểm chứng một ý chính.\n"
         "- Ưu tiên câu hỏi dựa trên CV, dự án, kinh nghiệm thật và yêu cầu JD.\n"
+        "- Không ép mọi câu trả lời theo STAR; dùng STAR cho hành vi/project, dùng trade-off/edge case/kiểm chứng cho kỹ thuật.\n"
         "- Không bịa thông tin ngoài CV/JD/transcript.\n"
         "- Không tiết lộ scorecard, recommendation hoặc đánh giá nội bộ cho ứng viên trong phiên live.\n"
     )
@@ -436,6 +440,7 @@ class InterviewPipeline:
             self._pacing_clock.note_activity()
 
         await self._send_json({"event": "transcript", "text": transcript})
+        await self._prepare_next_interviewer_action()
 
         # --- LLM + TTS ---
         self._phase = SessionPhase.SPEAKING
@@ -469,10 +474,23 @@ class InterviewPipeline:
                 "Runtime guidance: this should be the final interviewer turn. "
                 "Briefly thank the candidate, close the interview, and do not ask a new question."
             )
+        elif self.state.next_action == "wrap_up":
+            guidance = (
+                "Runtime guidance: the latest answer evaluation recommends wrapping up. "
+                "Briefly thank the candidate, close the interview, and do not ask a new question."
+            )
+        elif self.state.next_action == "follow_up" and self.state.pending_follow_up_question:
+            guidance = (
+                "Runtime guidance: ask exactly one follow-up question before moving on. "
+                f"Use this follow-up question: {self.state.pending_follow_up_question} "
+                f"Reason: {self.state.pending_follow_up_reason or 'answer needs more evidence'}. "
+                "Do not ask multiple questions, do not score aloud, and do not introduce a new topic yet."
+            )
         else:
             questions_left = max(1, max_questions - self._candidate_turn_count)
             guidance = (
-                "Runtime guidance: ask exactly one focused follow-up or next CV/JD-based question. "
+                "Runtime guidance: ask exactly one next CV/JD-based interview question. "
+                "If the previous answer was already evaluated as sufficient, move to a new planned topic. "
                 f"Approximate candidate turns left: {questions_left}. "
                 f"Approximate seconds left: {remaining_seconds}."
             )
@@ -549,10 +567,13 @@ class InterviewPipeline:
                 self.state.turns.append(
                     InterviewTurn(role="interviewer", content=assistant_content)
                 )
+                self.state.current_question = assistant_content
+                self.state.pending_follow_up_question = ""
+                self.state.pending_follow_up_reason = ""
                 await self._send_json({"event": "assistant_text", "text": assistant_content})
 
             # Check time-based wrap-up
-            if self.state and self._is_interview_over() and self._phase != SessionPhase.STOPPED:
+            if self.state and (self._is_interview_over() or self.state.next_action == "wrap_up") and self._phase != SessionPhase.STOPPED:
                 await self._send_json({"event": "time_up"})
                 await self.stop()
             else:
@@ -574,6 +595,101 @@ class InterviewPipeline:
     # Internal: evaluation
     # ------------------------------------------------------------------
 
+    async def _prepare_next_interviewer_action(self) -> None:
+        """Evaluate the latest answer and decide whether the next turn is follow-up or next topic."""
+        if self.state is None or not self.state.latest_transcript:
+            return
+
+        if self._is_interview_over():
+            self.state.next_action = "wrap_up"
+            return
+
+        score = None
+        decision: dict[str, Any] = {}
+        try:
+            eval_result = await evaluate_node(self.state, self._llm)
+            scores = eval_result.get("star_scores") or []
+            if scores:
+                score = scores[0]
+                self.state.star_scores.append(score)
+            raw_decision = eval_result.get("follow_up_decision") or {}
+            if isinstance(raw_decision, dict):
+                decision = raw_decision
+        except Exception as exc:
+            logger.warning("[Pipeline] Per-answer follow-up evaluation failed: %s", exc)
+
+        if not decision:
+            decision = self._heuristic_follow_up_decision(score)
+
+        ask_follow_up = bool(decision.get("ask_follow_up"))
+        next_action = str(decision.get("next_action") or "ask_next")
+        follow_up_question = str(decision.get("follow_up_question") or "").strip()
+        reason = str(decision.get("reason") or "").strip()
+        notes = str(decision.get("evaluation_notes") or "").strip()
+
+        can_follow_up = (
+            ask_follow_up
+            and next_action != "wrap_up"
+            and self.state.follow_up_depth < self.state.max_follow_ups_per_question
+            and bool(follow_up_question)
+        )
+
+        self.state.latest_evaluation_notes = notes
+        if can_follow_up:
+            self.state.next_action = "follow_up"
+            self.state.pending_follow_up_question = follow_up_question
+            self.state.pending_follow_up_reason = reason
+            self.state.follow_up_depth += 1
+        elif next_action == "wrap_up":
+            self.state.next_action = "wrap_up"
+            self.state.pending_follow_up_question = ""
+            self.state.pending_follow_up_reason = ""
+        else:
+            self.state.next_action = "ask"
+            self.state.pending_follow_up_question = ""
+            self.state.pending_follow_up_reason = ""
+            self.state.follow_up_depth = 0
+
+    def _heuristic_follow_up_decision(self, score: Any | None) -> dict[str, Any]:
+        """Deterministic fallback so follow-up behavior remains useful if LLM JSON fails."""
+        transcript = (self.state.latest_transcript if self.state else "").strip()
+        words = re.findall(r"\w+", transcript, flags=re.UNICODE)
+        has_metric = bool(re.search(r"\d|%|percent|ms|second|minute|người dùng|user|users", transcript, re.IGNORECASE))
+        has_personal_signal = bool(re.search(r"\b(tôi|mình|em|i)\b", transcript, re.IGNORECASE))
+        score_value = float(getattr(score, "overall_score", 0.0) or 0.0)
+
+        if len(words) < 28:
+            return {
+                "ask_follow_up": True,
+                "follow_up_question": "Bạn có thể nói cụ thể hơn về bối cảnh, phần bạn trực tiếp làm và kết quả đạt được không?",
+                "reason": "vague_answer",
+                "evaluation_notes": "Answer was short and lacked enough evidence.",
+                "next_action": "ask_follow_up",
+            }
+        if not has_personal_signal:
+            return {
+                "ask_follow_up": True,
+                "follow_up_question": "Trong phần đó, trách nhiệm cá nhân của bạn là gì và bạn tự ra quyết định nào?",
+                "reason": "missing_personal_contribution",
+                "evaluation_notes": "Answer may describe team work without clear personal ownership.",
+                "next_action": "ask_follow_up",
+            }
+        if not has_metric and score_value < 7:
+            return {
+                "ask_follow_up": True,
+                "follow_up_question": "Kết quả của việc đó được đo bằng chỉ số hoặc tác động cụ thể nào?",
+                "reason": "missing_metric",
+                "evaluation_notes": "Answer lacks measurable result evidence.",
+                "next_action": "ask_follow_up",
+            }
+        return {
+            "ask_follow_up": False,
+            "follow_up_question": "",
+            "reason": "good_enough",
+            "evaluation_notes": "Answer has enough signal to continue.",
+            "next_action": "ask_next",
+        }
+
     async def _run_final_evaluation(self) -> dict[str, Any]:
         """Run STAR scoring + holistic wrap-up and return the payload."""
         if self.state is None:
@@ -584,8 +700,8 @@ class InterviewPipeline:
             candidate_turns = [t for t in self.state.turns if t.role == "candidate"]
             if candidate_turns and len(self.state.star_scores) < len(candidate_turns):
                 eval_result = await evaluate_node(self.state, self._llm)
-                if eval_result:
-                    self.state = self.state.model_copy(update=eval_result)
+                for score in eval_result.get("star_scores") or []:
+                    self.state.star_scores.append(score)
 
         except Exception as exc:
             logger.error("[Pipeline] Final evaluation failed: %s", exc)

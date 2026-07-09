@@ -5,6 +5,7 @@ Owns:
     GET  /extraction/cv/{cv_id} -> fetch a previously persisted record
 """
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
@@ -14,11 +15,50 @@ from app.core.database import get_db_session
 from app.core.providers.auth import get_current_user
 from app.core.providers.services import get_extraction_service
 from app.core.rate_limit import limiter
+from app.models.cv_record import CVRecord
 from app.models.user import User
-from app.schema.response import CVExtractionResponse
+from app.schema.response import CVExtractionResponse, CVRecordSummaryResponse
 from app.service.extraction.service import MAX_FILE_SIZE, ExtractionService
 
 router = APIRouter(prefix="/extraction", tags=["extraction"])
+logger = logging.getLogger(__name__)
+
+
+def _cv_summary_response(cv: CVRecord) -> CVRecordSummaryResponse:
+    extracted = cv.extracted_data or {}
+    personal_info = extracted.get("personal_info") or {}
+    skills_matrix = extracted.get("skills_matrix") or {}
+    skills_count = sum(
+        len(skills_matrix.get(key) or [])
+        for key in ("languages", "frameworks", "tools", "soft_skills")
+    )
+    has_analysis = bool(cv.audit_score is not None or cv.optimized_data or cv.status == "optimized")
+    return CVRecordSummaryResponse(
+        cv_id=cv.id,
+        filename=cv.filename,
+        status=cv.status,
+        candidate_name=str(personal_info.get("name") or ""),
+        audit_score=cv.audit_score,
+        optimization_mode=cv.optimization_mode,
+        has_analysis=has_analysis,
+        skills_count=skills_count,
+        experience_count=len(extracted.get("experience") or []),
+        created_at=cv.created_at.isoformat() if cv.created_at else "",
+    )
+
+
+@router.get("/cvs")
+@limiter.limit("60/minute")
+async def list_cvs(
+    request: Request,
+    service: Annotated[ExtractionService, Depends(get_extraction_service)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    user: Annotated[User, Depends(get_current_user)],
+    limit: int = 50,
+) -> list[CVRecordSummaryResponse]:
+    """Return recent CV records owned by the authenticated user."""
+    cvs = await service.list_user_cvs(db, user.id, limit=limit)
+    return [_cv_summary_response(cv) for cv in cvs]
 
 
 @router.post("/cvs", status_code=status.HTTP_201_CREATED)
@@ -61,13 +101,15 @@ async def upload_cv(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(exc)) from exc
     except Exception as exc:
+        logger.exception("CV extraction failed for user_id=%s filename=%s", user.id, filename)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Extraction failed: {exc}",
+            detail="Could not analyze this CV. Please try another file or try again later.",
         ) from exc
 
 
 @router.get("/cv/{cv_id}")
+@router.get("/cvs/{cv_id}", include_in_schema=False)
 @limiter.limit("100/minute")
 async def get_cv(
     request: Request,

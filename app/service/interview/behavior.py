@@ -96,10 +96,10 @@ BEHAVIOR_CATALOG: dict[str, dict[str, str]] = {
         "suggestion": "Đảm bảo chỉ có ứng viên xuất hiện trong khung hình phỏng vấn.",
     },
     "camera_unavailable": {
-        "label": "Không truy cập được camera",
-        "category": "presence",
-        "sentiment": "concern",
-        "suggestion": "Cấp quyền camera nếu buổi phỏng vấn yêu cầu đánh giá hành vi.",
+        "label": "Không dùng camera trong phiên",
+        "category": "system",
+        "sentiment": "neutral",
+        "suggestion": "Phiên vẫn có thể đánh giá qua micro và transcript nếu âm thanh hoạt động ổn định.",
     },
     "camera_analysis_limited": {
         "label": "Trình duyệt không hỗ trợ nhận diện khuôn mặt native",
