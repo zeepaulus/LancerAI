@@ -178,6 +178,7 @@ const ChatPage = () => {
     const micLevelUpdateRef = useRef(0);
     const sessionInfoRef = useRef(null);
     const reportRedirectingRef = useRef(false);
+    const cameraAnalysisRef = useRef(null); // interval ID for camera anomaly detection
 
     useEffect(() => {
         phaseRef.current = phase;
@@ -337,6 +338,114 @@ const ChatPage = () => {
             window.removeEventListener('focus', comeBack);
         };
     }, []);
+
+    // ── Camera anomaly detection ──────────────────────────────────────────────
+    // Uses the browser-native FaceDetector API (Chrome/Edge) with a canvas
+    // brightness fallback for browsers that don't support it.
+    // Runs every 4 seconds while camera is active.
+    const startCameraAnalysis = (ws) => {
+        if (cameraAnalysisRef.current) return; // already running
+
+        const analysisCanvas = document.createElement('canvas');
+        analysisCanvas.width = 160;
+        analysisCanvas.height = 90;
+        const ctx2d = analysisCanvas.getContext('2d');
+
+        const hasFaceDetector = typeof window.FaceDetector !== 'undefined';
+        let faceDetector = null;
+        if (hasFaceDetector) {
+            try {
+                faceDetector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 5 });
+            } catch {
+                faceDetector = null;
+            }
+        }
+
+        const analyseFrame = async () => {
+            const video = videoPreviewRef.current;
+            if (!video || video.readyState < 2 || phaseRef.current === 'ended') return;
+
+            // Draw downscaled frame to canvas for analysis
+            try {
+                ctx2d.drawImage(video, 0, 0, 160, 90);
+            } catch {
+                return;
+            }
+
+            // ── Brightness check (works in all browsers) ─────────────────────
+            const imageData = ctx2d.getImageData(0, 0, 160, 90);
+            const pixels = imageData.data;
+            let brightnessSum = 0;
+            for (let i = 0; i < pixels.length; i += 4) {
+                // Luminance approximation: 0.299R + 0.587G + 0.114B
+                brightnessSum += pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
+            }
+            const avgBrightness = brightnessSum / (160 * 90);
+            if (avgBrightness < 40) {
+                sendBehaviorEvent(ws, {
+                    kind: 'poor_lighting',
+                    severity: 'medium',
+                    confidence: 0.85,
+                    detail: `Ánh sáng yếu (độ sáng trung bình ${Math.round(avgBrightness)}/255). Hãy tăng ánh sáng trước mặt.`,
+                }, 20000);
+            }
+
+            // ── Face detection (Chrome/Edge with FaceDetector API) ───────────
+            if (!faceDetector) return;
+            let faces = [];
+            try {
+                faces = await faceDetector.detect(video);
+            } catch {
+                return;
+            }
+
+            if (faces.length === 0) {
+                sendBehaviorEvent(ws, {
+                    kind: 'face_not_visible',
+                    severity: 'medium',
+                    confidence: 0.9,
+                    detail: 'Không phát hiện khuôn mặt trong khung hình. Hãy ngồi lại đúng vị trí camera.',
+                }, 12000);
+                return;
+            }
+
+            if (faces.length > 1) {
+                sendBehaviorEvent(ws, {
+                    kind: 'multiple_faces',
+                    severity: 'high',
+                    confidence: 0.95,
+                    detail: `Phát hiện ${faces.length} khuôn mặt. Đảm bảo chỉ có ứng viên trong khung hình.`,
+                }, 10000);
+            }
+
+            // ── Face off-center check ────────────────────────────────────────
+            const face = faces[0];
+            const box = face.boundingBox;
+            const faceCenterX = box.x + box.width / 2;
+            const faceCenterY = box.y + box.height / 2;
+            const vw = video.videoWidth || 640;
+            const vh = video.videoHeight || 480;
+            const offsetX = Math.abs(faceCenterX / vw - 0.5);
+            const offsetY = Math.abs(faceCenterY / vh - 0.5);
+            if (offsetX > 0.30 || offsetY > 0.30) {
+                sendBehaviorEvent(ws, {
+                    kind: 'face_off_center',
+                    severity: 'low',
+                    confidence: 0.8,
+                    detail: 'Khuôn mặt lệch khỏi trung tâm camera. Hãy ngồi thẳng đối diện camera.',
+                }, 15000);
+            }
+        };
+
+        cameraAnalysisRef.current = window.setInterval(analyseFrame, 4000);
+    };
+
+    const stopCameraAnalysis = () => {
+        if (cameraAnalysisRef.current) {
+            window.clearInterval(cameraAnalysisRef.current);
+            cameraAnalysisRef.current = null;
+        }
+    };
 
     const appendMessage = (sender, text) => {
         if (!text) return;
@@ -582,6 +691,8 @@ const ChatPage = () => {
                     confidence: 0.9,
                     detail: 'Camera đang bật để ghi nhận tín hiệu phiên.',
                 }, 0);
+                // Start real-time camera anomaly analysis
+                startCameraAnalysis(ws);
             } catch (err) {
                 setCameraStatus('unavailable');
                 appendMessage('system', `${mediaAccessMessage(err, 'camera')} Phiên vẫn tiếp tục bằng micro.`);
@@ -645,6 +756,7 @@ const ChatPage = () => {
     };
 
     const stopRecording = () => {
+        stopCameraAnalysis();
         if (!recordingRef.current) return;
         try {
             const { stream, videoStream, audioCtx, source, processor, mute } = recordingRef.current;

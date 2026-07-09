@@ -76,79 +76,6 @@ def _build_system_prompt(
     mode: str,
     duration_minutes: int,
 ) -> str:
-    """Compose the Vietnamese interviewer system prompt."""
-    cv_summary = cv_data.get("summary", "") or cv_data.get("raw_text", "")[:800]
-    jd_summary = ""
-    if jd_data:
-        jd_summary = jd_data.get("description", "") or jd_data.get("raw_text", "")[:600]
-    mode_instruction = {
-        "practice": "Phỏng vấn luyện tập — thân thiện, khuyến khích, đưa gợi ý nhỏ sau mỗi câu.",
-        "mock": "Phỏng vấn thử thực chiến — chuyên nghiệp, đánh giá nghiêm túc, không gợi ý.",
-        "quick": "Phỏng vấn nhanh — hỏi 3-4 câu trọng tâm, ngắn gọn, tập trung kỹ năng cốt lõi.",
-    }.get(mode, "Phỏng vấn tiêu chuẩn.")
-
-    return f"""Bạn là một chuyên gia phỏng vấn tuyển dụng người Việt, \
-đang phỏng vấn ứng viên cho vị trí **{job_title}**.
-
-## Phong cách
-- Nói bằng tiếng Việt tự nhiên, lịch sự, chuyên nghiệp.
-- Hỏi một câu tại một thời điểm. Không liệt kê nhiều câu cùng lúc.
-- Câu trả lời ngắn gọn (1-2 câu) khi nhận xét hoặc chuyển chủ đề.
-- Chế độ: {mode_instruction}
-- Thời lượng phỏng vấn: {duration_minutes} phút.
-
-## Thông tin ứng viên (CV)
-{cv_summary if cv_summary else "(Chưa có thông tin CV)"}
-
-## Mô tả vị trí (JD)
-{jd_summary if jd_summary else "(Chưa có JD — hỏi theo kỹ năng tổng quát cho vị trí)"}
-
-## Quy trình
-1. Bắt đầu bằng lời chào ngắn và câu hỏi giới thiệu bản thân.
-2. Đặt câu hỏi để lấy evidence cụ thể; dùng STAR cho câu hỏi hành vi/project, dùng trade-off/edge case/kiểm chứng cho câu hỏi kỹ thuật.
-3. Lắng nghe và đặt câu hỏi tiếp nối nếu câu trả lời chưa rõ.
-4. Khi hết thời gian, thông báo kết thúc lịch sự.
-
-Hãy bắt đầu phỏng vấn ngay bây giờ."""
-
-
-def _build_planned_system_prompt(
-    job_title: str,
-    cv_data: dict[str, Any],
-    jd_data: dict[str, Any] | None,
-    interview_plan: dict[str, Any] | None,
-    mode: str,
-    duration_minutes: int,
-) -> str:
-    """Compose the interviewer prompt with the precomputed plan attached."""
-    base_prompt = _build_system_prompt(
-        job_title=job_title,
-        cv_data=cv_data,
-        jd_data=jd_data,
-        interview_plan=interview_plan,
-        mode=mode,
-        duration_minutes=duration_minutes,
-    )
-    return (
-        f"{base_prompt}\n\n"
-        "## Interview plan / evaluation brief\n"
-        f"{plan_for_prompt(interview_plan or {})}\n\n"
-        "## Important operating rules\n"
-        "- Bám theo interview plan nhưng vẫn hỏi tự nhiên theo câu trả lời của ứng viên.\n"
-        "- Chỉ hỏi một câu tại một thời điểm.\n"
-        "- Không đọc điểm số hoặc kết luận tuyển dụng trong lúc phỏng vấn.\n"
-        "- Ưu tiên câu hỏi dựa trên CV, dự án, kinh nghiệm thật và yêu cầu JD nếu có.\n"
-    )
-
-
-def _build_system_prompt(
-    job_title: str,
-    cv_data: dict[str, Any],
-    jd_data: dict[str, Any] | None,
-    interview_plan: dict[str, Any] | None,
-    mode: str,
-    duration_minutes: int,
-) -> str:
     """Compose the final Vietnamese interviewer prompt for CV-first interviews."""
     cv_summary = cv_data.get("summary", "") or cv_data.get("raw_text", "")[:1200]
     jd_summary = ""
@@ -168,6 +95,7 @@ def _build_system_prompt(
     }.get(mode, "Phỏng vấn tiêu chuẩn, chuyên nghiệp, tập trung vào CV/JD.")
 
     return f"""Bạn là Senior Interviewer người Việt đang phỏng vấn ứng viên cho vị trí {job_title}.
+Xưng "tôi", gọi ứng viên là "anh" hoặc "chị" (không dùng "bạn", "em", hay "ông/bà").
 
 Mục tiêu phiên live:
 - Kiểm chứng năng lực thật trong CV, mức phù hợp với JD và khả năng trình bày evidence rõ ràng.

@@ -196,7 +196,7 @@ class InterviewService:
                 "focus_area": existing_scores.get("focus_area") or "",
             },
             logic_issues=behavior_issues,
-            improvement_suggestions=strengths + improvements,
+            improvement_suggestions=improvements,  # strengths stored separately in scorecard JSON
             completed_at=datetime.now(UTC),
         )
 

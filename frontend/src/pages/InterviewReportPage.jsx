@@ -178,8 +178,8 @@ const InterviewReportPage = () => {
                     )}
                 >
                     <div className="hero-progress-grid">
-                        <ProgressCard label="Điểm tổng quan" value={roundedConfidence} detail="Tín hiệu đánh giá chung." tone={scoreTone(roundedConfidence)} />
-                        <ProgressCard label="Độ ổn định phiên" value={roundedBehavior} detail="Tín hiệu trình duyệt và phiên." tone={scoreTone(roundedBehavior)} />
+                        <ProgressCard label="Điểm tổng quan" value={roundedConfidence} detail="Điểm tổng hợp từ LLM dựa trên STAR, CV-JD fit và transcript." tone={scoreTone(roundedConfidence)} />
+                        <ProgressCard label="Toàn vẹn phiên" value={roundedBehavior} detail="Đo qua: rời tab, màn hình phụ, ánh sáng và nhận diện khuôn mặt." tone={scoreTone(roundedBehavior)} />
                     </div>
                 </PageHero>
 
@@ -190,9 +190,9 @@ const InterviewReportPage = () => {
                 )}
 
                 <div className="metric-grid ui-section-gap-bottom">
-                    <MetricCard label="Điểm tổng quan" value={`${roundedConfidence}/100`} detail="Tín hiệu phỏng vấn chung" tone={scoreTone(roundedConfidence)} />
-                    <MetricCard label="Số lượt hỏi" value={total_questions || transcript.length || 0} detail="Bằng chứng đã ghi nhận" tone="brand" />
-                    <MetricCard label="Độ ổn định" value={`${roundedBehavior}/100`} detail="Tín hiệu phiên" tone={scoreTone(roundedBehavior)} />
+                    <MetricCard label="Điểm tổng quan" value={`${roundedConfidence}/100`} detail="LLM scorecard: STAR + CV-JD Fit" tone={scoreTone(roundedConfidence)} />
+                    <MetricCard label="Số lượt hỏi" value={total_questions || transcript.filter(t => t.role === 'candidate').length || 0} detail="Câu trả lời được đánh giá" tone="brand" />
+                    <MetricCard label="Toàn vẹn phiên" value={`${roundedBehavior}/100`} detail="Rời tab · màn hình phụ · camera" tone={scoreTone(roundedBehavior)} />
                     <MetricCard label="Ghi chú" value={logic_issues.length + improvement_suggestions.length} detail="Vấn đề và gợi ý" tone="ai" />
                 </div>
 
@@ -210,7 +210,7 @@ const InterviewReportPage = () => {
                         </AIResponsePanel>
                     </div>
 
-                    <Panel className="span-6" title="Tín hiệu phiên" subtitle="Chỉ dùng như dữ liệu hỗ trợ, không thay thế đánh giá của người thật.">
+                    <Panel className="span-6" title="Tín hiệu toàn vẹn phiên" subtitle="Ghi nhận từ: tab switching, màn hình phụ, camera (ánh sáng, khuôn mặt). Không phân tích ánh nhìn hay biểu cảm.">
                         {behavior_observations.length === 0 ? (
                             <EmptyState title="Không có cảnh báo" description="Không ghi nhận tín hiệu bất thường đáng chú ý trong phiên." />
                         ) : (
