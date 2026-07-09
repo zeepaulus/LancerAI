@@ -2,6 +2,17 @@
 .env
 .env.local
 .env.production
+frontend/.env*
+!frontend/.env.example
+
+# Git / local agent and review artifacts
+.git/
+.github/
+.agent/
+.agents/
+.design/
+tham_khao/
+mo_ta/
 
 # Python
 __pycache__/
@@ -23,6 +34,12 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+tests/
+test_chroma_*/
+test_chroma_tmp/
+test_with_real_cv.py
 
 # AI Model weights
 /models/
@@ -37,9 +54,12 @@ logs/
 
 # Frontend
 frontend/node_modules/
+frontend/dist/
 frontend/.next/
+frontend/.vite/
 
 # Data
 data/
 *.db
 *.sqlite3
+localhost/

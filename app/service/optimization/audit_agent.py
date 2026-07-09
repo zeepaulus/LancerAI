@@ -26,6 +26,25 @@ logger = logging.getLogger(__name__)
 _AUDIT_SYSTEM = """Bạn là chuyên gia kiểm duyệt CV, đảm bảo tính trung thực và không thổi phồng.
 Nhiệm vụ: Đánh giá từng nội dung viết lại — có trung thực và được hỗ trợ bởi CV gốc không?
 
+=== RUBRIC KIỂM DUYỆT CV (3 CẤP) ===
+
+"approved" — Đạt tất cả 3 điều kiện:
+  ✓ Mọi số liệu, công nghệ, tên dự án đều có gốc rõ ràng trong CV gốc
+  ✓ Câu viết lại rõ ràng hơn, có action verb mạnh hơn so với gốc
+  ✓ Không thêm thành tích, scope, hoặc impact mà gốc không đề cập
+
+"needs_revision" — Có ít nhất một trong các dấu hiệu sau:
+  ⚠ Thêm ước lượng số liệu không có cơ sở (VD: "giảm 30%" mà gốc không nêu con số)
+  ⚠ Nâng scope quá mức (VD: gốc là "feature nhỏ" → viết lại thành "hệ thống lớn")
+  ⚠ Dùng từ định tính không backed (VD: "dramatically improved", "significantly")
+  ⚠ Thay đổi vai trò: gốc "tham gia" → viết lại thành "lead/chủ trì"
+
+"rejected" — Bất kỳ một trong các vi phạm nghiêm trọng:
+  ✗ Bịa đặt con số không có trong CV gốc (VD: "tăng 40%" mà gốc không có số)
+  ✗ Thêm thành tích hoàn toàn mới không đề cập trong gốc
+  ✗ Tự nâng cấp công nghệ (VD: gốc dùng MySQL → viết lại thành distributed database)
+  ✗ Thay đổi thực chất nội dung, không chỉ cải thiện cách diễn đạt
+
 Trả về JSON hợp lệ:
 {
   "verdicts": [
@@ -33,16 +52,11 @@ Trả về JSON hợp lệ:
       "field": "experience[0].key_impacts[0]",
       "rewritten_text": "Nội dung đã viết lại",
       "original_text": "Nội dung gốc",
-      "issue": "Lý do nếu không được duyệt (để trống nếu approved)",
+      "issue": "Nêu cụ thể vi phạm rubric nào (để trống nếu approved)",
       "verdict": "approved|needs_revision|rejected"
     }
   ]
-}
-
-Tiêu chí:
-- "approved": Viết lại trung thực, rõ ràng hơn gốc, không bịa đặt.
-- "needs_revision": Cải thiện nhẹ nhưng có chi tiết chưa rõ nguồn gốc.
-- "rejected": Bịa đặt số liệu hoặc thành tích không có trong CV gốc."""
+}"""
 
 
 async def audit_agent(state: CVOptimizationState, llm: LLMConnector) -> dict[str, Any]:
@@ -141,11 +155,20 @@ Kiểm tra tính trung thực và trả về JSON:"""
             except Exception as parse_exc:
                 logger.warning("[audit_agent] Skipping malformed verdict: %s. Item was: %s", parse_exc, item)
 
-        # For rewrites that didn't get a verdict, auto-approve them
+        # For rewrites that didn't get a verdict, keep them out of the CV.
+        # Missing audit evidence is not enough to safely alter user content.
         audited_fields = {item.get("field") for item in verdicts_raw}
         for section in rewritten_sections:
             if section.field not in audited_fields:
-                approved_sections.append(section)
+                audit_flags.append(
+                    AuditFlag(
+                        field=section.field,
+                        rewritten_text=section.rewritten,
+                        original_text=section.original,
+                        issue="Không có verdict kiểm duyệt cho đoạn viết lại này.",
+                        verdict="needs_revision",
+                    )
+                )
 
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         logger.warning("[audit_agent] JSON parse failed (%s) — falling back to raw CV (no rewrites applied)", exc)
@@ -185,16 +208,16 @@ Kiểm tra tính trung thực và trả về JSON:"""
         "medium": 5.0,
         "low": 2.0
     }
-    
+
     # Identify which fields have approved rewrites
     approved_fields = {sec.field for sec in approved_sections}
-    
+
     # Calculate remaining penalties
     optimized_penalty = 0.0
     for issue in roast_issues:
         if issue.field not in approved_fields:
             optimized_penalty += severity_penalties.get(issue.severity, 5.0)
-            
+
     # Calculate optimized score (out of 100.0)
     optimized_score = max(0.0, min(100.0, 100.0 - optimized_penalty))
     overall_score = optimized_score / 100.0

@@ -4,22 +4,52 @@ import * as keys from '../config/storageKeys';
 /**
  * Chuẩn hóa thông báo lỗi FastAPI ({ detail: string | object }).
  */
+function sanitizeUserFacingMessage(message) {
+    const text = String(message || '').trim();
+    if (!text) return 'Yêu cầu chưa hoàn tất. Vui lòng thử lại.';
+
+    const lower = text.toLowerCase();
+    const technicalSignals = [
+        'traceback',
+        'sqlalchemy',
+        'database',
+        'backend',
+        'stack trace',
+        'attributeerror',
+        'keyerror',
+        'typeerror',
+        'cannot read',
+        'undefined',
+        'job_id',
+        'httpx',
+        'pydantic',
+        'internal server error',
+        'websocket',
+    ];
+
+    if (technicalSignals.some((signal) => lower.includes(signal))) {
+        return 'Yêu cầu chưa hoàn tất. Vui lòng kiểm tra dữ liệu và thử lại.';
+    }
+
+    return text;
+}
+
 export function detailToMessage(detail) {
     if (detail === undefined || detail === null) return 'Lỗi không xác định.';
-    if (typeof detail === 'string') return detail;
+    if (typeof detail === 'string') return sanitizeUserFacingMessage(detail);
     if (Array.isArray(detail)) {
         const parts = detail.map((e) =>
             typeof e?.msg === 'string' ? e.msg : JSON.stringify(e)
         );
-        return parts.join(' · ');
+        return sanitizeUserFacingMessage(parts.join(' · '));
     }
     if (typeof detail === 'object' && typeof detail.detail === 'string') {
-        return detail.detail;
+        return sanitizeUserFacingMessage(detail.detail);
     }
     try {
-        return JSON.stringify(detail);
+        return sanitizeUserFacingMessage(JSON.stringify(detail));
     } catch {
-        return 'Lỗi server.';
+        return 'Yêu cầu chưa hoàn tất. Vui lòng thử lại.';
     }
 }
 

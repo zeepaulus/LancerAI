@@ -78,6 +78,21 @@ class CVExtractionResponse(BaseModel):
     languages: list[str] = Field(default_factory=list)
 
 
+class CVRecordSummaryResponse(BaseModel):
+    """Compact CV row for the authenticated user's CV history."""
+
+    cv_id: str
+    filename: str
+    status: str = "extracted"
+    candidate_name: str = ""
+    audit_score: float | None = None
+    optimization_mode: str | None = None
+    has_analysis: bool = False
+    skills_count: int = 0
+    experience_count: int = 0
+    created_at: str = ""
+
+
 # --- Module 2: Optimization ---
 class CVOptimizationResponse(BaseModel):
     """Result of the multi-agent optimization pipeline."""
@@ -90,6 +105,7 @@ class CVOptimizationResponse(BaseModel):
     roast_summary: str | None = None
     roast_issues: list[dict[str, Any]] | None = None
     rewritten_sections: list[dict[str, Any]] | None = None
+    cv_scorecard: dict[str, Any] = Field(default_factory=dict)
 
 
 # --- Module 3: Matching ---
@@ -112,6 +128,25 @@ class JobMatchResponse(BaseModel):
     missing_skills: list[SkillGap] = Field(default_factory=list, description="Prioritized missing skills.")
 
 
+class JobListingResponse(BaseModel):
+    """Frontend-friendly public job listing row."""
+
+    job_id: str
+    title: str
+    company: str = ""
+    location: str = ""
+    salary_range: str = ""
+    source: str = ""
+    source_url: str = ""
+    description: str = ""
+    requirements: dict[str, Any] = Field(default_factory=dict)
+    skills: list[str] = Field(default_factory=list)
+    experience_level: str | None = None
+    job_type: str | None = None
+    crawled_at: str = ""
+    updated_at: str = ""
+
+
 class JobRecommendationResponse(BaseModel):
     """A recommended job listing based on CV match."""
 
@@ -131,9 +166,26 @@ class STARScore(BaseModel):
     result: float = Field(ge=0, le=10)
 
 
-class TranscriptTurn(BaseModel):
+class BehaviorObservationResponse(BaseModel):
+    kind: str
+    label: str
+    category: str
+    sentiment: str = "neutral"
+    severity: str = "info"
+    confidence: float = Field(default=0.5, ge=0, le=1)
+    count: int = 1
+    detail: str = ""
+    suggestion: str = ""
+
+
+class InterviewTranscriptResponse(BaseModel):
     role: str
     content: str
+    created_at: str = ""
+
+
+class TranscriptTurn(InterviewTranscriptResponse):
+    """Backward-compatible alias for older imports."""
 
 
 class InterviewReportResponse(BaseModel):
@@ -145,11 +197,15 @@ class InterviewReportResponse(BaseModel):
     star_scores: list[STARScore] = Field(default_factory=list)
     logic_issues: list[str] = Field(default_factory=list)
     improvement_suggestions: list[str] = Field(default_factory=list)
+    behavior_score: float = Field(default=100.0, ge=0, le=100)
+    behavior_observations: list[BehaviorObservationResponse] = Field(default_factory=list)
+    scorecard: dict[str, Any] = Field(default_factory=dict)
+    interview_plan: dict[str, Any] = Field(default_factory=dict)
+    transcript: list[InterviewTranscriptResponse] = Field(default_factory=list)
     created_at: str | None = None
     title: str | None = None
     focus_area: str | None = None
     status: str | None = None
-    transcript: list[TranscriptTurn] = Field(default_factory=list)
 
 
 class RenderedCVResponse(BaseModel):
@@ -166,3 +222,8 @@ class InterviewSessionResponse(BaseModel):
     cv_id: str
     mode: str
     status: str
+    room_name: str = ""
+    meeting_url: str = ""
+    job_title: str = ""
+    duration_minutes: int = 5
+    interview_plan: dict[str, Any] = Field(default_factory=dict)

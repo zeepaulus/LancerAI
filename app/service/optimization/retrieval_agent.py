@@ -49,6 +49,12 @@ async def retrieval_agent(
     """
     job_title = state.get("target_job_title", "Software Engineer")
     industry = state.get("target_industry", "technology")
+    if not str(job_title or "").strip():
+        return {
+            "industry_benchmarks": {},
+            "keyword_frequency_map": {},
+            "current_step": "retrieval_done",
+        }
 
     prompt = f"""Vị trí: {job_title}
 Ngành: {industry}
@@ -102,7 +108,7 @@ Cung cấp benchmark ngành và các từ khóa ATS quan trọng nhất cho vị
         }
 
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
-        logger.warning("[retrieval_agent] JSON parse failed (%s) — raw=%r", exc, raw[:200])
+        logger.warning("[retrieval_agent] JSON parse failed (%s); raw_length=%d", exc, len(raw or ""))
         return {
             "industry_benchmarks": {},
             "keyword_frequency_map": {},

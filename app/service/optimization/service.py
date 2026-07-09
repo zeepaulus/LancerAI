@@ -21,6 +21,7 @@ from app.repository.base_vector_repository import BaseVectorRepository
 from app.repository.graph_repository import GraphRepository
 from app.repository.relational_repository import RelationalRepository
 from app.schema.response import CVOptimizationResponse
+from app.service.cv_analysis.scorecard import build_cv_scorecard
 from app.service.optimization.graph import build_cv_optimization_graph
 
 logger = logging.getLogger(__name__)
@@ -76,10 +77,7 @@ class OptimizationService:
         initial_state: dict[str, Any] = {
             "cv_id": cv_id,
             "raw_cv_data": extracted_data,
-            "target_job_title": (
-                target_job_title
-                or extracted_data.get("personal_info", {}).get("title", "Software Engineer")
-            ),
+            "target_job_title": target_job_title.strip(),
             "target_industry": target_industry,
             "mode": mode,  # "standard" | "roast"
             # Initialise append-only lists to empty so reducers don't crash
@@ -105,11 +103,29 @@ class OptimizationService:
         optimized_cv: dict[str, Any] = final_state.get("optimized_cv") or extracted_data
         improvement_score: float = final_state.get("overall_improvement_score", 0.0)
 
-        # Convert to 0-100 audit_score (spec uses percentage)
-        audit_score = round(min(100.0, max(0.0, improvement_score * 100)), 1)
+        deterministic_scorecard = build_cv_scorecard(
+            optimized_cv,
+            target_job_title=initial_state["target_job_title"],
+            target_industry=target_industry,
+        )
+        deterministic_scorecard["pipeline_improvement_score"] = round(
+            min(100.0, max(0.0, improvement_score * 100)),
+            1,
+        )
+        audit_score = float(deterministic_scorecard["overall_score"])
 
         # 5. Persist optimized data back to CVRecord
         await self._cv_repo.update(session, cv_id, optimized_data=optimized_cv)
+        await session.commit()
+
+        # Persist new analytics columns (additive — does not affect existing logic)
+        await self._cv_repo.update(
+            session,
+            cv_id,
+            audit_score=audit_score,
+            optimization_mode=mode,
+            status="optimized",
+        )
         await session.commit()
 
         logger.info(
@@ -132,4 +148,5 @@ class OptimizationService:
                 sec.model_dump() if hasattr(sec, "model_dump") else dict(sec)
                 for sec in final_state.get("rewritten_sections", [])
             ] if final_state.get("rewritten_sections") is not None else None,
+            cv_scorecard=deterministic_scorecard,
         )

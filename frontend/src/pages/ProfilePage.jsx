@@ -1,147 +1,139 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Layout/Navbar';
+import { EmptyState, MetricCard, Page, PageHero, Panel, SkeletonRows, StatusBadge } from '../components/Common/AppUI';
+import { CandidateAvatar, ProductMockupGraphic } from '../components/Common/Visuals';
+import { getSessions } from '../api/interview';
+import * as keys from '../config/storageKeys';
+
+function formatDate(isoString) {
+    if (!isoString) return 'Chưa có ngày';
+    return new Date(isoString).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function averageScore(items) {
+    const scored = items.filter((item) => Number(item.overall_confidence) > 0);
+    if (!scored.length) return 0;
+    return Math.round(scored.reduce((sum, item) => sum + Number(item.overall_confidence || 0), 0) / scored.length);
+}
 
 const ProfilePage = () => {
-    const interviewHistory = [
-        { id: 'INT-001', name: 'Phỏng vấn Frontend Dev', date: '05/05/2026', note: 'Kỹ năng React tốt' },
-        { id: 'INT-002', name: 'Phỏng vấn Backend Nodejs', date: '01/05/2026', note: 'Cần ôn lại SQL' }
-    ];
-    const cvHistory = [];
+    const navigate = useNavigate();
+    const profile = JSON.parse(localStorage.getItem(keys.LANCERAI_USER_PROFILE) || '{}');
+    const displayName = profile.display_name || profile.email || 'Người dùng';
+    const [sessions, setSessions] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        setLoading(true);
+        getSessions()
+            .then((data) => {
+                if (active) setSessions(Array.isArray(data) ? data : []);
+            })
+            .catch(() => {
+                if (active) setSessions([]);
+            })
+            .finally(() => {
+                if (active) setLoading(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    const completedSessions = useMemo(() => sessions.filter((item) => item.status !== 'incomplete'), [sessions]);
+    const avgScore = averageScore(completedSessions);
 
     return (
-        <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
+        <div className="app-screen">
             <Navbar />
-            <div style={styles.container}>
-                {/* Profile header */}
-                <div style={styles.header}>
-                    <div style={styles.avatar}>A</div>
-                    <div>
-                        <h2 className="display-sm">Nguyễn Văn A</h2>
-                        <p style={{color: 'var(--muted)', fontSize: '14px', marginTop: 'var(--sp-xxs)'}}>Sinh viên IT</p>
+            <Page wide>
+                <PageHero
+                    kicker="Hồ sơ"
+                    title="Hồ sơ ứng viên"
+                    description="Tổng hợp phiên phỏng vấn, lịch sử CV, trạng thái so khớp việc làm và điểm báo cáo."
+                    visual={<ProductMockupGraphic variant="candidate" />}
+                    tone="ai"
+                    actions={<StatusBadge tone="ai">Hồ sơ cá nhân</StatusBadge>}
+                />
+
+                {sessions.length > 0 && (
+                    <div className="metric-grid ui-section-gap-bottom">
+                        <MetricCard label="Phiên phỏng vấn" value={sessions.length} detail="Dữ liệu từ tài khoản hiện tại" tone="brand" />
+                        <MetricCard label="Đã có báo cáo" value={completedSessions.length} detail="Phiên đã hoàn tất" tone="success" />
+                        <MetricCard label="Điểm trung bình" value={avgScore ? `${avgScore}/100` : 'Chưa có'} detail="Tính trên phiên đã đánh giá" tone="ai" />
                     </div>
+                )}
+
+                <div className="profile-summary-grid">
+                    <Panel title="Tài khoản" subtitle="Thông tin thật từ tài khoản đang đăng nhập.">
+                        <div className="team-card">
+                            <CandidateAvatar name={displayName} size={72} status="success" />
+                            <div className="team-card__body">
+                                <h2 className="title-md">{displayName}</h2>
+                                {profile.email && <p className="caption">{profile.email}</p>}
+                                {!profile.display_name && <p className="caption">Bạn có thể cập nhật tên hiển thị trong Cài đặt.</p>}
+                            </div>
+                        </div>
+                    </Panel>
+
+                    <Panel title="Hành động nhanh" subtitle="Các thao tác thường dùng trong hồ sơ.">
+                        <div className="review-list">
+                            {[
+                                ['Tải hoặc cập nhật CV', 'Chuẩn bị dữ liệu cho phân tích và so khớp', 'cv', '/cv-upload'],
+                                ['Tạo phiên phỏng vấn', 'Luyện theo vai trò mục tiêu', 'voice', '/interview'],
+                                ['Xem báo cáo', 'Đọc điểm và transcript của phiên đã hoàn tất', 'analytics', '/reports'],
+                            ].map(([label, description, tone, path]) => (
+                                <button type="button" className="review-card ui-card-button" key={label} onClick={() => navigate(path)}>
+                                    <div className="review-card__header">
+                                        <strong>{label}</strong>
+                                        <StatusBadge tone={tone}>Mở</StatusBadge>
+                                    </div>
+                                    <p className="caption">{description}</p>
+                                </button>
+                            ))}
+                        </div>
+                    </Panel>
                 </div>
 
-                {/* Interview History */}
-                <div style={styles.sectionHeader}>
-                    <p className="caption-uppercase" style={{color: 'var(--muted)'}}>LỊCH SỬ PHỎNG VẤN</p>
-                </div>
-                {interviewHistory.length > 0 ? (
-                    <div className="card" style={{overflow: 'hidden', padding: 0, marginBottom: 'var(--sp-xl)'}}>
-                        <table style={styles.table}>
-                            <thead>
-                                <tr>
-                                    <th style={styles.th}>ID</th>
-                                    <th style={styles.th}>Tên cuộc phỏng vấn</th>
-                                    <th style={styles.th}>Thời gian</th>
-                                    <th style={styles.th}>Ghi chú</th>
-                                    <th style={styles.th}>Xóa</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {interviewHistory.map(item => (
-                                    <tr key={item.id}>
-                                        <td style={styles.td}><span className="caption" style={{color: 'var(--muted)'}}>{item.id}</span></td>
-                                        <td style={styles.td}><span style={{color: 'var(--ink)', fontWeight: 500, cursor: 'pointer'}}>{item.name}</span></td>
-                                        <td style={styles.td}><span className="caption" style={{color: 'var(--muted)'}}>{item.date}</span></td>
-                                        <td style={styles.td}><span className="caption">{item.note}</span></td>
-                                        <td style={styles.td}>
-                                            <button style={styles.btnIcon} title="Xóa">🗑️</button>
-                                        </td>
+                <div className="dashboard-grid ui-section-gap">
+                    <Panel className="span-12" title="Lịch sử phỏng vấn" subtitle="Dữ liệu được tải theo tài khoản đang đăng nhập.">
+                        {loading ? (
+                            <SkeletonRows rows={5} />
+                        ) : sessions.length ? (
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Phiên</th>
+                                        <th>Ngày</th>
+                                        <th>Trạng thái</th>
+                                        <th>Điểm</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                ) : (
-                    <div style={styles.emptyMsg}>Bạn chưa thực hiện cuộc phỏng vấn nào!</div>
-                )}
-
-                {/* CV History */}
-                <div style={styles.sectionHeader}>
-                    <p className="caption-uppercase" style={{color: 'var(--muted)'}}>LỊCH SỬ ĐÁNH GIÁ CV</p>
+                                </thead>
+                                <tbody>
+                                    {sessions.map((item) => {
+                                        const score = Math.round(Number(item.overall_confidence || 0));
+                                        const done = item.status !== 'incomplete';
+                                        return (
+                                            <tr key={item.session_id}>
+                                                <td><strong>{item.title || 'Phiên phỏng vấn'}</strong></td>
+                                                <td>{formatDate(item.created_at)}</td>
+                                                <td><StatusBadge tone={done ? 'success' : 'warning'}>{done ? 'Đã đánh giá' : 'Chưa hoàn tất'}</StatusBadge></td>
+                                                <td>{score ? <StatusBadge tone={score >= 70 ? 'success' : score >= 50 ? 'warning' : 'danger'}>{score}/100</StatusBadge> : 'Chưa có'}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <EmptyState title="Chưa có phiên phỏng vấn" description="Tạo một phiên phỏng vấn để bắt đầu lưu lịch sử luyện tập." />
+                        )}
+                    </Panel>
                 </div>
-                {cvHistory.length > 0 ? (
-                    <div className="card" style={{overflow: 'hidden', padding: 0}}>
-                        <table style={styles.table}>...</table>
-                    </div>
-                ) : (
-                    <div style={styles.emptyMsg}>Chưa thực hiện đánh giá CV!</div>
-                )}
-            </div>
+            </Page>
         </div>
     );
-};
-
-const styles = {
-    container: {
-        padding: 'var(--sp-xl) var(--sp-lg)',
-        maxWidth: '1000px',
-        margin: '0 auto',
-    },
-    header: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--sp-lg)',
-        marginBottom: 'var(--sp-xxl)',
-    },
-    avatar: {
-        width: '72px',
-        height: '72px',
-        borderRadius: 'var(--rounded-full)',
-        backgroundColor: 'var(--surface-strong)',
-        color: 'var(--ink)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '28px',
-        fontFamily: 'var(--font-display)',
-        fontWeight: 300,
-        border: '2px solid var(--hairline)',
-    },
-    sectionHeader: {
-        marginBottom: 'var(--sp-base)',
-        paddingBottom: 'var(--sp-xs)',
-    },
-    table: {
-        width: '100%',
-        borderCollapse: 'collapse',
-        textAlign: 'left',
-    },
-    th: {
-        padding: 'var(--sp-sm) var(--sp-base)',
-        backgroundColor: 'var(--surface-strong)',
-        fontFamily: 'var(--font-body)',
-        fontSize: '12px',
-        fontWeight: 600,
-        letterSpacing: '0.96px',
-        textTransform: 'uppercase',
-        color: 'var(--muted)',
-        borderBottom: '1px solid var(--hairline)',
-    },
-    td: {
-        padding: 'var(--sp-sm) var(--sp-base)',
-        borderBottom: '1px solid var(--hairline-soft)',
-        fontSize: '14px',
-        color: 'var(--body)',
-    },
-    btnIcon: {
-        background: 'none',
-        border: 'none',
-        cursor: 'pointer',
-        fontSize: '14px',
-        padding: 'var(--sp-xxs)',
-        borderRadius: 'var(--rounded-sm)',
-        transition: 'background-color var(--transition-fast)',
-    },
-    emptyMsg: {
-        padding: 'var(--sp-lg)',
-        backgroundColor: 'var(--surface-strong)',
-        color: 'var(--muted)',
-        borderRadius: 'var(--rounded-xl)',
-        textAlign: 'center',
-        fontSize: '14px',
-        marginBottom: 'var(--sp-xl)',
-    },
 };
 
 export default ProfilePage;

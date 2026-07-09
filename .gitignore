@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.production
+# .env.production.example is tracked (template, no real secrets)
 
 # Python
 __pycache__/
@@ -81,8 +82,10 @@ frontend/.next/
 skills-lock.json
 
 # Local notes and agent tooling
+.agent/
 .agents/
 mo_ta/
+tham_khao/
 
 # Test CV and OCR files
 *.pdf

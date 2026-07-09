@@ -1,0 +1,192 @@
+# Production stack — chạy trên DigitalOcean droplet.
+# Dùng: docker compose -f docker-compose.prod.yml up -d
+#
+# Yêu cầu: tạo file .env (copy từ .env.example, điền thông tin thật)
+# Nginx lắng nghe port 80 (và 443 nếu bật SSL) và proxy đến backend:8000
+
+services:
+  # ─── Infrastructure ───────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: lancerai-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lancerai}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?err}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: lancerai-redis
+    restart: always
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  chromadb:
+    image: chromadb/chroma:1.5.8
+    container_name: lancerai-chromadb
+    restart: always
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+    networks:
+      - internal
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: lancerai-neo4j
+    restart: always
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/changeme}
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    volumes:
+      - neo4j_data:/data
+    networks:
+      - internal
+
+  # ─── Application ──────────────────────────────────────────────────────────
+
+  backend:
+    image: lancerai-backend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    container_name: lancerai-backend
+    restart: always
+    env_file: .env
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      LOG_TO_FILE: "false"
+      # Override localhost URLs to use Docker service names
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lancerai}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      VECTOR_DB_HOST: http://chromadb
+      VECTOR_DB_PORT: "8000"
+      NEO4J_URI: bolt://neo4j:7687
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      neo4j:
+        condition: service_started
+    networks:
+      - internal
+    volumes:
+      - uploads_data:/opt/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()\""]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  celery_worker:
+    image: lancerai-backend:latest
+    container_name: lancerai-celery
+    restart: always
+    command: ["uv", "run", "--no-sync", "celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "-P", "threads", "-c", "2"]
+    env_file: .env
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      LOG_TO_FILE: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-lancerai}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      VECTOR_DB_HOST: http://chromadb
+      VECTOR_DB_PORT: "8000"
+      NEO4J_URI: bolt://neo4j:7687
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - internal
+    volumes:
+      - uploads_data:/opt/app/uploads
+
+  frontend:
+    image: lancerai-frontend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend-prod
+      args:
+        VITE_API_BASE_URL: ""   # rỗng = dùng relative URL qua Nginx proxy
+    container_name: lancerai-frontend
+    restart: always
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: lancerai-nginx
+    restart: always
+    ports:
+      - "80:80"
+      # Terminate HTTPS at Cloudflare/load balancer, or add an SSL server block before exposing 443.
+      # - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  postgres_data:
+  redis_data:
+  chroma_data:
+  neo4j_data:
+  uploads_data:
+
+networks:
+  internal:
+    driver: bridge

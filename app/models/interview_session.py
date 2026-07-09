@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, CheckConstraint, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.models.base import Base
@@ -33,11 +33,15 @@ class InterviewSession(Base):
     )
 
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), server_default="completed", nullable=False)
     total_questions: Mapped[int] = mapped_column(Integer, default=0)
     overall_confidence: Mapped[float] = mapped_column(Float, default=0.0)
     star_scores: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     logic_issues: Mapped[list[str]] = mapped_column(JSON, default=list)
     improvement_suggestions: Mapped[list[str]] = mapped_column(JSON, default=list)
+    jd_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tts_voice: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

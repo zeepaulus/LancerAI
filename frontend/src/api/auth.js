@@ -1,4 +1,4 @@
-import { AUTH_LOGIN_PATH, AUTH_ME_PATH, AUTH_SIGNUP_PATH } from './paths';
+import { AUTH_LOGIN_PATH, AUTH_ME_PATH, AUTH_PASSWORD_PATH, AUTH_SIGNUP_PATH } from './paths';
 import { apiJson } from './http';
 
 /**
@@ -27,4 +27,18 @@ export function login({ identifier, password }) {
 /** GET `/api/v1/auth/me` — Bearer token required from localStorage */
 export function me() {
     return apiJson(AUTH_ME_PATH, { method: 'GET' });
+}
+
+export function updateMe({ display_name }) {
+    return apiJson(AUTH_ME_PATH, {
+        method: 'PATCH',
+        body: { display_name },
+    });
+}
+
+export function changePassword({ current_password, new_password }) {
+    return apiJson(AUTH_PASSWORD_PATH, {
+        method: 'PUT',
+        body: { current_password, new_password },
+    });
 }

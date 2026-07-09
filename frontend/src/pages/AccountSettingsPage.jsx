@@ -1,235 +1,233 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Layout/Navbar';
+import { Alert, Page, PageHero, Panel, StatusBadge } from '../components/Common/AppUI';
+import { changePassword, me, updateMe } from '../api/auth';
+import * as keys from '../config/storageKeys';
+
+const initialPasswordForm = {
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
+};
 
 const AccountSettingsPage = () => {
-    const [activeTab, setActiveTab] = useState('overview');
+    const [profile, setProfile] = useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem(keys.LANCERAI_USER_PROFILE) || '{}');
+        } catch {
+            return {};
+        }
+    });
+    const [displayName, setDisplayName] = useState(profile.display_name || '');
+    const [passwordForm, setPasswordForm] = useState(initialPasswordForm);
     const [showPassword, setShowPassword] = useState(false);
-    
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [countdown, setCountdown] = useState(5);
+    const [loadingProfile, setLoadingProfile] = useState(false);
+    const [savingProfile, setSavingProfile] = useState(false);
+    const [savingPassword, setSavingPassword] = useState(false);
+    const [profileMessage, setProfileMessage] = useState('');
+    const [passwordMessage, setPasswordMessage] = useState('');
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        let timer;
-        if (showDeleteModal && countdown > 0) {
-            timer = setInterval(() => setCountdown(c => c - 1), 1000);
-        }
-        return () => clearInterval(timer);
-    }, [showDeleteModal, countdown]);
+        let active = true;
+        setLoadingProfile(true);
+        me()
+            .then((data) => {
+                if (!active) return;
+                setProfile(data || {});
+                setDisplayName(data?.display_name || '');
+                localStorage.setItem(keys.LANCERAI_USER_PROFILE, JSON.stringify(data || {}));
+            })
+            .catch((err) => {
+                if (active) setError(err.message || 'Không thể tải hồ sơ tài khoản.');
+            })
+            .finally(() => {
+                if (active) setLoadingProfile(false);
+            });
+        return () => { active = false; };
+    }, []);
 
-    const tabs = [
-        { key: 'overview', label: 'Tổng quan' },
-        { key: 'contact', label: 'Thông tin liên lạc' },
-        { key: 'security', label: 'Tài khoản & Bảo mật' },
-    ];
+    const handleProfileSubmit = async (event) => {
+        event.preventDefault();
+        setError('');
+        setProfileMessage('');
+        const cleaned = displayName.trim();
+        if (!cleaned) {
+            setError('Vui lòng nhập họ tên hiển thị.');
+            return;
+        }
+
+        setSavingProfile(true);
+        try {
+            const updated = await updateMe({ display_name: cleaned });
+            setProfile(updated || {});
+            setDisplayName(updated?.display_name || cleaned);
+            localStorage.setItem(keys.LANCERAI_USER_PROFILE, JSON.stringify(updated || {}));
+            setProfileMessage('Đã cập nhật hồ sơ.');
+        } catch (err) {
+            setError(err.message || 'Không thể cập nhật hồ sơ.');
+        } finally {
+            setSavingProfile(false);
+        }
+    };
+
+    const handlePasswordSubmit = async (event) => {
+        event.preventDefault();
+        setError('');
+        setPasswordMessage('');
+        if (passwordForm.new_password !== passwordForm.confirm_password) {
+            setError('Mật khẩu mới và xác nhận mật khẩu chưa khớp.');
+            return;
+        }
+        if (passwordForm.new_password.length < 8) {
+            setError('Mật khẩu mới cần có ít nhất 8 ký tự.');
+            return;
+        }
+
+        setSavingPassword(true);
+        try {
+            await changePassword({
+                current_password: passwordForm.current_password,
+                new_password: passwordForm.new_password,
+            });
+            setPasswordForm(initialPasswordForm);
+            setPasswordMessage('Đã đổi mật khẩu.');
+        } catch (err) {
+            setError(err.message || 'Không thể đổi mật khẩu.');
+        } finally {
+            setSavingPassword(false);
+        }
+    };
+
+    const initials = (profile.display_name || profile.email || 'Người dùng')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join('') || 'U';
 
     return (
-        <div style={{backgroundColor: 'var(--canvas)', minHeight: '100vh'}}>
+        <div className="app-screen">
             <Navbar />
-            <div style={styles.container}>
-                <h2 className="display-sm" style={{marginBottom: 'var(--sp-xl)'}}>Quản lý tài khoản</h2>
+            <Page wide>
+                <PageHero
+                    kicker="Cài đặt"
+                    title="Tài khoản"
+                    description="Quản lý tên hiển thị trong LancerAI và đổi mật khẩu khi cần."
+                    actions={<StatusBadge tone="settings">Tài khoản người dùng</StatusBadge>}
+                    tone="settings"
+                />
 
-                {/* Tabs */}
-                <div style={styles.tabHeader}>
-                    {tabs.map(tab => (
-                        <button
-                            key={tab.key}
-                            style={{
-                                ...styles.tabBtn,
-                                color: activeTab === tab.key ? 'var(--ink)' : 'var(--muted)',
-                                borderBottom: activeTab === tab.key ? '2px solid var(--ink)' : '2px solid transparent',
-                                fontWeight: activeTab === tab.key ? 500 : 400,
-                            }}
-                            onClick={() => setActiveTab(tab.key)}
-                        >
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
+                {error && (
+                    <div className="ui-section-gap-bottom">
+                        <Alert tone="danger" title="Cần kiểm tra cài đặt">{error}</Alert>
+                    </div>
+                )}
 
-                {/* TAB 1: TỔNG QUAN */}
-                {activeTab === 'overview' && (
-                    <div>
-                        <div style={styles.avatarRow}>
-                            <div style={styles.avatarCircle}></div>
+                <div className="dashboard-grid">
+                    <Panel className="span-5" title="Hồ sơ hiện tại" subtitle="Thông tin đang được lưu trong tài khoản.">
+                        <div className="settings-profile-card">
+                            <span className="lancer-avatar settings-profile-avatar">{initials}</span>
                             <div>
-                                <button className="btn-outline" style={{fontSize: '13px', padding: '6px 14px', height: '32px'}}>Upload avatar</button>
-                                <p style={{fontSize: '12px', color: 'var(--muted-soft)', marginTop: 'var(--sp-xxs)'}}>Max size: 2MB. Formats: JPG, PNG.</p>
+                                <strong>{profile.display_name || 'Chưa đặt tên'}</strong>
+                                <p>{profile.email || 'Chưa có email'}</p>
                             </div>
                         </div>
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Tên người dùng <span style={styles.req}>*</span></label>
-                            <input className="text-input" />
+                        <div className="settings-profile-meta">
+                            <span>Vai trò</span>
+                            <strong>{profile.role || 'user'}</strong>
+                            <span>Trạng thái</span>
+                            <strong>{loadingProfile ? 'Đang tải' : 'Đã đồng bộ'}</strong>
                         </div>
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Họ và tên <span style={styles.req}>*</span></label>
-                            <input className="text-input" />
-                        </div>
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Tiểu sử</label>
-                            <textarea className="text-input" style={{height: '80px'}} />
-                        </div>
-                        <div style={styles.formGroup}>
-                            <label style={styles.label}>Địa chỉ email <span style={styles.req}>*</span></label>
-                            <input className="text-input" type="email" />
-                        </div>
-                        <button className="btn-primary">Lưu thay đổi</button>
-                    </div>
-                )}
+                    </Panel>
 
-                {/* TAB 2: LIÊN LẠC */}
-                {activeTab === 'contact' && (
-                    <div>
-                        {['Nơi làm việc hiện tại', 'Số điện thoại', 'Tên Github', 'Tên Linkedin'].map(label => (
-                            <div style={styles.formGroup} key={label}>
-                                <label style={styles.label}>{label}</label>
-                                <input className="text-input" />
+                    <Panel className="span-7" title="Thông tin hồ sơ" subtitle="Cập nhật tên hiển thị trên dashboard, báo cáo và phần chuẩn bị phỏng vấn.">
+                        <form className="ui-stack" onSubmit={handleProfileSubmit}>
+                            <label htmlFor="settings-full-name" className="ui-field">
+                                <span>Họ tên hiển thị</span>
+                                <input
+                                    id="settings-full-name"
+                                    className="text-input"
+                                    value={displayName}
+                                    onChange={(event) => setDisplayName(event.target.value)}
+                                    autoComplete="name"
+                                />
+                            </label>
+                            <label htmlFor="settings-email" className="ui-field">
+                                <span>Email</span>
+                                <input
+                                    id="settings-email"
+                                    className="text-input"
+                                    value={profile.email || ''}
+                                    readOnly
+                                    aria-describedby="settings-email-note"
+                                />
+                            </label>
+                            <p id="settings-email-note" className="caption">Email dùng để đăng nhập và chưa thể chỉnh sửa trong phiên bản này.</p>
+                            <div className="ui-cluster">
+                                <button className="btn-primary" type="submit" disabled={savingProfile}>
+                                    {savingProfile ? 'Đang lưu...' : 'Lưu hồ sơ'}
+                                </button>
+                                {profileMessage && <StatusBadge tone="success">{profileMessage}</StatusBadge>}
                             </div>
-                        ))}
-                        <button className="btn-primary">Lưu thay đổi</button>
-                    </div>
-                )}
+                        </form>
+                    </Panel>
 
-                {/* TAB 3: BẢO MẬT */}
-                {activeTab === 'security' && (
-                    <div>
-                        <h3 className="title-sm" style={{marginBottom: 'var(--sp-base)'}}>Thay đổi mật khẩu</h3>
-                        {['Mật khẩu hiện tại', 'Mật khẩu mới', 'Xác nhận mật khẩu mới'].map((label, i) => (
-                            <div style={styles.formGroup} key={i}>
-                                <label style={styles.label}>{label}</label>
-                                <div style={styles.pwdWrapper}>
-                                    <input className="text-input" type={showPassword ? "text" : "password"} />
-                                    <span style={styles.eyeIcon} onClick={() => setShowPassword(!showPassword)}>
-                                        {showPassword ? '🙈' : '👁️'}
-                                    </span>
-                                </div>
+                    <Panel className="span-12" title="Mật khẩu" subtitle="Đổi mật khẩu tài khoản. LancerAI không hiển thị dữ liệu nội bộ hay tham số AI tại đây.">
+                        <form className="settings-password-grid" onSubmit={handlePasswordSubmit}>
+                            <PasswordField
+                                id="current-password"
+                                label="Mật khẩu hiện tại"
+                                value={passwordForm.current_password}
+                                show={showPassword}
+                                autoComplete="current-password"
+                                onChange={(value) => setPasswordForm((prev) => ({ ...prev, current_password: value }))}
+                            />
+                            <PasswordField
+                                id="new-password"
+                                label="Mật khẩu mới"
+                                value={passwordForm.new_password}
+                                show={showPassword}
+                                autoComplete="new-password"
+                                onChange={(value) => setPasswordForm((prev) => ({ ...prev, new_password: value }))}
+                            />
+                            <PasswordField
+                                id="confirm-password"
+                                label="Xác nhận mật khẩu mới"
+                                value={passwordForm.confirm_password}
+                                show={showPassword}
+                                autoComplete="new-password"
+                                onChange={(value) => setPasswordForm((prev) => ({ ...prev, confirm_password: value }))}
+                            />
+                            <div className="settings-password-actions">
+                                <button className="btn-outline" type="button" onClick={() => setShowPassword((value) => !value)}>
+                                    {showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                                </button>
+                                <button className="btn-primary" type="submit" disabled={savingPassword}>
+                                    {savingPassword ? 'Đang lưu...' : 'Lưu mật khẩu'}
+                                </button>
+                                {passwordMessage && <StatusBadge tone="success">{passwordMessage}</StatusBadge>}
                             </div>
-                        ))}
-                        <button className="btn-primary">Lưu mật khẩu</button>
-
-                        <div style={styles.divider}></div>
-                        
-                        <h3 className="title-sm" style={{color: 'var(--semantic-error)', marginBottom: 'var(--sp-sm)'}}>Xóa tài khoản</h3>
-                        <p style={{color: 'var(--muted)', fontSize: '14px', marginBottom: 'var(--sp-base)', lineHeight: 1.6}}>
-                            Nếu bạn xóa tài khoản, bạn sẽ mất quyền truy cập vĩnh viễn vào tài khoản này mà không có cách nào khôi phục. Dữ liệu cá nhân và tiến trình của bạn sẽ bị mất.
-                        </p>
-                        <button className="btn-danger" onClick={() => {setShowDeleteModal(true); setCountdown(5);}}>
-                            Xóa tài khoản
-                        </button>
-                    </div>
-                )}
-            </div>
-
-            {/* MODAL XÓA TÀI KHOẢN */}
-            {showDeleteModal && (
-                <div style={styles.modalOverlay}>
-                    <div style={styles.modalBox}>
-                        <h3 className="title-md" style={{marginBottom: 'var(--sp-sm)'}}>Xóa tài khoản?</h3>
-                        <p style={{color: 'var(--muted)', marginBottom: 'var(--sp-xl)', fontSize: '14px'}}>Hành động này không thể hoàn tác!</p>
-                        <div style={{display: 'flex', gap: 'var(--sp-sm)', justifyContent: 'center'}}>
-                            <button
-                                className="btn-danger"
-                                disabled={countdown > 0}
-                                style={countdown > 0 ? {opacity: 0.4, cursor: 'not-allowed'} : {}}
-                            >
-                                Có {countdown > 0 ? `(${countdown}s)` : ''}
-                            </button>
-                            <button className="btn-outline" onClick={() => setShowDeleteModal(false)}>
-                                Không
-                            </button>
-                        </div>
-                    </div>
+                        </form>
+                    </Panel>
                 </div>
-            )}
+            </Page>
         </div>
     );
 };
 
-const styles = {
-    container: {
-        maxWidth: '800px',
-        margin: '0 auto',
-        padding: 'var(--sp-xl) var(--sp-lg)',
-    },
-    tabHeader: {
-        display: 'flex',
-        borderBottom: '1px solid var(--hairline)',
-        marginBottom: 'var(--sp-xl)',
-        gap: 'var(--sp-xxs)',
-    },
-    tabBtn: {
-        padding: 'var(--sp-sm) var(--sp-base)',
-        cursor: 'pointer',
-        border: 'none',
-        background: 'none',
-        fontFamily: 'var(--font-body)',
-        fontSize: '15px',
-        transition: 'all var(--transition-fast)',
-    },
-    avatarRow: {
-        display: 'flex',
-        gap: 'var(--sp-lg)',
-        alignItems: 'center',
-        marginBottom: 'var(--sp-xl)',
-    },
-    avatarCircle: {
-        width: '56px',
-        height: '56px',
-        borderRadius: 'var(--rounded-full)',
-        backgroundColor: 'var(--surface-strong)',
-        border: '2px solid var(--hairline)',
-    },
-    formGroup: {
-        marginBottom: 'var(--sp-base)',
-    },
-    label: {
-        display: 'block',
-        marginBottom: 'var(--sp-xs)',
-        fontWeight: 500,
-        fontSize: '14px',
-        color: 'var(--body-strong, var(--ink))',
-    },
-    req: {
-        color: 'var(--semantic-error)',
-    },
-    pwdWrapper: {
-        position: 'relative',
-    },
-    eyeIcon: {
-        position: 'absolute',
-        right: 'var(--sp-sm)',
-        top: '12px',
-        cursor: 'pointer',
-        fontSize: '16px',
-    },
-    divider: {
-        height: '1px',
-        backgroundColor: 'var(--hairline)',
-        margin: 'var(--sp-xxl) 0',
-    },
-    modalOverlay: {
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0,0,0,0.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        backdropFilter: 'blur(4px)',
-    },
-    modalBox: {
-        backgroundColor: 'var(--surface-card)',
-        color: 'var(--ink)',
-        padding: 'var(--sp-xl)',
-        borderRadius: 'var(--rounded-xl)',
-        textAlign: 'center',
-        width: '400px',
-        maxWidth: '90%',
-        border: '1px solid var(--hairline)',
-        boxShadow: 'var(--shadow-dropdown)',
-    },
-};
+const PasswordField = ({ id, label, value, onChange, show, autoComplete }) => (
+    <label htmlFor={id} className="ui-field">
+        <span>{label}</span>
+        <input
+            id={id}
+            className="text-input"
+            type={show ? 'text' : 'password'}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            autoComplete={autoComplete}
+        />
+    </label>
+);
 
 export default AccountSettingsPage;

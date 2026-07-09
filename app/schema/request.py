@@ -32,6 +32,19 @@ class AuthLoginRequest(BaseModel):
     password: str = Field(..., min_length=8)
 
 
+class UserProfileUpdateRequest(BaseModel):
+    """Payload for updating the current user's visible profile."""
+
+    display_name: str = Field(..., min_length=1, max_length=120)
+
+
+class PasswordChangeRequest(BaseModel):
+    """Payload for changing the current user's password."""
+
+    current_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
 class CVUploadRequest(BaseModel):
     """Metadata accompanying a CV file upload."""
 
@@ -70,6 +83,17 @@ class InterviewSessionRequest(BaseModel):
 
     cv_id: str = Field(..., description="CV to use as interview context.")
     job_listing_id: str | None = Field(default=None, description="Optional JD to tailor the interview.")
+    job_title: str | None = Field(
+        default=None,
+        max_length=160,
+        description="Optional target role for CV-only interviews.",
+    )
+    jd_text: str | None = Field(
+        default=None,
+        max_length=12000,
+        description="Optional pasted JD text for this interview.",
+    )
+    jd_url: str | None = Field(default=None, max_length=500, description="Optional JD source URL for context/audit.")
     mode: Literal["practice", "mock", "quick"] = Field(
         default="practice",
         description="Interview mode: 'practice' (coaching), 'mock' (realistic), or 'quick' (fast-paced).",

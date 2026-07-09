@@ -1,4 +1,4 @@
-import { EXTRACTION_UPLOAD_PATH, extractionCvPath } from './paths';
+import { EXTRACTION_CVS_PATH, EXTRACTION_UPLOAD_PATH, extractionCvPath } from './paths';
 import { API_BASE_URL } from '../config/env';
 import * as keys from '../config/storageKeys';
 import { apiJson } from './http';
@@ -39,4 +39,13 @@ export async function uploadCV(file) {
  */
 export function getCV(cvId) {
     return apiJson(extractionCvPath(cvId), { method: 'GET' });
+}
+
+export function getCVHistory(params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') query.set(key, value);
+    });
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return apiJson(`${EXTRACTION_CVS_PATH}${suffix}`, { method: 'GET' });
 }

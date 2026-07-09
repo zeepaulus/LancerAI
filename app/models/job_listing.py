@@ -27,9 +27,12 @@ class JobListing(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     requirements: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     salary_range: Mapped[str] = mapped_column(String(100), default="")
+    experience_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    job_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     crawled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     job_matches = relationship("JobMatchResult", back_populates="job_listing", lazy="noload")
     interview_sessions = relationship("InterviewSession", back_populates="job_listing", lazy="noload")

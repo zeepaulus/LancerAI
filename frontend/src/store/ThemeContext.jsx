@@ -1,29 +1,16 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 
-// 1. Tạo Context
 const ThemeContext = createContext();
 
-// 2. Tạo Provider để bọc ứng dụng
 export const ThemeProvider = ({ children }) => {
-    // Kiểm tra xem trước đó người dùng có lưu chế độ tối không
-    const [isDarkMode, setIsDarkMode] = useState(() => {
-        return localStorage.getItem('theme') === 'dark';
-    });
+    const [isDarkMode] = useState(true);
 
-    // Mỗi khi isDarkMode thay đổi, cập nhật giao diện và lưu lại
     useEffect(() => {
-        if (isDarkMode) {
-            document.documentElement.setAttribute('data-theme', 'dark');
-            localStorage.setItem('theme', 'dark');
-        } else {
-            document.documentElement.removeAttribute('data-theme');
-            localStorage.setItem('theme', 'light');
-        }
-    }, [isDarkMode]);
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+    }, []);
 
-    const toggleDarkMode = () => {
-        setIsDarkMode((prevMode) => !prevMode);
-    };
+    const toggleDarkMode = () => {};
 
     return (
         <ThemeContext.Provider value={{ isDarkMode, toggleDarkMode }}>
@@ -32,5 +19,4 @@ export const ThemeProvider = ({ children }) => {
     );
 };
 
-// 3. Tạo Custom Hook để sử dụng cho tiện
 export const useTheme = () => useContext(ThemeContext);

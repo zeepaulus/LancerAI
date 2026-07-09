@@ -8,6 +8,8 @@ stored on ``CVRecord``. Vector embeddings are pushed to ``vector_repository``
 so later modules (matching, retrieval agent) can run RAG.
 """
 
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import json
@@ -49,7 +51,7 @@ Không bọc trong markdown. Không giải thích. Chỉ trả về JSON thuần
 - **personal_info.location**: Thành phố / quốc gia.
 - **education**: Mỗi entry = 1 trường/chương trình. period = "Jan 2020 - Dec 2024" hoặc tương tự.
 - **experience**: Mỗi entry = 1 vị trí. descriptions = mô tả chi tiết (bullet points). key_impacts = thành tựu đo lường được. tech_stack = công nghệ sử dụng.
-- **projects**: Mỗi dự án cá nhân/nhóm. potential_roast_points = điểm yếu tiềm ẩn.
+- **projects**: Mỗi dự án cá nhân/nhóm. potential_roast_points chỉ ghi điểm cần kiểm tra khi có bằng chứng rõ trong CV; không suy đoán lỗi.
 - **skills_matrix.languages**: Ngôn ngữ LẬP TRÌNH (Python, Java, ...). KHÔNG phải ngôn ngữ giao tiếp.
 - **skills_matrix.frameworks**: React, FastAPI, Django, ...
 - **skills_matrix.tools**: Git, Docker, AWS, ...
@@ -202,6 +204,25 @@ class ExtractionService:
         results = await self._cv_repo.filter_by(session, id=cv_id, user_id=user_id)
         return results[0] if results else None
 
+    async def list_user_cvs(
+        self,
+        session: AsyncSession,
+        user_id: str,
+        limit: int = 50,
+    ) -> list[CVRecord]:
+        """Return recent CV records owned by the given user."""
+        from sqlalchemy import select
+
+        safe_limit = max(1, min(int(limit or 50), 100))
+        stmt = (
+            select(CVRecord)
+            .where(CVRecord.user_id == user_id)
+            .order_by(CVRecord.created_at.desc())
+            .limit(safe_limit)
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -264,7 +285,7 @@ class ExtractionService:
         llm_response = await self._llm.generate(
             prompt,
             system=_CV_EXTRACTION_SYSTEM,
-            use_cloud=bool(self._llm._cloud_api_key),
+            use_cloud=self._llm.has_cloud,
             json_mode=True,
         )
 
@@ -279,7 +300,7 @@ class ExtractionService:
                 retry_response = await self._llm.generate(
                     prompt,
                     system=_CV_EXTRACTION_RETRY_SYSTEM,
-                    use_cloud=bool(self._llm._cloud_api_key),
+                    use_cloud=self._llm.has_cloud,
                     json_mode=True,
                 )
                 retry_extraction = _parse_extraction_response(retry_response, "pending")

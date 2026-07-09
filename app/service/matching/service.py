@@ -11,11 +11,14 @@ deterministic keyword scoring and stay on the CPU.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import math
 import re
+import socket
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +29,7 @@ from app.repository.base_vector_repository import BaseVectorRepository
 from app.repository.graph_repository import GraphRepository
 from app.repository.relational_repository import RelationalRepository
 from app.schema.response import JobMatchResponse, JobRecommendationResponse, SkillGap
+from app.service.cv_analysis.scorecard import build_cv_scorecard
 
 logger = logging.getLogger(__name__)
 
@@ -110,13 +114,10 @@ class MatchingService:
         # 4. Semantic score (50%)
         sem_score = await self._semantic_score(cv_flat_text, jd_text)
 
-        # 5. Overall weighted score (0-100)
-        overall = (
-            WEIGHT_FREQUENCY * freq_score
-            + WEIGHT_POSITION * pos_score
-            + WEIGHT_SEMANTIC * sem_score
-        ) * 100
-        overall = round(min(100.0, max(0.0, overall)), 1)
+        # 5. Overall weighted score (0-100). If semantic embeddings are
+        # unavailable, renormalize across deterministic components instead of
+        # turning infrastructure failure into a candidate penalty.
+        overall = _weighted_match_score(freq_score, pos_score, sem_score)
 
         # 6. LLM feedback
         missing_skills, improvement_feedback = await self._llm_feedback(cv_data, jd_text)
@@ -154,7 +155,7 @@ class MatchingService:
             overall_score=overall,
             frequency_score=round(freq_score * 100, 1),
             position_score=round(pos_score * 100, 1),
-            semantic_score=round(sem_score * 100, 1),
+            semantic_score=round((sem_score or 0.0) * 100, 1),
             improvement_feedback=improvement_feedback,
             missing_skills=missing_skills,
         )
@@ -199,6 +200,34 @@ class MatchingService:
             )
 
         return recommendations
+
+    async def save_match_result(
+        self,
+        session: AsyncSession,
+        user_id: str,
+        cv_id: str,
+        result: JobMatchResponse,
+        job_id: str | None = None,
+    ) -> None:
+        """Persist a match result with component scores to job_match_results.
+
+        Called automatically after match_cv_to_jd so component scores are
+        never lost. job_id is None for manual JD-text matches.
+        """
+        await self._job_repo.create(
+            session,
+            user_id=user_id,
+            cv_id=cv_id,
+            job_id=job_id,
+            match_score=round(result.overall_score / 100.0, 4),
+            frequency_score=round(result.frequency_score / 100.0, 4),
+            position_score=round(result.position_score / 100.0, 4),
+            semantic_score=round(result.semantic_score / 100.0, 4),
+            matching_rationale={"improvement_feedback": result.improvement_feedback},
+            missing_skills=[s.skill_name for s in result.missing_skills],
+            status=MatchStatus.RECOMMENDED,
+        )
+        await session.commit()
 
     async def save_job(
         self,
@@ -252,15 +281,15 @@ class MatchingService:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _semantic_score(self, cv_text: str, jd_text: str) -> float:
+    async def _semantic_score(self, cv_text: str, jd_text: str) -> float | None:
         """Compute cosine similarity between CV and JD embeddings."""
         cv_embed, jd_embed = await asyncio.gather(
             self._llm.embed(cv_text[:2000]),
             self._llm.embed(jd_text[:2000]),
         )
         if not cv_embed or not jd_embed or len(cv_embed) != len(jd_embed):
-            logger.warning("[Matching] Embedding unavailable or dimension mismatch — semantic score defaulting to 0.0")
-            return 0.0  # fail-safe: no free points when embedding is broken
+            logger.warning("[Matching] Embedding unavailable or dimension mismatch; semantic score excluded from overall")
+            return None
         return _cosine_similarity(cv_embed, jd_embed)
 
     async def _llm_feedback(
@@ -294,19 +323,73 @@ Phân tích kỹ năng còn thiếu và đưa ra phản hồi cải thiện:"""
 
             data: dict[str, Any] = json.loads(raw)
             missing_skills: list[SkillGap] = [
-                SkillGap(**item) for item in data.get("missing_skills", [])
+                _normalise_skill_gap(item) for item in data.get("missing_skills", []) if isinstance(item, dict)
             ]
-            feedback: str = data.get("improvement_feedback", "")
+            feedback: str = str(data.get("improvement_feedback", "") or "").strip()
+            if not feedback:
+                feedback = _fallback_match_feedback(cv_data, jd_text, missing_skills)
             return missing_skills, feedback
 
         except Exception as exc:
-            logger.warning("[Matching] LLM feedback failed (%s) — raw=%r", exc, raw[:200])
-            return [], ""
+            logger.warning("[Matching] LLM feedback failed (%s); raw_length=%d", exc, len(raw or ""))
+            gaps = _deterministic_skill_gaps(cv_data, jd_text)
+            return gaps, _fallback_match_feedback(cv_data, jd_text, gaps)
 
 
 # ------------------------------------------------------------------
 # Deterministic scoring helpers (CPU-only, no LLM)
 # ------------------------------------------------------------------
+
+
+def _weighted_match_score(freq_score: float, pos_score: float, sem_score: float | None) -> float:
+    components: list[tuple[float, float]] = [
+        (freq_score, WEIGHT_FREQUENCY),
+        (pos_score, WEIGHT_POSITION),
+    ]
+    if sem_score is not None:
+        components.append((sem_score, WEIGHT_SEMANTIC))
+
+    total_weight = sum(weight for _score, weight in components)
+    if total_weight <= 0:
+        return 0.0
+    weighted = sum(max(0.0, min(1.0, score)) * weight for score, weight in components) / total_weight
+    return round(min(100.0, max(0.0, weighted * 100)), 1)
+
+
+def _normalise_skill_gap(item: dict[str, Any]) -> SkillGap:
+    impact = str(item.get("impact_level", "") or "").lower()
+    if "critical" in impact:
+        impact_level = "critical"
+    elif "nice" in impact or "optional" in impact:
+        impact_level = "nice_to_have"
+    else:
+        impact_level = "important"
+    return SkillGap(
+        skill_name=str(item.get("skill_name", "") or "").strip() or "Skill gap",
+        impact_level=impact_level,
+        reason=str(item.get("reason", "") or "").strip(),
+    )
+
+
+def _deterministic_skill_gaps(cv_data: dict[str, Any], jd_text: str) -> list[SkillGap]:
+    scorecard = build_cv_scorecard(cv_data, jd_data={"description": jd_text})
+    gaps: list[SkillGap] = []
+    for index, skill in enumerate(scorecard.get("missing_skills", [])[:6]):
+        gaps.append(
+            SkillGap(
+                skill_name=str(skill),
+                impact_level="critical" if index < 2 else "important",
+                reason="JD có đề cập kỹ năng này nhưng CV chưa thể hiện rõ.",
+            )
+        )
+    return gaps
+
+
+def _fallback_match_feedback(cv_data: dict[str, Any], jd_text: str, gaps: list[SkillGap]) -> str:
+    if gaps:
+        skills = ", ".join(gap.skill_name for gap in gaps[:4])
+        return f"Đã so khớp CV với JD bằng quy tắc xác định. Nên bổ sung bằng chứng liên quan đến: {skills}."
+    return "Đã so khớp CV với JD bằng quy tắc xác định. Chưa phát hiện khoảng trống kỹ năng lớn; hãy kiểm tra lại các mô tả impact trước khi ứng tuyển."
 
 
 
@@ -406,20 +489,83 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 async def _fetch_jd_from_url(url: str) -> str:
     """Fetch and return plain text from a JD URL (best-effort)."""
+    if not _is_public_http_url(url):
+        logger.warning("[Matching] Refusing unsafe JD URL: %r", url)
+        return ""
+
+    # 1. Try Jina Reader API first (handles JS rendering, anti-bot bypass)
+    jina_url = f"https://r.jina.ai/{url}"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            headers = {"Accept": "text/plain"}
+            resp = await client.get(jina_url, headers=headers)
+            if resp.status_code == 200 and resp.text:
+                return resp.text[:12000]
+    except Exception as exc:
+        logger.warning("[Matching] Jina Reader failed for %r: %s. Trying direct request...", url, exc)
+
+    # 2. Fallback to direct requests + BeautifulSoup
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, follow_redirects=True)
+            resp = await client.get(url, follow_redirects=False)
             resp.raise_for_status()
-            # Use BeautifulSoup for correct HTML→text (handles script/style/entities)
             from bs4 import BeautifulSoup  # noqa: PLC0415
 
             soup = BeautifulSoup(resp.text, "html.parser")
-            # Remove script and style blocks entirely
             for tag in soup(["script", "style"]):
                 tag.decompose()
             text = soup.get_text(separator=" ")
             text = re.sub(r"\s+", " ", text).strip()
             return text[:8000]
-    except httpx.RequestError as exc:
-        logger.warning("[Matching] Failed to fetch JD URL %r: %s", url, exc)
+    except httpx.HTTPError as exc:
+        logger.warning("[Matching] Failed to fetch JD URL %r directly: %s", url, exc)
         return ""
+
+
+def _is_public_http_url(url: str) -> bool:
+    """Return True only for public http(s) URLs to avoid SSRF through JD fetch."""
+    try:
+        parsed = urlparse(url.strip())
+    except ValueError:
+        return False
+
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False
+
+    hostname = parsed.hostname.strip().lower()
+    if hostname in {"localhost", "localhost.localdomain"} or hostname.endswith(".localhost"):
+        return False
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return _hostname_resolves_publicly(hostname)
+
+    return _is_public_ip(ip)
+
+
+def _hostname_resolves_publicly(hostname: str) -> bool:
+    try:
+        addr_infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return False
+
+    addresses = {info[4][0] for info in addr_infos}
+    if not addresses:
+        return False
+
+    try:
+        return all(_is_public_ip(ipaddress.ip_address(address)) for address in addresses)
+    except ValueError:
+        return False
+
+
+def _is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )

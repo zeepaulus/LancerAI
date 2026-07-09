@@ -32,3 +32,14 @@ export function getReport(sessionId) {
 export function getSessions() {
     return apiJson(INTERVIEW_SESSIONS_PATH, { method: 'GET' });
 }
+
+/**
+ * Scrape and structure a job description from a URL.
+ * Matches GET /api/v1/interview/scrape-jd?url={url}
+ * @param {string} url
+ * @returns {Promise<object>} `{ job_title, company, jd_text, focus_area }`
+ */
+export function scrapeJD(url) {
+    const encoded = encodeURIComponent(url);
+    return apiJson(`/api/v1/interview/scrape-jd?url=${encoded}`, { method: 'GET' });
+}

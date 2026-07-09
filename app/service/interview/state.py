@@ -19,6 +19,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.service.interview.behavior import BehaviorEvent
+
 
 class STARScore(BaseModel):
     """Structured evaluation of a candidate's answer using the STAR method."""
@@ -36,6 +38,11 @@ class STARScore(BaseModel):
     overall_score: float = Field(0.0, ge=0.0, le=10.0)
     feedback: str = ""
     follow_up_triggered: bool = False
+    ask_follow_up: bool = False
+    follow_up_question: str = ""
+    follow_up_reason: str = ""
+    evaluation_notes: str = ""
+    next_action: Literal["ask_next", "ask_follow_up", "wrap_up"] = "ask_next"
 
 
 class ChatMessage(BaseModel):
@@ -68,6 +75,7 @@ class InterviewState(BaseModel):
     session_id: str = ""
     cv_data: dict[str, Any] = Field(default_factory=dict)
     jd_data: dict[str, Any] = Field(default_factory=dict)  # Job Description data (from DB)
+    interview_plan: dict[str, Any] = Field(default_factory=dict)
     job_title: str = ""
     job_description: str = ""
     interview_mode: Literal["practice", "mock", "quick"] = "practice"
@@ -86,12 +94,20 @@ class InterviewState(BaseModel):
     # --- STAR scores (append-only, filled post-hoc) ---
     star_scores: Annotated[list[STARScore], operator.add] = Field(default_factory=list)
 
+    # --- Behavioral observations from camera/browser signals ---
+    behavior_events: list[BehaviorEvent] = Field(default_factory=list)
+
     # --- Current state ---
     current_question: str = ""
     current_question_index: int = 0
     total_questions: int = 0  # Estimated, flexible
     waiting_for_answer: bool = False
     latest_transcript: str = ""  # STT output from last user turn
+    follow_up_depth: int = 0
+    max_follow_ups_per_question: int = 1
+    pending_follow_up_question: str = ""
+    pending_follow_up_reason: str = ""
+    latest_evaluation_notes: str = ""
 
     # --- Final assessment ---
     overall_score: float = 0.0
