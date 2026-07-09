@@ -429,9 +429,16 @@ async def interview_websocket(
     try:
         while True:
             data = await websocket.receive()
-            if "bytes" in data:
+            message_type = data.get("type")
+            if message_type == "websocket.disconnect":
+                _logger.info("WebSocket disconnected (user=%s, code=%s)", user_id, data.get("code"))
+                break
+            if message_type != "websocket.receive":
+                continue
+
+            if data.get("bytes") is not None:
                 await _pipeline.feed_audio(data["bytes"])
-            elif "text" in data:
+            elif data.get("text") is not None:
                 try:
                     msg = json.loads(data["text"])
                     if msg.get("action") == "stop":
