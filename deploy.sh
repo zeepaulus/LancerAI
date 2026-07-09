@@ -72,6 +72,35 @@ wait_for_http() {
     log "$url is reachable"
 }
 
+ensure_swap_for_small_host() {
+    if [ ! -r /proc/meminfo ]; then
+        return 0
+    fi
+
+    local total_ram_mb
+    total_ram_mb="$(awk '/MemTotal/ { printf "%d\n", $2/1024 }' /proc/meminfo)"
+    local swap_file="${SWAP_FILE:-/swapfile}"
+
+    if [ "$total_ram_mb" -ge 3000 ] || [ -f "$swap_file" ]; then
+        log "RAM ${total_ram_mb}MB - swap is not needed or already exists"
+        return 0
+    fi
+
+    log "RAM is ${total_ram_mb}MB - creating 4GB swap to reduce Docker build OOM risk"
+    if command -v fallocate >/dev/null 2>&1; then
+        fallocate -l 4G "$swap_file"
+    else
+        dd if=/dev/zero of="$swap_file" bs=1M count=4096 status=progress
+    fi
+    chmod 600 "$swap_file"
+    mkswap "$swap_file"
+    swapon "$swap_file"
+    if ! grep -q "^$swap_file " /etc/fstab; then
+        echo "$swap_file none swap sw 0 0" >> /etc/fstab
+    fi
+    log "Swap enabled: $(free -h | awk '/Swap/ {print $2}')"
+}
+
 require_cmd git
 require_cmd curl
 
@@ -108,6 +137,7 @@ if grep -Eq 'REPLACE_|YOUR_DROPLET_IP|changeme' "$APP_DIR/.env"; then
 fi
 
 mkdir -p "$APP_DIR/nginx/certs"
+ensure_swap_for_small_host
 
 log "Building production images..."
 compose build --pull backend frontend
