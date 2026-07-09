@@ -141,6 +141,12 @@ BEHAVIOR_CATALOG.update(
             "sentiment": "concern",
             "suggestion": "Dat dien thoai ra khoi khu vuc phong van neu khong can thiet.",
         },
+        "candidate_silence": {
+            "label": "Im lặng quá lâu hoặc không phản hồi",
+            "category": "attention",
+            "sentiment": "concern",
+            "suggestion": "Nên trả lời nhanh gọn hơn và hạn chế khoảng lặng kéo dài.",
+        },
     }
 )
 
@@ -193,7 +199,7 @@ def summarize_behavior(events: list[dict[str, Any] | BehaviorEvent]) -> Behavior
             continue
         grouped.setdefault(event.kind, []).append(event)
 
-    score = 86.0
+    score = 100.0
     observations: list[BehaviorObservation] = []
     for kind, items in grouped.items():
         catalog = BEHAVIOR_CATALOG.get(kind, {})

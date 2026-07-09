@@ -4,6 +4,7 @@ import Navbar from '../components/Layout/Navbar';
 import { EmptyState, MetricCard, Page, PageHero, Panel, QuickActionCard, SkeletonRows, StatusBadge } from '../components/Common/AppUI';
 import { AssetIllustration, FeatureIcon } from '../components/Common/Visuals';
 import { getSessions } from '../api/interview';
+import { getCVHistory } from '../api/extraction';
 import * as keys from '../config/storageKeys';
 
 function formatDate(isoString) {
@@ -17,25 +18,32 @@ function averageScore(items) {
     return Math.round(scored.reduce((sum, item) => sum + Number(item.overall_confidence || 0), 0) / scored.length);
 }
 
+function scoreTone(score) {
+    if (score >= 80) return 'success';
+    if (score >= 60) return 'warning';
+    return 'danger';
+}
+
 const MainDashboard = () => {
     const navigate = useNavigate();
     const profile = JSON.parse(localStorage.getItem(keys.LANCERAI_USER_PROFILE) || '{}');
     const [history, setHistory] = useState([]);
-    const [historyLoading, setHistoryLoading] = useState(false);
+    const [cvs, setCvs] = useState([]);
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         let active = true;
-        setHistoryLoading(true);
-        getSessions()
-            .then((data) => {
-                if (active) setHistory(Array.isArray(data) ? data : []);
-            })
-            .catch(() => {
-                if (active) setHistory([]);
-            })
-            .finally(() => {
-                if (active) setHistoryLoading(false);
-            });
+        setLoading(true);
+        Promise.all([
+            getSessions().catch(() => []),
+            getCVHistory().catch(() => [])
+        ]).then(([sessionsData, cvsData]) => {
+            if (!active) return;
+            setHistory(Array.isArray(sessionsData) ? sessionsData : []);
+            setCvs(Array.isArray(cvsData) ? cvsData : []);
+        }).finally(() => {
+            if (active) setLoading(false);
+        });
         return () => {
             active = false;
         };
@@ -45,8 +53,23 @@ const MainDashboard = () => {
         const completed = history.filter((item) => item.status !== 'incomplete');
         const pending = history.filter((item) => item.status === 'incomplete' || Number(item.overall_confidence || 0) < 60);
         const avg = averageScore(completed);
-        return { completed: completed.length, pending: pending.length, avg };
-    }, [history]);
+        
+        // Find highest optimized ATS score from CVs
+        let maxAts = 0;
+        cvs.forEach(cv => {
+            const parsed = typeof cv.optimized_data === 'string' ? JSON.parse(cv.optimized_data) : cv.optimized_data;
+            const score = Number(cv.overall_confidence || parsed?.audit_score || 0);
+            if (score > maxAts) maxAts = score;
+        });
+
+        return { 
+            completed: completed.length, 
+            pending: pending.length, 
+            avg,
+            totalCvs: cvs.length,
+            bestAts: Math.round(maxAts)
+        };
+    }, [history, cvs]);
 
     const featureActions = [
         {
@@ -104,15 +127,16 @@ const MainDashboard = () => {
                     )}
                 />
 
-                {historyLoading ? (
+                {loading ? (
                     <div className="ui-section-gap-bottom">
                         <SkeletonRows rows={1} />
                     </div>
-                ) : history.length > 0 && (
+                ) : (
                     <div className="metric-grid ui-section-gap-bottom">
-                        <MetricCard label="Đã đánh giá" value={metrics.completed} detail="Phiên có báo cáo" tone="success" />
-                        <MetricCard label="Điểm trung bình" value={metrics.avg ? `${metrics.avg}/100` : 'Chưa có'} detail="Tính trên phiên đã hoàn tất" tone="brand" />
-                        <MetricCard label="Phiên cần xử lý" value={metrics.pending} detail="Chưa hoàn tất hoặc dưới 60 điểm" tone={metrics.pending ? 'warning' : 'neutral'} />
+                        <MetricCard label="Phỏng vấn giọng nói" value={metrics.completed} detail="Phiên có báo cáo" tone="success" />
+                        <MetricCard label="Điểm phỏng vấn TB" value={metrics.avg ? `${metrics.avg}/100` : 'Chưa có'} detail="Tính trên phiên đã hoàn tất" tone="brand" />
+                        <MetricCard label="CV đã phân tích" value={metrics.totalCvs} detail="Số CV lưu trong hệ thống" tone="ai" />
+                        <MetricCard label="Điểm ATS tốt nhất" value={metrics.bestAts ? `${metrics.bestAts}/100` : 'Chưa có'} detail="Điểm CV cao nhất đạt được" tone={scoreTone(metrics.bestAts)} />
                     </div>
                 )}
 
@@ -136,7 +160,7 @@ const MainDashboard = () => {
                     ))}
                 </div>
 
-                {!historyLoading && history.length > 0 && (
+                {!loading && history.length > 0 && (
                     <section className="dashboard-priority-strip" aria-label="Bước nên làm">
                         <FeatureIcon type={metrics.pending ? 'report' : 'questions'} />
                     <div className="dashboard-priority-strip__copy">
@@ -160,7 +184,7 @@ const MainDashboard = () => {
 
                 <div className="dashboard-grid">
                     <Panel className="span-12" title="Phiên phỏng vấn gần đây" subtitle="Bấm vào một phiên để xem điểm, transcript và ghi chú cải thiện.">
-                        {historyLoading ? (
+                        {loading ? (
                             <SkeletonRows rows={5} />
                         ) : history.length === 0 ? (
                             <EmptyState

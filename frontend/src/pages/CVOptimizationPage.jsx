@@ -13,7 +13,7 @@ import {
     StatusBadge,
 } from '../components/Common/AppUI';
 import { CVDocumentGraphic, ProductMockupGraphic } from '../components/Common/Visuals';
-import { optimizeCV } from '../api/optimization';
+import { optimizeCV, downloadPDF } from '../api/optimization';
 
 const INDUSTRIES = [
     { value: 'technology', label: 'Kỹ thuật phần mềm' },
@@ -103,8 +103,29 @@ const CVOptimizationPage = () => {
     const [jobTitle, setJobTitle] = useState('');
     const [industry, setIndustry] = useState('technology');
     const [loading, setLoading] = useState(false);
+    const [downloading, setDownloading] = useState(false);
     const [error, setError] = useState('');
     const [result, setResult] = useState(null);
+
+    const handleDownloadPDF = async () => {
+        if (!cvId) return;
+        setDownloading(true);
+        try {
+            const blob = await downloadPDF(cvId, 'harvard');
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `cv_optimized_${cvId.substring(0, 8)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            setError(err.message || 'Không thể tải xuống PDF.');
+        } finally {
+            setDownloading(false);
+        }
+    };
 
     const auditScore = Math.round(Number(result?.audit_score || 0));
     const cvScorecard = result?.cv_scorecard || {};
@@ -173,6 +194,11 @@ const CVOptimizationPage = () => {
                             <button className="btn-primary" onClick={handleAnalyze} disabled={loading}>
                                 {loading ? 'Đang phân tích...' : result ? 'Phân tích lại' : 'Bắt đầu phân tích'}
                             </button>
+                            {result && (
+                                <button className="btn-success" onClick={handleDownloadPDF} disabled={downloading}>
+                                    {downloading ? 'Đang tải PDF...' : 'Tải PDF'}
+                                </button>
+                            )}
                         </>
                     )}
                 />
@@ -346,10 +372,13 @@ const CVOptimizationPage = () => {
                                 </Panel>
                             )}
 
-                            <Panel className="span-12" title="Bước tiếp theo" subtitle="Dùng kết quả phân tích để so khớp CV với mô tả công việc.">
+                            <Panel className="span-12" title="Bước tiếp theo" subtitle="Dùng kết quả phân tích để so khớp CV với mô tả công việc hoặc xuất file.">
                                 <div className="ui-cluster">
                                     <button className="btn-primary" onClick={() => navigate('/job-matching', { state: { cvId } })}>
                                         So khớp với JD
+                                    </button>
+                                    <button className="btn-success" onClick={handleDownloadPDF} disabled={downloading}>
+                                        {downloading ? 'Đang tải PDF...' : 'Tải PDF'}
                                     </button>
                                     <button className="btn-outline" onClick={() => navigate('/cv-upload')}>
                                         Phân tích CV khác

@@ -55,11 +55,9 @@ class OCRProcessor:
                 enable_mkldnn=False,
             )
             logger.info("[OCR] PaddleOCR ready")
-        except ImportError as exc:
-            raise RuntimeError(
-                "PaddleOCR is not installed. "
-                "Run: uv add paddleocr paddlepaddle"
-            ) from exc
+        except ImportError:
+            logger.warning("[OCR] PaddleOCR is not installed. Scanned images will fall back to placeholder text.")
+            self._ocr = False  # Flag that OCR is not available
 
     # ------------------------------------------------------------------
     # Public API
@@ -74,6 +72,12 @@ class OCRProcessor:
         - ``bbox``: ``[x1, y1, x2, y2]`` bounding box (top-left → bottom-right).
         """
         self._ensure_ocr()
+        if self._ocr is False:
+            return [{
+                "text": "[OCR Tạm Thời Không Khả Dụng - Vui lòng tải CV PDF định dạng văn bản]",
+                "confidence": 1.0,
+                "bbox": [0, 0, 100, 100]
+            }]
 
         # Decode bytes → numpy array (BGR, as expected by PaddleOCR)
         try:

@@ -356,7 +356,8 @@ async def interview_websocket(
         except Exception as e:
             _logger.debug("WS send_bytes failed (client disconnected): %s", e)
 
-    stmt = select(InterviewSession).where(
+    from sqlalchemy.orm import selectinload
+    stmt = select(InterviewSession).options(selectinload(InterviewSession.transcripts)).where(
         InterviewSession.id == session_id,
         InterviewSession.user_id == str(user_id),
     )
@@ -411,6 +412,13 @@ async def interview_websocket(
     except (TypeError, ValueError):
         duration_minutes = 5
 
+    existing_turns = []
+    if session_record.transcripts:
+        existing_turns = [
+            {"role": t.role.value if hasattr(t.role, "value") else str(t.role), "content": t.content}
+            for t in session_record.transcripts
+        ]
+
     try:
         await _pipeline.start(
             session_id=session_id,
@@ -420,6 +428,7 @@ async def interview_websocket(
             interview_plan=interview_plan,
             mode=mode,
             duration_minutes=duration_minutes,
+            existing_turns=existing_turns,
         )
     except Exception as exc:
         _logger.error("WS /interview/ws: pipeline.start failed â€” %s", exc)

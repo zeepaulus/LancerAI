@@ -217,6 +217,7 @@ class InterviewPipeline:
         mode: str = "practice",
         duration_minutes: int = 5,
         session_id: str | None = None,
+        existing_turns: list[dict[str, Any]] | None = None,
     ) -> None:
         """Initialise the session and emit the interviewer's first greeting."""
         session_id = session_id or str(uuid.uuid4())
@@ -238,6 +239,29 @@ class InterviewPipeline:
         )
         self._pacing_clock.start()
 
+        chat_history = [ChatMessage(role="system", content=system_prompt)]
+        turns = []
+        
+        if existing_turns:
+            for turn in existing_turns:
+                role = turn.get("role")
+                content = turn.get("content") or ""
+                # Map MessageRole to state schema roles
+                if role in ("ai", "interviewer", "MessageRole.AI"):
+                    chat_role = "assistant"
+                    turn_role = "interviewer"
+                elif role in ("human", "candidate", "MessageRole.HUMAN"):
+                    chat_role = "user"
+                    turn_role = "candidate"
+                    self._candidate_turn_count += 1
+                else:
+                    chat_role = "system"
+                    turn_role = "system"
+                
+                chat_history.append(ChatMessage(role=chat_role, content=content))
+                turns.append(InterviewTurn(role=turn_role, content=content))
+            logger.info("[Pipeline] Resuming session %s with %d existing turns", session_id, len(turns))
+
         self.state = InterviewState(
             session_id=session_id,
             cv_data=cv_data,
@@ -247,7 +271,8 @@ class InterviewPipeline:
             interview_mode=mode,  # type: ignore[arg-type]
             duration_minutes=duration_minutes,
             start_time=time.time(),
-            chat_history=[ChatMessage(role="system", content=system_prompt)],
+            chat_history=chat_history,
+            turns=turns,
         )
 
         logger.info("[Pipeline] Session %s started — user=%s mode=%s", session_id, self._user_id, mode)
@@ -261,10 +286,15 @@ class InterviewPipeline:
             }
         )
 
-        # Emit greeting
-        self._phase = SessionPhase.SPEAKING
-        await self._send_json({"event": "phase_change", "phase": SessionPhase.SPEAKING})
-        await self._generate_and_speak()
+        if existing_turns:
+            # Resuming: immediately start listening for user input
+            self._phase = SessionPhase.LISTENING
+            await self._send_json({"event": "phase_change", "phase": SessionPhase.LISTENING})
+        else:
+            # New session: Emit greeting
+            self._phase = SessionPhase.SPEAKING
+            await self._send_json({"event": "phase_change", "phase": SessionPhase.SPEAKING})
+            await self._generate_and_speak()
 
     async def feed_audio(self, pcm_bytes: bytes) -> None:
         """Consume one chunk of microphone PCM Int16 mono 16kHz audio.
@@ -452,6 +482,21 @@ class InterviewPipeline:
         if signal != self._last_pacing_signal:
             logger.info("[Pipeline] Pacing signal changed: %s", signal.value)
             self._last_pacing_signal = signal
+            if signal in {PacingSignal.DEAD_AIR, PacingSignal.ABANDON} and self.state:
+                from app.service.interview.behavior import BehaviorEvent
+                # Check if already added
+                if not any(e.kind == "candidate_silence" for e in self.state.behavior_events):
+                    self.state.behavior_events.append(
+                        BehaviorEvent(
+                            kind="candidate_silence",
+                            category="attention",
+                            label="Im lặng quá lâu hoặc không phản hồi",
+                            severity="medium",
+                            confidence=0.9,
+                            detail="Ứng viên im lặng quá lâu hoặc không phản hồi câu hỏi.",
+                            ts=time.time()
+                        )
+                    )
         return signal
 
     def _is_interview_over(self) -> bool:
@@ -646,6 +691,24 @@ class InterviewPipeline:
 
         except Exception as exc:
             logger.error("[Pipeline] Final evaluation failed: %s", exc)
+
+        # Check if there is active dead air or silence at session end
+        if self._pacing_clock is not None:
+            silence_dur = self._pacing_clock._silence()
+            has_silence_event = any(e.kind == "candidate_silence" for e in self.state.behavior_events)
+            if silence_dur >= getattr(self._pacing_clock, "_dead_air_sec", 45) and not has_silence_event:
+                from app.service.interview.behavior import BehaviorEvent
+                self.state.behavior_events.append(
+                    BehaviorEvent(
+                        kind="candidate_silence",
+                        category="attention",
+                        label="Im lặng quá lâu hoặc không phản hồi",
+                        severity="medium",
+                        confidence=0.9,
+                        detail=f"Ứng viên im lặng kéo dài {int(silence_dur)} giây tại thời điểm kết thúc phỏng vấn.",
+                        ts=time.time()
+                    )
+                )
 
         behavior_summary = summarize_behavior(self.state.behavior_events)
         behavior_issues, behavior_suggestions = behavior_feedback_lines(behavior_summary)

@@ -59,6 +59,7 @@ class InterviewTurn(BaseModel):
     role: Literal["interviewer", "candidate"]
     content: str
     audio_duration_ms: int = 0
+    created_at: float = Field(default_factory=time.time)
 
 
 class InterviewState(BaseModel):
