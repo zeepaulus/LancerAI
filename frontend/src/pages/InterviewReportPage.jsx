@@ -17,6 +17,8 @@ import {
 import { EvaluationScoreGraphic } from '../components/Common/Visuals';
 import { getReport } from '../api/interview';
 
+const REPORT_RETRY_DELAYS_MS = [500, 900, 1400, 2000, 2800];
+
 function scoreTone(score) {
     if (score >= 80) return 'success';
     if (score >= 60) return 'warning';
@@ -49,22 +51,43 @@ const InterviewReportPage = () => {
         if (report || !sessionIdFromState) return;
 
         let mounted = true;
-        setLoading(true);
-        getReport(sessionIdFromState)
-            .then((data) => {
+        let timeoutId = null;
+
+        const wait = (delay) => new Promise((resolve) => {
+            timeoutId = window.setTimeout(resolve, delay);
+        });
+
+        async function loadReport() {
+            setLoading(true);
+            let lastError = null;
+
+            for (let attempt = 0; attempt <= REPORT_RETRY_DELAYS_MS.length; attempt += 1) {
                 if (!mounted) return;
-                setReport(data);
-                setError('');
-            })
-            .catch((err) => {
-                if (mounted) setError(err.message || 'Could not load the interview report.');
-            })
-            .finally(() => {
-                if (mounted) setLoading(false);
-            });
+                try {
+                    const data = await getReport(sessionIdFromState);
+                    if (!mounted) return;
+                    setReport(data);
+                    setError('');
+                    setLoading(false);
+                    return;
+                } catch (err) {
+                    lastError = err;
+                    if (attempt < REPORT_RETRY_DELAYS_MS.length) {
+                        await wait(REPORT_RETRY_DELAYS_MS[attempt]);
+                    }
+                }
+            }
+
+            if (!mounted) return;
+            setError(lastError?.message || 'Báo cáo chưa sẵn sàng. Vui lòng thử lại sau vài giây.');
+            setLoading(false);
+        }
+
+        loadReport();
 
         return () => {
             mounted = false;
+            if (timeoutId) window.clearTimeout(timeoutId);
         };
     }, [report, sessionIdFromState]);
 

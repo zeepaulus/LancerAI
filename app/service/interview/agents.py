@@ -110,12 +110,15 @@ Nguyên tắc bắt buộc:
 - Bám sát CV, JD, interview plan và lịch sử hội thoại thực tế.
 - Không hỏi lại nội dung ứng viên đã trả lời rõ.
 - Hỏi bằng ngôn ngữ tự nhiên như phỏng vấn thật; tránh câu quá chung như "hãy chia sẻ thêm".
+- Mỗi câu hỏi phải nối tiếp mạch phỏng vấn: CV/project -> ownership -> quyết định kỹ thuật -> trade-off/edge case -> kiểm chứng/kết quả -> JD gap.
+- Không hỏi câu vô nghĩa, câu có/không, câu định nghĩa suông, câu hỏi mẹo, GPA hoặc thông tin cá nhân không liên quan năng lực IT.
+- Nếu CV/JD thiếu dữ liệu, hãy hỏi một câu xác minh nền tảng có ích rồi mới đào sâu; không bịa dự án, công ty hoặc công nghệ.
 - Ưu tiên evidence cụ thể. Với hành vi/project, hỏi về bối cảnh, vai trò cá nhân, hành động hoặc kết quả khi phù hợp; với kỹ thuật, hỏi về cách tiếp cận, trade-off, edge case hoặc cách kiểm chứng.
 - Nếu câu trước còn mơ hồ, hỏi một follow-up ngắn để làm rõ đúng điểm thiếu: phạm vi, ownership, quyết định kỹ thuật, kết quả đo được hoặc rủi ro.
 - Nếu thiếu JD, đánh giá theo mức phù hợp với vai trò mục tiêu suy ra từ CV.
 - Không tiết lộ điểm số, tiêu chí nội bộ hoặc kết luận tuyển dụng trong lúc hỏi.
 
-Output: chỉ trả về đúng một câu hỏi tiếng Việt, chuyên nghiệp, tối đa 32 từ, kết thúc bằng dấu hỏi chấm."""
+Output: chỉ trả về đúng một câu hỏi tiếng Việt, chuyên nghiệp, tối đa 34 từ, kết thúc bằng dấu hỏi chấm."""
 
 _EVALUATE_SYSTEM = """Bạn là Interview Evaluator chuyên chấm chất lượng evidence trong câu trả lời.
 Không ép mọi câu trả lời vào một khuôn STAR. Chỉ dùng STAR như khung tham chiếu khi câu hỏi thuộc hành vi/project/kinh nghiệm thực tế.
@@ -290,7 +293,12 @@ async def question_node(state: InterviewState, llm: LLMConnector) -> dict[str, A
         return {"current_question": question.strip()}
     except Exception as exc:
         logger.error("[question_node] Failed: %s", exc)
-        return {"current_question": "Bạn có thể kể về kinh nghiệm làm việc của mình không?"}
+        return {
+            "current_question": (
+                f"Trong dự án hoặc kinh nghiệm gần nhất liên quan đến {state.job_title}, "
+                "bạn trực tiếp xử lý vấn đề kỹ thuật nào và kết quả ra sao?"
+            )
+        }
 
 
 async def evaluate_node(state: InterviewState, llm: LLMConnector) -> dict[str, Any]:

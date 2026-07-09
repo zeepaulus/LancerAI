@@ -408,8 +408,7 @@ def _build_question_plan(
             "stage": "warmup",
             "goal": "Mở đầu và xác nhận mục tiêu nghề nghiệp",
             "question": (
-                "Bạn có thể giới thiệu ngắn gọn về bản thân và kinh nghiệm "
-                f"phù hợp với vị trí {target_role} không?"
+                f"Bạn hãy giới thiệu ngắn gọn kinh nghiệm hoặc dự án phù hợp nhất với vị trí {target_role}?"
             ),
         },
         {
@@ -432,16 +431,14 @@ def _build_question_plan(
             "stage": "technical_depth",
             "goal": "Đào sâu kỹ thuật/kỹ năng cốt lõi",
             "question": (
-                f"Bạn đã sử dụng {core_skill} trong tình huống thực tế nào, "
-                "và bạn ra quyết định kỹ thuật ra sao?"
+                f"Trong tình huống dùng {core_skill}, trade-off kỹ thuật quan trọng nhất bạn cân nhắc là gì?"
             ),
         },
         {
             "stage": "jd_fit",
             "goal": "Kiểm tra mức độ phù hợp với yêu cầu vị trí",
             "question": (
-                f"Vị trí này cần {gap_skill}. Bạn có kinh nghiệm liên quan "
-                "hoặc kế hoạch bù đắp khoảng trống này như thế nào?"
+                f"Với yêu cầu {gap_skill}, bạn đã có evidence thực tế nào hoặc sẽ bù gap này ra sao?"
             ),
         },
         {
@@ -468,7 +465,7 @@ def _build_question_plan(
             {
                 "stage": "focus_area",
                 "goal": "Đào sâu trọng tâm do người dùng chọn",
-                "question": f"Bạn hãy nói kỹ hơn về {focus_area.strip()} và ví dụ cụ thể bạn đã xử lý trong công việc.",
+                "question": f"Với {focus_area.strip()}, bạn từng xử lý tình huống cụ thể nào và kiểm chứng kết quả ra sao?",
             },
         )
 

@@ -54,7 +54,12 @@ def _create_stt_connector() -> VoiceSTTConnector:
 def _create_tts_connector() -> VoiceTTSConnector:
     s = get_settings()
     mp = Path(s.tts_model_path) if s.tts_model_path else None
-    return VoiceTTSConnector(engine=s.tts_engine, model_path=mp, voice=s.tts_voice)
+    return VoiceTTSConnector(
+        engine=s.tts_engine,
+        model_path=mp,
+        voice=s.tts_voice,
+        local_timeout_seconds=s.tts_local_timeout_seconds,
+    )
 
 
 def _create_vector_repository() -> BaseVectorRepository:

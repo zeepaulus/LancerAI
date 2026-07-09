@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 SAMPLE_RATE = 16_000  # Hz — input contract
 # silero-vad requires 512-sample chunks at 16kHz (= 32 ms per chunk)
 VAD_CHUNK_SAMPLES = 512
+MIN_TRANSCRIBE_DURATION_SECONDS = 0.25
+MIN_TRANSCRIBE_RMS = 0.003
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +41,12 @@ def _pcm_bytes_to_float32(pcm_bytes: bytes) -> np.ndarray:
     samples = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32)
     samples /= 32768.0
     return samples
+
+
+def _rms(audio: np.ndarray) -> float:
+    if audio.size == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(audio**2)))
 
 
 def _resample(audio: np.ndarray, orig_sr: int, target_sr: int) -> np.ndarray:
@@ -280,6 +288,17 @@ class VoiceSTTConnector:
         Returns:
             Stripped transcription string (empty string if nothing detected).
         """
+        audio = _pcm_bytes_to_float32(audio_bytes)
+        duration_seconds = len(audio) / max(1, sample_rate)
+        audio_rms = _rms(audio)
+        if duration_seconds < MIN_TRANSCRIBE_DURATION_SECONDS or audio_rms < MIN_TRANSCRIBE_RMS:
+            logger.info(
+                "[STT] Skipping low-energy audio before model load duration=%.2fs rms=%.5f",
+                duration_seconds,
+                audio_rms,
+            )
+            return ""
+
         self._ensure_whisper()
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._transcribe_sync, audio_bytes, sample_rate)
@@ -290,11 +309,23 @@ class VoiceSTTConnector:
         if sample_rate != SAMPLE_RATE:
             audio = _resample(audio, sample_rate, SAMPLE_RATE)
 
+        duration_seconds = len(audio) / SAMPLE_RATE
+        audio_rms = _rms(audio)
+        if duration_seconds < MIN_TRANSCRIBE_DURATION_SECONDS or audio_rms < MIN_TRANSCRIBE_RMS:
+            logger.info(
+                "[STT] Skipping low-energy audio duration=%.2fs rms=%.5f",
+                duration_seconds,
+                audio_rms,
+            )
+            return ""
+
         segments, _ = self._whisper.transcribe(  # type: ignore[union-attr]
             audio,
             language=self._language,
             beam_size=5,
             vad_filter=False,  # We handle VAD ourselves
+            condition_on_previous_text=False,
+            no_speech_threshold=0.6,
         )
         text = " ".join(seg.text for seg in segments).strip()
         return text
@@ -366,5 +397,3 @@ class VoiceSTTConnector:
                 yield text
 
         return  # explicit return to satisfy type checker
-
-
