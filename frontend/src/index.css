@@ -2671,6 +2671,7 @@ textarea.text-input {
   gap: var(--space-8);
   align-items: center;
   padding-block: var(--space-12);
+  padding-inline: clamp(var(--space-6), 6vw, var(--space-12));
 }
 
 .landing-showcase--alt {
