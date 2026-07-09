@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import * as keys from '../config/storageKeys';
-import { login as apiLogin, me as apiMe, signup as apiSignup, googleLogin as apiGoogleLogin } from '../api/auth';
+import { login as apiLogin, me as apiMe, signup as apiSignup } from '../api/auth';
 import { validateAuthForm } from '../utils/validation';
 
 import googleLogo from '../assets/Logo/google_logo.png';
