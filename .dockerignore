@@ -59,7 +59,7 @@ frontend/.next/
 frontend/.vite/
 
 # Data
-data/
+/data/
 *.db
 *.sqlite3
 localhost/
