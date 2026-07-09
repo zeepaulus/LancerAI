@@ -94,6 +94,17 @@ class _VADProcessor:
     def _ensure_loaded(self) -> None:
         if self._model is not None:
             return
+        # 1. Try local package import first (offline-friendly, avoids Snakers4 download hang/fail)
+        try:
+            import silero_vad
+            model = silero_vad.load_silero_vad(onnx=False)
+            self._model = model
+            logger.info("[VAD] silero-vad loaded locally from package")
+            return
+        except Exception as local_exc:
+            logger.debug("[VAD] Local silero-vad package load failed: %s. Trying torch.hub...", local_exc)
+
+        # 2. Fallback to torch.hub
         try:
             import torch
 
@@ -156,6 +167,11 @@ class _VADProcessor:
         self._speech_ms_accumulated = 0.0
         self._silence_ms_accumulated = 0.0
         self._in_speech = False
+        if self._model is not None and hasattr(self._model, "reset_states"):
+            try:
+                self._model.reset_states()
+            except Exception as exc:
+                logger.debug("[VAD] Failed to reset model states: %s", exc)
 
 
 # ---------------------------------------------------------------------------
