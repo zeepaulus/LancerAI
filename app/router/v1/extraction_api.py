@@ -17,6 +17,7 @@ from app.core.providers.services import get_extraction_service
 from app.core.rate_limit import limiter
 from app.models.cv_record import CVRecord
 from app.models.user import User
+from app.schema.request import CVExtractionUpdateRequest
 from app.schema.response import CVExtractionResponse, CVRecordSummaryResponse
 from app.service.extraction.service import MAX_FILE_SIZE, ExtractionService
 
@@ -126,3 +127,28 @@ async def get_cv(
             detail="CV not found or access denied.",
         )
     return CVExtractionResponse(cv_id=cv.id, **cv.extracted_data)
+
+
+@router.put("/cvs/{cv_id}")
+@limiter.limit("30/minute")
+async def update_cv_extraction(
+    request: Request,
+    cv_id: str,
+    payload: CVExtractionUpdateRequest,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    service: Annotated[ExtractionService, Depends(get_extraction_service)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> CVExtractionResponse:
+    """Update user-reviewed extracted CV data before optimization."""
+    updated = await service.update_extracted_data(
+        db,
+        cv_id,
+        user.id,
+        payload.model_dump(),
+    )
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="CV not found or access denied.",
+        )
+    return updated

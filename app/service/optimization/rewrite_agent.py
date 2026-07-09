@@ -66,6 +66,9 @@ Nhiệm vụ: Viết lại các đoạn CV bị phê bình. Trả về JSON hợ
 Quy tắc NGHIÊM NGẶT:
 - KHÔNG bịa đặt hoặc ước lượng số liệu nếu CV gốc không có; chỉ mô tả impact định tính dựa trên evidence gốc.
 - Giữ nguyên mọi thông tin thực tế; chỉ cải thiện cách diễn đạt và cấu trúc câu.
+- Chỉ rewrite khi câu mới làm CV rõ hơn về action, scope, ownership, result hoặc role fit. Nếu rewrite chỉ dài hơn nhưng không thêm giá trị tuyển dụng, KHÔNG đưa vào rewrites.
+- Không biến thông tin đã rõ thành câu văn dư thừa. Ví dụ sai: original "GPA 8.0" -> rewritten "Đã học tập tại trường ABC với GPA 8.0". Trường hợp này phải bỏ qua, không rewrite.
+- rewritten phải là nội dung có thể đặt trực tiếp vào CV: ngắn, cụ thể, không giải thích ngoài lề, không dùng văn phong tư vấn.
 - Không viết lại các nhận xét nhỏ, hành chính hoặc học thuật không ảnh hưởng trực tiếp đến tuyển dụng IT.
 - Không tạo rewrite cho GPA, thang điểm, địa chỉ trường, ngày sinh hoặc thông tin cá nhân phụ trừ khi issue là high/critical và có liên quan rõ tới target role.
 - Bắt đầu câu bằng động từ hành động mạnh (Built, Designed, Led, Reduced, Optimized, Delivered...).
@@ -143,6 +146,9 @@ Viết lại các đoạn trên theo công thức XYZ/STAR. Trả về JSON:"""
                 if _has_new_numeric_claim(section.original, section.rewritten):
                     logger.info("[rewrite_agent] Skipping rewrite with unsupported numeric claim for %s", section.field)
                     continue
+                if _is_low_value_rewrite(section):
+                    logger.info("[rewrite_agent] Skipping low-value rewrite for %s", section.field)
+                    continue
                 rewritten_sections.append(section)
             except Exception as parse_exc:
                 logger.warning("[rewrite_agent] Skipping malformed rewrite: %s. Item was: %s", parse_exc, item)
@@ -178,3 +184,33 @@ def _has_new_numeric_claim(original: str, rewritten: str) -> bool:
         return False
     original_numbers = _numbers_in_text(original)
     return not rewritten_numbers.issubset(original_numbers)
+
+
+def _is_low_value_rewrite(section: RewrittenSection) -> bool:
+    import unicodedata
+
+    def norm(value: str) -> str:
+        normalized = unicodedata.normalize("NFKD", value or "")
+        return "".join(char for char in normalized if not unicodedata.combining(char)).lower()
+
+    combined = norm(f"{section.field} {section.original} {section.rewritten}")
+    low_value_markers = (
+        "gpa",
+        "thang diem",
+        "he diem",
+        "quy doi",
+        "ngay sinh",
+        "dia chi truong",
+        "cccd",
+        "can cuoc",
+        "hon nhan",
+    )
+    if any(marker in combined for marker in low_value_markers):
+        return True
+
+    original_words = len(section.original.split())
+    rewritten_words = len(section.rewritten.split())
+    if original_words <= 4 and rewritten_words >= original_words + 8:
+        return True
+
+    return False

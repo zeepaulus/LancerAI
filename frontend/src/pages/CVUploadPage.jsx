@@ -35,7 +35,12 @@ const CVUploadPage = () => {
         setErrorMsg('');
         try {
             const extractionData = await uploadCV(selectedFile);
-            navigate('/cv-optimization', { state: { cvId: extractionData.cv_id } });
+            navigate('/cv-extraction-result', {
+                state: {
+                    cvId: extractionData.cv_id,
+                    extractionData,
+                },
+            });
         } catch (err) {
             setUploadState('idle');
             if (err?.status === 401) setErrorMsg('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
@@ -54,8 +59,8 @@ const CVUploadPage = () => {
             <Page wide>
                 <PageHero
                     kicker="Phân tích CV"
-                    title="Tải CV để bắt đầu phân tích"
-                    description="LancerAI sẽ đọc CV và đưa ra điểm ATS, điểm yếu cần sửa, kỹ năng còn thiếu và gợi ý viết lại."
+                    title="Tải CV để trích xuất thông tin"
+                    description="LancerAI sẽ đọc CV, bóc tách các mục quan trọng và cho bạn kiểm tra lại trước khi chạy đánh giá."
                     visual={<CVDocumentGraphic />}
                     tone="cv"
                     actions={<button className="btn-outline" onClick={() => navigate('/cv-review')}>Xem lịch sử CV</button>}
@@ -85,12 +90,12 @@ const CVUploadPage = () => {
                                 </>
                             ) : selectedFile ? (
                                 <>
-                                    <StatusBadge tone="success">Sẵn sàng phân tích</StatusBadge>
+                                    <StatusBadge tone="success">Sẵn sàng trích xuất</StatusBadge>
                                     <h2 className="title-md">{selectedFile.name}</h2>
                                     <p className="caption">Đã chọn {Math.round(selectedFile.size / 1024)} KB</p>
                                     {errorMsg && <p className="ui-error-text">{errorMsg}</p>}
                                     <div className="ui-cluster ui-cluster--center">
-                                        <button className="btn-primary" onClick={handleUpload}>Phân tích CV</button>
+                                        <button className="btn-primary" onClick={handleUpload}>Trích xuất thông tin</button>
                                         <button className="btn-outline" onClick={() => { setSelectedFile(null); setErrorMsg(''); if (inputRef.current) inputRef.current.value = ''; }}>Chọn file khác</button>
                                     </div>
                                 </>
@@ -119,7 +124,7 @@ const CVUploadPage = () => {
                         </div>
                     </Panel>
 
-                    <Panel title="Kết quả phân tích" subtitle="Sau khi tải lên, bạn sẽ được chuyển thẳng đến màn hình phân tích CV.">
+                    <Panel title="Sau khi tải lên" subtitle="Bạn sẽ kiểm tra dữ liệu đã bóc tách trước khi chạy đánh giá CV.">
                         <div className="ui-stack ui-stack--md">
                             {[
                                 ['Điểm ATS', 'Đánh giá mức độ rõ ràng, cấu trúc và khả năng vượt bộ lọc tuyển dụng.'],

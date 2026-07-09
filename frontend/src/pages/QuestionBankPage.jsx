@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import Navbar from '../components/Layout/Navbar';
 import { EmptyState, Page, PageHero, Panel, StatusBadge } from '../components/Common/AppUI';
@@ -151,8 +152,8 @@ const FilterSelect = ({ id, label, value, onChange, options }) => (
     </label>
 );
 
-const QuestionDetailModal = ({ question, onClose }) => (
-    <div className="ui-modal-overlay" onClick={(event) => event.target === event.currentTarget && onClose()}>
+const QuestionDetailModal = ({ question, onClose }) => createPortal((
+    <div className="ui-modal-overlay qbank-detail-overlay" onClick={(event) => event.target === event.currentTarget && onClose()}>
         <div className="ui-modal-card qbank-detail-modal" role="dialog" aria-modal="true" aria-labelledby="question-detail-title">
             <div className="panel-header">
                 <div className="qbank-detail-heading">
@@ -212,7 +213,7 @@ const QuestionDetailModal = ({ question, onClose }) => (
             </div>
         </div>
     </div>
-);
+), document.body);
 
 const DetailBlock = ({ title, icon = 'questions', children }) => (
     <section className="qbank-detail-block">

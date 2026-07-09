@@ -53,20 +53,20 @@ const iconAssets = {
 };
 
 const labels = {
-    dashboard: 'AI career journey from candidate CV to readiness',
-    journey: 'AI career journey from candidate CV to readiness',
-    voice: 'Voice interview recording, waveform, thinking, and transcript states',
-    interview: 'Voice interview recording, waveform, thinking, and transcript states',
-    cv: 'Quy trình phân tích CV bằng AI',
-    upload: 'Quy trình tải lên và phân tích CV',
+    dashboard: 'Bảng tổng quan CV, việc làm và phỏng vấn',
+    journey: 'Quy trình chuẩn bị ứng tuyển từ CV đến phỏng vấn',
+    voice: 'Phòng phỏng vấn giọng nói với micro, camera và transcript',
+    interview: 'Phòng phỏng vấn giọng nói với micro, camera và transcript',
+    cv: 'Quy trình trích xuất và đánh giá CV',
+    upload: 'Quy trình tải lên và trích xuất CV',
     extraction: 'Quy trình trích xuất dữ liệu CV',
-    match: 'Candidate CV matched against job description requirements',
-    report: 'Interview report score, trends, and analytics',
-    analytics: 'Interview report score, trends, and analytics',
-    questions: 'Question bank as searchable interview knowledge library',
-    candidate: 'Candidate workspace with CV, interview, and report signals',
-    workspace: 'LancerAI product workspace with dashboard cards and readiness chart',
-    emptyInterview: 'Empty interview state with microphone and transcript prompt',
+    match: 'So khớp CV với yêu cầu trong mô tả công việc',
+    report: 'Báo cáo phỏng vấn với điểm, nhận xét và transcript',
+    analytics: 'Báo cáo phỏng vấn với điểm, nhận xét và transcript',
+    questions: 'Ngân hàng câu hỏi phỏng vấn có thể tìm kiếm',
+    candidate: 'Lịch sử CV, phỏng vấn và báo cáo của ứng viên',
+    workspace: 'Bảng tổng quan các tác vụ CV, việc làm và phỏng vấn',
+    emptyInterview: 'Trạng thái chưa có phiên phỏng vấn',
 };
 
 export const AssetIllustration = ({ name = 'workspace', className = '', compact = false }) => {
@@ -105,7 +105,7 @@ export const CandidateAvatar = ({ name = 'Candidate', size = 40, status = 'neutr
 export const AIAssistantMark = ({ active = false, size = 72 }) => (
     <div
         role="img"
-        aria-label="LancerAI assistant"
+        aria-label="Biểu tượng hỗ trợ phân tích"
         className={`ai-assistant-mark ${active ? 'is-active' : ''}`}
         style={{ width: size, height: size }}
     >
@@ -138,7 +138,7 @@ export const CandidateClusterGraphic = () => (
 );
 
 export const EvaluationScoreGraphic = ({ score = null }) => (
-    <div role="img" className="evaluation-score-graphic" aria-label={score == null ? 'Báo cáo đánh giá AI' : `Điểm báo cáo AI ${score} trên 100`}>
+    <div role="img" className="evaluation-score-graphic" aria-label={score == null ? 'Báo cáo đánh giá' : `Điểm báo cáo ${score} trên 100`}>
         <AssetIllustration name="report" />
         <span>{score == null ? '—' : score}</span>
     </div>

@@ -173,7 +173,7 @@ const AccountSettingsPage = () => {
                         </form>
                     </Panel>
 
-                    <Panel className="span-12" title="Mật khẩu" subtitle="Đổi mật khẩu tài khoản. LancerAI không hiển thị dữ liệu nội bộ hay tham số AI tại đây.">
+                    <Panel className="span-12" title="Mật khẩu" subtitle="Đổi mật khẩu định kỳ nếu bạn dùng chung thiết bị hoặc nghi ngờ tài khoản bị lộ.">
                         <form className="settings-password-grid" onSubmit={handlePasswordSubmit}>
                             <PasswordField
                                 id="current-password"

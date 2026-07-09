@@ -213,6 +213,7 @@ class VoiceSTTConnector:
     def __init__(
         self,
         model_size: str = "small",
+        model_path: str | None = None,
         device: str = "cpu",
         compute_type: str = "int8",
         language: str = "vi",
@@ -220,6 +221,7 @@ class VoiceSTTConnector:
         min_speech_ms: int = 200,
     ) -> None:
         self._model_size = model_size
+        self._model_path = model_path
         self._device = device
         self._compute_type = compute_type
         self._language = language
@@ -243,12 +245,12 @@ class VoiceSTTConnector:
 
             logger.info(
                 "[STT] Loading faster-whisper model=%s device=%s compute=%s",
-                self._model_size,
+                self._model_path or self._model_size,
                 self._device,
                 self._compute_type,
             )
             self._whisper = WhisperModel(
-                self._model_size,
+                self._model_path or self._model_size,
                 device=self._device,
                 compute_type=self._compute_type,
             )

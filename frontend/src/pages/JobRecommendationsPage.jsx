@@ -108,7 +108,7 @@ const JobRecommendationsPage = () => {
                             </div>
                         </Panel>
 
-                        <Panel title="Cách dùng gợi ý" subtitle="Danh sách này chỉ là danh sách rút gọn, không phải quyết định ứng tuyển tự động.">
+                        <Panel title="Cách dùng gợi ý" subtitle="Danh sách này dùng để tham khảo khi chọn việc làm phù hợp, không thay bạn quyết định có ứng tuyển hay không.">
                             <ProductMockupGraphic variant="match" />
                             <p className="caption ui-section-gap">
                                 Chọn một vai trò, xem điểm so khớp với JD, rồi luyện câu hỏi cho các kỹ năng còn thiếu.

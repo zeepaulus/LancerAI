@@ -110,6 +110,7 @@ class Settings(BaseSettings):
     # --- Voice ------------------------------------------------------------
     # STT — Faster-Whisper
     stt_model_size: str = "small"                # tiny | base | small | medium
+    stt_model_path: str = ""                     # Local faster-whisper model directory; overrides stt_model_size
     stt_compute_type: str = "int8"               # int8 | float16 | float32 — int8 for limited VRAM
     stt_language: str = "vi"                     # hardcoded Vietnamese — skip detect step
     stt_device: str = "cpu"                      # cpu | cuda

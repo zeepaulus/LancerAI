@@ -34,6 +34,9 @@ Nguyên tắc bắt buộc:
 - Với học vấn/GPA: chỉ nêu vấn đề nếu thông tin bị sai, mâu thuẫn, hoặc target role/JD yêu cầu rõ.
   Không viết nhận xét kiểu "không rõ cách tính GPA" khi ứng viên đã cung cấp GPA và GPA không phải tiêu chí cốt lõi.
 - Nếu một phần chưa hoàn hảo nhưng không ảnh hưởng đáng kể đến quyết định tuyển dụng, hãy bỏ qua thay vì tạo issue severity low.
+- Chỉ tạo issue nếu có hành động sửa cụ thể giúp CV thuyết phục hơn. Nếu phần sửa chỉ là diễn giải lại thông tin đã rõ, hãy bỏ qua.
+- Không đề xuất rewrite kiểu kéo dài thông tin hành chính/học thuật đã đủ rõ. Ví dụ sai: "GPA 8.0" -> "Đã học tập và làm việc tại ABC với GPA 8.0". Đây là diễn giải dư thừa, không tăng giá trị tuyển dụng.
+- Với mỗi issue, explanation phải nói rõ: (1) vấn đề cụ thể là gì, (2) vì sao ảnh hưởng đến recruiter/ATS/role fit, (3) nên sửa bằng cách thêm/sắp xếp thông tin nào. Không viết góp ý chung chung.
 - Với mỗi issue, trích đúng đoạn gốc vào original_text nếu issue đến từ một câu/bullet cụ thể.
 - Nếu issue là thiếu thông tin ở cả section, original_text có thể là "" nhưng needs_clarification phải là true.
 - Severity phải hợp lý:
@@ -57,7 +60,7 @@ Trả về JSON object đúng schema:
       "severity": "critical|high|medium|low",
       "issue_type": "vague_claim|buzzword|missing_metric|weak_verb|generic_statement",
       "original_text": "Đoạn gốc cụ thể hoặc chuỗi rỗng nếu thiếu cả section",
-      "explanation": "Giải thích ngắn gọn, dựa trên rubric và bằng chứng CV",
+      "explanation": "Nêu rõ vấn đề, tác động tuyển dụng, và hướng sửa cụ thể; không đề xuất diễn giải dư thừa",
       "needs_clarification": false
     }
   ],
@@ -67,6 +70,7 @@ Trả về JSON object đúng schema:
 Giới hạn:
 - Tối đa 8 issues.
 - Ưu tiên high-impact issues thay vì bắt lỗi nhỏ; nếu CV tương đối ổn, trả về ít issue hoặc mảng rỗng.
+- Ít issue nhưng đúng trọng tâm tốt hơn nhiều issue lan man. Tuyệt đối không tạo issue để lấp số lượng.
 - Không nhắc đến các field path trong explanation; field chỉ để hệ thống định vị dữ liệu."""
 
 
@@ -79,6 +83,11 @@ _LOW_IMPACT_MARKERS = {
     "quy doi gpa",
     "gpa formula",
     "academic grading",
+    "hoc tap va lam viec",
+    "da hoc tap",
+    "diem 8.0",
+    "gpa 8.0",
+    "gpa 8",
     "dia chi truong",
     "ngay sinh",
     "tinh trang hon nhan",

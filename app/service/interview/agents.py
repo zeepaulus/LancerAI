@@ -124,6 +124,7 @@ _EVALUATE_SYSTEM = """Bạn là Interview Evaluator chuyên chấm chất lượ
 Không ép mọi câu trả lời vào một khuôn STAR. Chỉ dùng STAR như khung tham chiếu khi câu hỏi thuộc hành vi/project/kinh nghiệm thực tế.
 Với câu hỏi kỹ thuật, system design, debugging hoặc khái niệm, hãy đánh giá theo: hiểu vấn đề, hành động/cách tiếp cận, trade-off/edge case, kiểm chứng/kết quả.
 Chỉ đánh giá dựa trên evidence có trong câu hỏi và câu trả lời; không suy diễn, không bịa thành tích.
+Khi có CV/JD trong prompt, dùng chúng làm bối cảnh để đánh giá mức liên quan, mâu thuẫn hoặc khoảng thiếu; không dùng CV/JD để thưởng điểm nếu ứng viên không chứng minh trong câu trả lời.
 
 === RUBRIC ĐÁNH GIÁ PHỎNG VẤN — EVIDENCE FRAMEWORK ===
 
@@ -197,18 +198,23 @@ Tổng kết phải công bằng, dựa trên transcript và STAR score; không 
 Quy tắc:
 - Chỉ nêu điểm mạnh có evidence từ transcript; không khen chung chung.
 - Viết improvements dạng "Làm X để đạt Y", không phán xét nhân cách.
+- Mỗi strength/improvement phải dựa trên một nội dung cụ thể từ transcript, CV hoặc JD. Nếu không có evidence, không viết.
+- Ưu tiên nhận xét có ý nghĩa tuyển dụng: technical depth, ownership, kết quả đo được, communication, CV-JD fit, risk/gap cần kiểm chứng.
+- Không viết góp ý chung kiểu "cần tự tin hơn" nếu transcript không cho thấy vấn đề rõ. Không lặp lại cùng một ý bằng nhiều câu khác nhau.
+- Cho nhiều nhận xét nhất có thể khi có evidence: strengths 3-6 ý, improvements 3-8 ý. Nếu phiên quá ngắn, ghi rõ giới hạn evidence thay vì bịa thêm.
 - Nếu < 3 lượt hỏi, ghi rõ "Đánh giá hạn chế do phiên ngắn" trong final_feedback.
 
 Trả về JSON hợp lệ, không markdown:
 {
   "overall_score": <0-10>,
-  "strengths": ["<điểm mạnh có evidence cụ thể>"],
-  "improvements": ["<đề xuất cải thiện actionable>"],
+  "strengths": ["<điểm mạnh có evidence cụ thể từ transcript/CV/JD>"],
+  "improvements": ["<đề xuất cải thiện actionable, nêu rõ nên bổ sung/sửa cách trả lời gì>"],
   "final_feedback": "<2-3 câu tiếng Việt, chuyên nghiệp, phù hợp đưa vào report HR>"
 }"""
 
 _SCORECARD_SYSTEM = """Bạn là Inspector Agent chấm điểm phỏng vấn tuyển dụng theo CV/JD.
 Bạn PHẢI chấm từng năng lực dựa trên evidence trong transcript, CV và JD. Không bịa thông tin, không thưởng điểm cho claim không được ứng viên chứng minh.
+Mục tiêu là tạo report hữu ích cho HR/candidate: nhận xét rõ, nhiều góc nhìn, nhưng mỗi ý phải có bằng chứng hoặc khoảng thiếu cụ thể.
 
 Thang điểm từng năng lực: 0.0-5.0
 - 5.0: exceptional, evidence rất mạnh, vượt yêu cầu rõ ràng.
@@ -229,6 +235,14 @@ Quy tắc red flag:
 - Chỉ ghi red flag nếu có evidence nghiêm trọng: gian lận rõ, nhiều người hỗ trợ, rời tab kéo dài, trả lời mâu thuẫn lớn với CV.
 - Tín hiệu hành vi không được dùng như chẩn đoán tâm lý hoặc kết luận tự động.
 
+Quy tắc chất lượng nhận xét:
+- rationale phải nêu rõ vì sao score được cho, gắn với transcript/CV/JD; không viết "ứng viên trả lời tốt" nếu không chỉ ra tốt ở đâu.
+- evidence phải là trích dẫn ngắn hoặc tóm tắt rất cụ thể từ transcript/CV/JD. Nếu thiếu evidence, ghi "Không đủ evidence trong transcript" và chấm thấp/phù hợp.
+- strengths nên có 3-6 ý nếu transcript đủ dữ liệu; mỗi ý nêu năng lực + bằng chứng + ý nghĩa tuyển dụng.
+- concerns nên có 3-8 ý nếu có căn cứ; mỗi ý nêu thiếu gì, ảnh hưởng gì, và cần kiểm chứng/sửa thế nào.
+- next_steps phải cụ thể: nên hỏi follow-up chủ đề nào, yêu cầu bài test gì, hoặc ứng viên nên chuẩn bị evidence nào.
+- Không tạo nhận xét lan man, không lặp ý, không góp ý về chi tiết không ảnh hưởng tuyển dụng.
+
 Trả về JSON hợp lệ, không markdown:
 {
   "competencies": [
@@ -241,9 +255,9 @@ Trả về JSON hợp lệ, không markdown:
     }
   ],
   "headline": "<một câu kết luận ngắn>",
-  "summary": "<3-5 câu cho HR/reviewer>",
-  "strengths": ["<điểm mạnh có evidence>"],
-  "concerns": ["<điểm cần lưu ý hoặc thiếu evidence>"],
+  "summary": "<4-7 câu cho HR/reviewer, cân bằng điểm mạnh, rủi ro, mức fit và giới hạn evidence>",
+  "strengths": ["<năng lực + evidence + ý nghĩa tuyển dụng>"],
+  "concerns": ["<khoảng thiếu/rủi ro + evidence/thiếu evidence + đề xuất kiểm chứng>"],
   "red_flags": ["<red flag nghiêm trọng nếu có>"],
   "next_steps": "<đề xuất bước tiếp theo: pass/follow-up/deep-dive/reject review>"
 }
@@ -317,11 +331,20 @@ async def evaluate_node(state: InterviewState, llm: LLMConnector) -> dict[str, A
         if interviewer_turns:
             last_question = interviewer_turns[-1].content
 
+    cv_snippet = json.dumps(state.cv_data, ensure_ascii=False)[:1800]
+    jd_snippet = json.dumps(state.jd_data, ensure_ascii=False)[:1200] if state.jd_data else "(Không có JD chi tiết)"
+
     prompt = f"""Câu hỏi phỏng vấn: {last_question}
 
 Câu trả lời của ứng viên: {state.latest_transcript}
 
 Vị trí ứng tuyển: {state.job_title}
+
+CV ứng viên để đối chiếu:
+{cv_snippet}
+
+JD / yêu cầu vị trí để đối chiếu:
+{jd_snippet}
 
 Đánh giá theo STAR:"""
 
@@ -407,6 +430,12 @@ async def wrap_up_node(state: InterviewState, llm: LLMConnector) -> dict[str, An
     prompt = f"""## Vị trí: {state.job_title}
 ## Thời lượng phỏng vấn: {duration_min} phút
 {star_summary}
+
+## CV ứng viên
+{json.dumps(state.cv_data, ensure_ascii=False)[:2500]}
+
+## JD / yêu cầu vị trí
+{json.dumps(state.jd_data, ensure_ascii=False)[:1800] if state.jd_data else "(Không có JD chi tiết)"}
 
 ## Toàn bộ transcript
 {transcript_text[:3000]}

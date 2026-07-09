@@ -169,19 +169,6 @@ const JobMatchingPage = () => {
         });
     };
 
-    const generateQuestions = () => {
-        if (!selectedJob) return;
-        navigate('/question-bank', {
-            state: {
-                jobPreset: {
-                    role: jobRole(selectedJob),
-                    category: 'Job Description-based Questions',
-                    jdText: jdText || jobToText(selectedJob),
-                },
-            },
-        });
-    };
-
     const score = Math.round(Number(result?.overall_score || 0));
 
     return (
@@ -327,7 +314,7 @@ const JobMatchingPage = () => {
                             <MetricCard label="Điểm phù hợp" value={`${score}/100`} detail="Tổng hợp từ CV và JD" tone={scoreTone(score)} />
                             <MetricCard label="Trùng yêu cầu" value={`${Math.round(result.frequency_score || 0)}/100`} detail="Từ khóa và kỹ năng trong JD" tone="brand" />
                             <MetricCard label="Kinh nghiệm phù hợp" value={`${Math.round(result.position_score || 0)}/100`} detail="Bằng chứng liên quan trong CV" tone="ai" />
-                            <MetricCard label="Độ khớp vai trò" value={`${Math.round(result.semantic_score || 0)}/100`} detail="Mức tương đồng về ý nghĩa" tone="success" />
+                            <MetricCard label="Mức phù hợp vai trò" value={`${Math.round(result.semantic_score || 0)}/100`} detail="So sánh nội dung CV với JD" tone="success" />
                         </div>
 
                         <div className="dashboard-grid">
@@ -335,7 +322,7 @@ const JobMatchingPage = () => {
                                 {[
                                     ['Trùng yêu cầu', result.frequency_score || 0],
                                     ['Kinh nghiệm phù hợp', result.position_score || 0],
-                                    ['Độ khớp vai trò', result.semantic_score || 0],
+                                    ['Mức phù hợp vai trò', result.semantic_score || 0],
                                 ].map(([label, value]) => (
                                     <div key={label} className="ui-section-gap-bottom">
                                         <div className="ui-spread ui-row-gap-bottom">
@@ -347,16 +334,15 @@ const JobMatchingPage = () => {
                                 ))}
                             </Panel>
 
-                            <Panel className="span-7" title="Bước nên làm" subtitle="Dùng như gợi ý định hướng, không phải quyết định ứng tuyển tự động.">
+                            <Panel className="span-7" title="Bước nên làm" subtitle="Dùng phần này như gợi ý tham khảo trước khi chỉnh CV hoặc luyện phỏng vấn.">
                                 {result.improvement_feedback ? <p className="ui-copy">{result.improvement_feedback}</p> : <p className="caption">Dịch vụ so khớp chưa trả về nhận xét bằng văn bản.</p>}
                                 <div className="ui-cluster ui-section-gap">
-                                    <button className="btn-primary" onClick={generateQuestions}>Tạo câu hỏi từ JD này</button>
-                                    <button className="btn-outline" onClick={() => navigate('/cv-optimization', { state: { cvId } })}>Xem gợi ý cải thiện CV</button>
+                                    <button className="btn-primary" onClick={() => navigate('/cv-optimization', { state: { cvId } })}>Xem gợi ý cải thiện CV</button>
                                     <button className="btn-outline" onClick={prepareInterview}>Luyện phỏng vấn</button>
                                 </div>
                             </Panel>
 
-                            <Panel className="span-12" title="Kỹ năng còn thiếu" subtitle="Dùng danh sách này để bổ sung bằng chứng trong CV hoặc chuẩn bị ví dụ dự án.">
+                            <Panel className="span-12" title="Kỹ năng nên bổ sung" subtitle="Dùng danh sách này để bổ sung ví dụ trong CV hoặc chuẩn bị câu chuyện dự án.">
                                 {result.missing_skills?.length > 0 ? (
                                     <table className="data-table">
                                         <thead>
@@ -373,7 +359,7 @@ const JobMatchingPage = () => {
                                                     <td><strong className="ui-row-title">{gap.skill_name}</strong></td>
                                                     <td><StatusBadge tone={gap.impact_level === 'critical' ? 'danger' : 'warning'}>{gap.impact_level || 'cần xem'}</StatusBadge></td>
                                                     <td>{gap.reason || 'Chưa có giải thích chi tiết.'}</td>
-                                                    <td>Bổ sung bằng chứng trong CV hoặc chuẩn bị ví dụ dự án liên quan.</td>
+                                                    <td>Bổ sung ví dụ trong CV hoặc chuẩn bị một câu chuyện dự án liên quan.</td>
                                                 </tr>
                                             ))}
                                         </tbody>

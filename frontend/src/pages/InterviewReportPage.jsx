@@ -112,8 +112,8 @@ const InterviewReportPage = () => {
                 <Page narrow>
                     <PageHero
                         kicker="Báo cáo phỏng vấn"
-                        title="AI đang chuẩn bị báo cáo"
-                        description="Đang tải điểm đánh giá, tín hiệu phiên, transcript và gợi ý cải thiện."
+                        title="Đang chuẩn bị báo cáo"
+                        description="Đang tải điểm đánh giá, ghi nhận trong phiên, transcript và gợi ý cải thiện."
                         visual={<EvaluationScoreGraphic />}
                         tone="analytics"
                     />
@@ -166,9 +166,9 @@ const InterviewReportPage = () => {
             <Navbar />
             <Page wide>
                 <PageHero
-                    kicker="Báo cáo phỏng vấn"
-                    title="Đánh giá dựa trên bằng chứng"
-                    description="Xem điểm tổng quan, nhận xét, tín hiệu phiên và transcript trước khi đưa ra quyết định."
+                        kicker="Báo cáo phỏng vấn"
+                        title="Đánh giá dựa trên bằng chứng"
+                    description="Xem điểm tổng quan, nhận xét, ghi nhận trong buổi phỏng vấn và transcript trước khi đưa ra quyết định."
                     visual={<EvaluationScoreGraphic score={roundedConfidence} />}
                     tone="analytics"
                     actions={(
@@ -179,8 +179,8 @@ const InterviewReportPage = () => {
                     )}
                 >
                     <div className="hero-progress-grid">
-                        <ProgressCard label="Điểm tổng quan" value={roundedConfidence} detail="Điểm tổng hợp từ LLM dựa trên STAR, CV-JD fit và transcript." tone={scoreTone(roundedConfidence)} />
-                        <ProgressCard label="Toàn vẹn phiên" value={roundedBehavior} detail="Đo qua: rời tab, màn hình phụ, ánh sáng và nhận diện khuôn mặt." tone={scoreTone(roundedBehavior)} />
+                        <ProgressCard label="Điểm tổng quan" value={roundedConfidence} detail="Điểm tổng hợp dựa trên STAR, CV-JD Fit và transcript." tone={scoreTone(roundedConfidence)} />
+                        <ProgressCard label="Điều kiện buổi phỏng vấn" value={roundedBehavior} detail="Ghi nhận từ việc rời tab, màn hình phụ, ánh sáng và camera." tone={scoreTone(roundedBehavior)} />
                     </div>
                 </PageHero>
 
@@ -191,18 +191,18 @@ const InterviewReportPage = () => {
                 )}
 
                 <div className="metric-grid ui-section-gap-bottom">
-                    <MetricCard label="Điểm tổng quan" value={`${roundedConfidence}/100`} detail="LLM scorecard: STAR + CV-JD Fit" tone={scoreTone(roundedConfidence)} />
+                    <MetricCard label="Điểm tổng quan" value={`${roundedConfidence}/100`} detail="Tổng hợp từ STAR, CV-JD Fit và transcript" tone={scoreTone(roundedConfidence)} />
                     <MetricCard label="Số lượt hỏi" value={total_questions || transcript.filter(t => t.role === 'candidate').length || 0} detail="Câu trả lời được đánh giá" tone="brand" />
-                    <MetricCard label="Toàn vẹn phiên" value={`${roundedBehavior}/100`} detail="Rời tab · màn hình phụ · camera" tone={scoreTone(roundedBehavior)} />
+                    <MetricCard label="Điều kiện phiên" value={`${roundedBehavior}/100`} detail="Rời tab · màn hình phụ · camera" tone={scoreTone(roundedBehavior)} />
                     <MetricCard label="Ghi chú" value={logic_issues.length + improvement_suggestions.length} detail="Vấn đề và gợi ý" tone="ai" />
                 </div>
 
                 <div className="dashboard-grid">
                     <div className="span-12">
                         <AIResponsePanel
-                            title="Tóm tắt đánh giá AI"
-                            subtitle={`Phiên ${session_id || 'hiện tại'} - Kết luận từ hội đồng AI`}
-                            footer={<StatusBadge tone={scoreTone(roundedConfidence)} compact>{roundedConfidence >= 80 ? 'Tín hiệu tốt' : roundedConfidence >= 60 ? 'Cần xem xét' : 'Rủi ro cao'}</StatusBadge>}
+                            title="Tóm tắt đánh giá"
+                            subtitle={`Phiên ${session_id || 'hiện tại'}, nên xem lại trước khi ra quyết định`}
+                            footer={<StatusBadge tone={scoreTone(roundedConfidence)} compact>{roundedConfidence >= 80 ? 'Tín hiệu tốt' : roundedConfidence >= 60 ? 'Cần xem lại' : 'Rủi ro cao'}</StatusBadge>}
                         >
                             {scorecard?.headline && (
                                 <h3 className="title-md ui-row-gap-bottom" style={{ color: 'var(--color-brand-primary)', fontStyle: 'italic', marginBottom: '10px' }}>
@@ -210,7 +210,7 @@ const InterviewReportPage = () => {
                                 </h3>
                             )}
                             <p className="ui-copy" style={{ whiteSpace: 'pre-wrap' }}>
-                                {scorecard?.summary || 'Ứng viên đạt điểm tổng quan ' + roundedConfidence + '/100. Hãy xem transcript và các ghi chú cải thiện bên dưới trước khi chấp nhận đánh giá của AI.'}
+                                {scorecard?.summary || `Ứng viên đạt điểm tổng quan ${roundedConfidence}/100. Hãy đọc transcript và các ghi chú bên dưới trước khi dùng kết quả này để ra quyết định.`}
                             </p>
                             {scorecard?.next_steps && (
                                 <div className="card ui-card-compact" style={{ marginTop: '15px', backgroundColor: 'var(--color-bg-neutral-subtle)', borderLeft: '4px solid var(--color-brand-primary)', padding: '12px' }}>
@@ -223,7 +223,7 @@ const InterviewReportPage = () => {
 
                     {scorecard?.red_flags?.length > 0 && (
                         <div className="span-12">
-                            <Alert tone="danger" title="Cảnh báo Red Flags (Điểm cảnh cáo nghiêm trọng)">
+                            <Alert tone="danger" title="Cảnh báo cần xem kỹ">
                                 <ul style={{ margin: 0, paddingLeft: '20px' }}>
                                     {scorecard.red_flags.map((flag, idx) => (
                                         <li key={idx} className="ui-copy">{flag}</li>
@@ -234,7 +234,7 @@ const InterviewReportPage = () => {
                     )}
 
                     {scorecard?.competencies?.length > 0 && (
-                        <Panel className="span-12" title="Bảng đánh giá năng lực chi tiết" subtitle="Đánh giá chi tiết của hội đồng AI cho từng tiêu chí tuyển dụng.">
+                        <Panel className="span-12" title="Đánh giá năng lực chi tiết" subtitle="Điểm theo từng tiêu chí tuyển dụng, kèm lý do và bằng chứng trong phiên.">
                             <div className="report-note-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
                                 {scorecard.competencies.map((comp, idx) => {
                                     const percentage = comp.score * 20; // 0-5 scaled to 0-100%
@@ -264,7 +264,7 @@ const InterviewReportPage = () => {
                         </Panel>
                     )}
 
-                    <Panel className="span-6" title="Tín hiệu toàn vẹn phiên" subtitle="Ghi nhận từ: tab switching, màn hình phụ, camera (ánh sáng, khuôn mặt). Không phân tích ánh nhìn hay biểu cảm.">
+                    <Panel className="span-6" title="Ghi nhận trong phiên" subtitle="Ghi nhận từ việc rời tab, màn hình phụ và camera (ánh sáng, khuôn mặt). Không phân tích ánh nhìn hay biểu cảm.">
                         {behavior_observations.length === 0 ? (
                             <EmptyState title="Không có cảnh báo" description="Không ghi nhận tín hiệu bất thường đáng chú ý trong phiên." />
                         ) : (
@@ -303,9 +303,9 @@ const InterviewReportPage = () => {
                         </Panel>
                     )}
 
-                    <Panel className="span-12" title="Ghi chú đánh giá" subtitle="Các vấn đề và gợi ý cải thiện được AI ghi nhận.">
+                    <Panel className="span-12" title="Ghi chú đánh giá" subtitle="Các vấn đề và gợi ý cải thiện được ghi nhận từ nội dung buổi phỏng vấn.">
                         {logic_issues.length === 0 && improvement_suggestions.length === 0 ? (
-                            <EmptyState title="Không có ghi chú" description="AI không ghi nhận vấn đề hoặc gợi ý cải thiện trong phiên này." />
+                            <EmptyState title="Không có ghi chú" description="Chưa ghi nhận vấn đề hoặc gợi ý cải thiện rõ ràng trong phiên này." />
                         ) : (
                             <div className="report-note-grid">
                                 {logic_issues.length > 0 && (

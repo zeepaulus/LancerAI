@@ -51,6 +51,18 @@ class CVUploadRequest(BaseModel):
     language: Literal["vi", "en"] = Field(default="vi", description="Primary language of the CV: 'vi' or 'en'.")
 
 
+class CVExtractionUpdateRequest(BaseModel):
+    """Editable structured CV data after OCR/LLM extraction."""
+
+    personal_info: dict = Field(default_factory=dict)
+    education: list[dict] = Field(default_factory=list)
+    experience: list[dict] = Field(default_factory=list)
+    projects: list[dict] = Field(default_factory=list)
+    skills_matrix: dict = Field(default_factory=dict)
+    certifications: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
+
+
 class OptimizationRequest(BaseModel):
     """Request body for POST /optimization/cvs/{cv_id}/optimizations.
 

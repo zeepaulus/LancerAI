@@ -113,10 +113,10 @@ function isActive(pathname, item) {
     return item.match.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
-function workspaceLabel(pathname) {
+function currentAreaLabel(pathname) {
     const labels = {
         '/': 'Trang chủ',
-        '/dashboard': 'Dashboard',
+        '/dashboard': 'Tổng quan',
         '/candidate': 'Lịch sử luyện tập',
         '/profile': 'Hồ sơ',
         '/settings': 'Cài đặt',
@@ -186,7 +186,7 @@ const Navbar = () => {
         <div className={`lancer-nav-shell ${sidebarCollapsed ? 'is-collapsed' : ''}`}>
             <aside className="lancer-sidebar" aria-label="Primary navigation">
                 <div className="lancer-sidebar-head">
-                    <button className="lancer-brand" type="button" onClick={() => navigate('/dashboard')} title="Dashboard LancerAI">
+                    <button className="lancer-brand" type="button" onClick={() => navigate('/dashboard')} title="Về trang tổng quan">
                         <span className="lancer-brand-mark">L</span>
                         <span className="lancer-brand-name">
                             <strong>LancerAI</strong>
@@ -233,8 +233,8 @@ const Navbar = () => {
 
             <header className="lancer-topbar">
                 <div className="lancer-topbar-context" aria-label="Khu vực hiện tại">
-                    <span className="page-kicker">Không gian làm việc</span>
-                    <strong>{workspaceLabel(location.pathname)}</strong>
+                    <span className="page-kicker">Khu vực hiện tại</span>
+                    <strong>{currentAreaLabel(location.pathname)}</strong>
                 </div>
 
                 <div className="lancer-topbar-actions">

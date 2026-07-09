@@ -26,8 +26,8 @@ const PHASE_META = {
     },
     processing: {
         label: 'Đang phân tích',
-        title: 'Đang chuyển lời nói thành transcript',
-        description: 'AI đang tạo bằng chứng transcript và kiểm tra có cần hỏi tiếp hay không.',
+        title: 'Đang ghi transcript',
+        description: 'Hệ thống đang chuyển câu trả lời thành transcript và chuẩn bị câu hỏi tiếp theo.',
         tone: 'ai',
     },
     speaking: {
@@ -131,24 +131,24 @@ function messageTitle(sender) {
 
 function micStatusMeta(status, phase) {
     if (status === 'unavailable') {
-        return { label: 'Mic lỗi', tone: 'danger', description: 'Micro chưa sẵn sàng hoặc chưa được cấp quyền.' };
+        return { label: 'Micro lỗi', tone: 'danger', description: 'Micro chưa sẵn sàng hoặc chưa được cấp quyền.' };
     }
     if (status === 'requesting') {
-        return { label: 'Đang xin quyền mic', tone: 'warning', description: 'Trình duyệt đang chờ quyền truy cập micro.' };
+        return { label: 'Đang xin quyền micro', tone: 'warning', description: 'Trình duyệt đang chờ quyền truy cập micro.' };
     }
     if (status === 'off') {
-        return { label: 'Mic đã tắt', tone: 'neutral', description: 'Micro đã dừng cho phiên hiện tại.' };
+        return { label: 'Micro đã tắt', tone: 'neutral', description: 'Micro đã dừng cho phiên hiện tại.' };
     }
     if (phase === 'listening' && status === 'recording') {
-        return { label: 'Đang thu mic', tone: 'success', description: 'Micro đang gửi âm thanh đến phiên phỏng vấn.' };
+        return { label: 'Đang thu âm', tone: 'success', description: 'Micro đang gửi âm thanh đến phiên phỏng vấn.' };
     }
     if (phase === 'listening') {
-        return { label: 'Mic sẵn sàng', tone: 'success', description: 'Bạn có thể trả lời. Micro sẽ gửi âm thanh khi phát hiện tiếng nói.' };
+        return { label: 'Micro sẵn sàng', tone: 'success', description: 'Bạn có thể trả lời. Micro sẽ gửi âm thanh khi phát hiện tiếng nói.' };
     }
     if (status === 'ready') {
-        return { label: 'Mic tạm dừng', tone: 'warning', description: 'Micro đã sẵn sàng nhưng chưa gửi âm thanh khi AI đang hỏi hoặc hệ thống đang xử lý.' };
+        return { label: 'Micro tạm dừng', tone: 'warning', description: 'Micro đã sẵn sàng nhưng chưa gửi âm thanh khi AI đang hỏi hoặc hệ thống đang xử lý.' };
     }
-    return { label: 'Đang mở mic', tone: 'neutral', description: 'Hệ thống đang chuẩn bị micro.' };
+    return { label: 'Đang mở micro', tone: 'neutral', description: 'Hệ thống đang chuẩn bị micro.' };
 }
 
 const ChatPage = () => {
@@ -713,7 +713,7 @@ const ChatPage = () => {
                     kind: 'camera_ready',
                     severity: 'low',
                     confidence: 0.9,
-                    detail: 'Camera đang bật để ghi nhận tín hiệu phiên.',
+                    detail: 'Camera đang bật để ghi nhận điều kiện phỏng vấn.',
                 }, 0);
                 // Start real-time camera anomaly analysis
                 startCameraAnalysis(ws);

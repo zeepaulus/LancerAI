@@ -98,9 +98,9 @@ const AuthPage = () => {
 
     return (
         <div className="auth-redesign-shell auth-shell">
-            <section className="auth-visual-panel" aria-label="Xem trước không gian làm việc LancerAI">
-                <span className="status-badge status-badge--ai">Không gian LancerAI</span>
-                <h1 className="title-lg">Tiếp tục luyện CV và phỏng vấn.</h1>
+            <section className="auth-visual-panel" aria-label="Xem trước các tính năng chính">
+                <span className="status-badge status-badge--ai">CV, việc làm và phỏng vấn</span>
+                <h1 className="title-lg">Tiếp tục phân tích CV và luyện phỏng vấn.</h1>
                 <p className="caption">
                     Truy cập CV đã tải, phiên phỏng vấn giọng nói, kết quả so khớp việc làm và báo cáo.
                 </p>

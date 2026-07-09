@@ -128,6 +128,7 @@ class VoiceTTSConnector:
         self._speed = speed
         self._local_timeout_seconds = max(1.0, float(local_timeout_seconds or 8.0))
         self._vieneu_tts: object | None = None
+        self._vieneu_mode: str | None = None
 
     async def synthesize(self, text: str, voice: str | None = None) -> bytes:
         """Return complete PCM Int16 mono buffer for text."""
@@ -299,12 +300,15 @@ class VoiceTTSConnector:
             yield pcm_data
 
     async def _stream_vieneu(self, text: str, voice: str) -> AsyncGenerator[bytes, None]:
-        """Stream via VieNeu SDK first, then CLI binary, and finally edge-tts as fallback."""
+        """Stream via VieNeu local SDK/CLI without falling back to network TTS."""
         try:
             async for chunk in self._stream_vieneu_sdk(text, voice):
                 yield chunk
             return
         except Exception as sdk_exc:
+            if self._model_path and Path(self._model_path).suffix.lower() == ".gguf":
+                logger.warning("[TTS] Local VieNeu GGUF failed: %s", sdk_exc)
+                raise
             logger.debug("[TTS] VieNeu SDK not available or failed: %s. Trying CLI...", sdk_exc)
 
         try:
@@ -312,10 +316,8 @@ class VoiceTTSConnector:
                 yield chunk
             return
         except Exception as cli_exc:
-            logger.debug("[TTS] VieNeu CLI not available or failed: %s. Falling back to edge-tts...", cli_exc)
-
-        async for chunk in self._stream_edge(text, "vi-VN-HoaiMyNeural"):
-            yield chunk
+            logger.warning("[TTS] VieNeu CLI not available or failed: %s", cli_exc)
+            raise
 
     def _synthesize_vieneu_sync(self, text: str, voice: str) -> bytes:
         """Blocking VieNeu SDK call, executed in a thread pool by _stream_vieneu."""
@@ -325,14 +327,57 @@ class VoiceTTSConnector:
             except ImportError as exc:
                 raise RuntimeError("vieneu SDK is not installed. Run: uv sync") from exc
 
-            logger.info("[TTS] Loading VieNeu SDK backend. First run may download model/codec files.")
-            self._vieneu_tts = Vieneu()
+            if self._model_path and Path(self._model_path).suffix.lower() == ".gguf":
+                logger.info("[TTS] Loading local VieNeu GGUF backend: %s", self._model_path)
+                self._vieneu_tts = self._load_local_vieneu_gguf(Path(self._model_path))
+                self._vieneu_mode = "standard"
+            else:
+                logger.info("[TTS] Loading VieNeu SDK backend. First run may download model/codec files.")
+                self._vieneu_tts = Vieneu()
+                self._vieneu_mode = "v3turbo"
 
         tts = self._vieneu_tts
         selected_voice = self._resolve_vieneu_voice(tts, voice)
-        audio = tts.infer(text=text, voice=selected_voice) if selected_voice else tts.infer(text=text)
+        if self._vieneu_mode == "standard" and selected_voice and hasattr(tts, "get_preset_voice"):
+            audio = tts.infer(text=text, voice=tts.get_preset_voice(selected_voice))
+        else:
+            audio = tts.infer(text=text, voice=selected_voice) if selected_voice else tts.infer(text=text)
         sample_rate = int(getattr(tts, "sample_rate", OUTPUT_SAMPLE_RATE))
         return _waveform_to_pcm(audio, sample_rate)
+
+    def _load_local_vieneu_gguf(self, model_path: Path) -> object:
+        """Load a local VieNeu v2 GGUF model without Hugging Face lookups."""
+        from llama_cpp import Llama
+        from vieneu.base import BaseVieneuTTS
+        from vieneu.standard import VieNeuTTS
+        from vieneu.utils import NeuCodecOnnx
+
+        codec_path = model_path.parent / "codec" / "model.onnx"
+        if not codec_path.exists():
+            raise FileNotFoundError(f"VieNeu codec not found: {codec_path}")
+
+        tts = VieNeuTTS.__new__(VieNeuTTS)
+        BaseVieneuTTS.__init__(tts)
+        tts.max_context = 512
+        tts.streaming_overlap_frames = 1
+        tts.streaming_frames_per_chunk = 25
+        tts.streaming_lookforward = 10
+        tts.streaming_lookback = 100
+        tts.streaming_stride_samples = tts.streaming_frames_per_chunk * tts.hop_length
+        tts._is_quantized_model = True
+        tts._is_onnx_codec = True
+        tts.tokenizer = None
+        tts.use_chat_format = False
+        tts.default_emotion = "<|emotion_0|>"
+        tts.codec = NeuCodecOnnx(str(codec_path))
+        tts.backbone = Llama(
+            model_path=str(model_path),
+            verbose=False,
+            n_gpu_layers=0,
+            n_ctx=4096,
+        )
+        tts._load_voices(str(model_path.parent))
+        return tts
 
     def _resolve_vieneu_voice(self, tts: object, voice: str) -> str | None:
         requested = (voice or "").strip().strip('"').lower()

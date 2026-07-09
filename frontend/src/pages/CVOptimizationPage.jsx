@@ -13,7 +13,7 @@ import {
     StatusBadge,
 } from '../components/Common/AppUI';
 import { CVDocumentGraphic, ProductMockupGraphic } from '../components/Common/Visuals';
-import { optimizeCV, downloadPDF } from '../api/optimization';
+import { optimizeCV } from '../api/optimization';
 
 const INDUSTRIES = [
     { value: 'technology', label: 'Kỹ thuật phần mềm' },
@@ -67,7 +67,7 @@ function formatFieldPath(path) {
         languages: 'Ngoại ngữ',
         school: 'Trường',
         degree: 'Bằng cấp',
-        major: 'Major',
+        major: 'Chuyên ngành',
         gpa: 'GPA',
         period: 'Thời gian',
         company: 'Công ty',
@@ -103,29 +103,8 @@ const CVOptimizationPage = () => {
     const [jobTitle, setJobTitle] = useState('');
     const [industry, setIndustry] = useState('technology');
     const [loading, setLoading] = useState(false);
-    const [downloading, setDownloading] = useState(false);
     const [error, setError] = useState('');
     const [result, setResult] = useState(null);
-
-    const handleDownloadPDF = async () => {
-        if (!cvId) return;
-        setDownloading(true);
-        try {
-            const blob = await downloadPDF(cvId, 'harvard');
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `cv_optimized_${cvId.substring(0, 8)}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            window.URL.revokeObjectURL(url);
-        } catch (err) {
-            setError(err.message || 'Không thể tải xuống PDF.');
-        } finally {
-            setDownloading(false);
-        }
-    };
 
     const auditScore = Math.round(Number(result?.audit_score || 0));
     const cvScorecard = result?.cv_scorecard || {};
@@ -184,8 +163,8 @@ const CVOptimizationPage = () => {
             <Page wide>
                 <PageHero
                     kicker="Tối ưu CV"
-                    title="Xem điểm yếu của CV trước khi xuất file"
-                    description="Kiểm tra điểm ATS, câu diễn đạt yếu, kỹ năng còn thiếu và gợi ý viết lại trước khi tải PDF."
+                    title="Xem điểm yếu của CV trước khi chỉnh sửa"
+                    description="Kiểm tra điểm ATS, câu diễn đạt yếu, kỹ năng còn thiếu và gợi ý viết lại để bạn quyết định phần nào nên sửa."
                     visual={<ProductMockupGraphic variant="cv" />}
                     tone="cv"
                     actions={(
@@ -194,11 +173,6 @@ const CVOptimizationPage = () => {
                             <button className="btn-primary" onClick={handleAnalyze} disabled={loading}>
                                 {loading ? 'Đang phân tích...' : result ? 'Phân tích lại' : 'Bắt đầu phân tích'}
                             </button>
-                            {result && (
-                                <button className="btn-success" onClick={handleDownloadPDF} disabled={downloading}>
-                                    {downloading ? 'Đang tải PDF...' : 'Tải PDF'}
-                                </button>
-                            )}
                         </>
                     )}
                 />
@@ -241,7 +215,7 @@ const CVOptimizationPage = () => {
 
                         <div className="cv-analysis-preview" aria-label="Kết quả phân tích sẽ gồm">
                             <span>Điểm ATS</span>
-                            <span>Lỗi có bằng chứng</span>
+                            <span>Điểm cần sửa</span>
                             <span>Gợi ý viết lại</span>
                         </div>
                     </Panel>
@@ -249,9 +223,9 @@ const CVOptimizationPage = () => {
 
                 {loading && (
                     <div className={result ? '' : 'ui-section-gap'}>
-                        <Panel title="AI đang phân tích CV" subtitle="Thời gian thường mất 30-60 giây tùy độ dài tài liệu.">
+                        <Panel title="Đang phân tích CV" subtitle="Thời gian thường mất 30-60 giây, tùy độ dài tài liệu.">
                             <div className="cv-opt-loading-grid">
-                                {['Tìm bằng chứng trong CV', 'Phát hiện câu diễn đạt yếu', 'Soạn gợi ý viết lại', 'Kiểm tra tính an toàn nội dung'].map((item, index) => (
+                                {['Đọc lại nội dung CV', 'Tìm các câu còn mơ hồ', 'Soạn gợi ý viết lại', 'Kiểm tra nội dung có phóng đại không'].map((item, index) => (
                                     <div key={item} className="card cv-opt-loading-step">
                                         <span className="lancer-nav-icon">{index + 1}</span>
                                         <div>
@@ -268,8 +242,8 @@ const CVOptimizationPage = () => {
                 {result && (
                     <>
                         <div className="metric-grid ui-section-gap-bottom">
-                            <MetricCard label="Điểm ATS" value={`${auditScore}/100`} detail="Sức khỏe tổng thể của CV" tone={scoreTone(auditScore)} />
-                            <MetricCard label="Vấn đề tìm thấy" value={issueCounts.total} detail={`${issueCounts.critical + issueCounts.high} ưu tiên cao`} tone={issueCounts.total ? 'warning' : 'success'} />
+                            <MetricCard label="Điểm ATS" value={`${auditScore}/100`} detail="Chất lượng tổng thể của CV" tone={scoreTone(auditScore)} />
+                            <MetricCard label="Điểm cần sửa" value={issueCounts.total} detail={`${issueCounts.critical + issueCounts.high} mục nên ưu tiên`} tone={issueCounts.total ? 'warning' : 'success'} />
                             <MetricCard label="Gợi ý viết lại" value={result.rewritten_sections?.length || 0} detail="Cần xem trước khi dùng" tone="ai" />
                             <MetricCard label="Kỹ năng đã khớp" value={cvScorecard.matched_skills?.length || 0} detail="Có trong CV và vai trò mục tiêu" tone="success" />
                         </div>
@@ -296,11 +270,11 @@ const CVOptimizationPage = () => {
                             <div className="span-7">
                                 <AIResponsePanel
                                     title="Tóm tắt tối ưu CV"
-                                    subtitle="Dùng như gợi ý nghề nghiệp. Hãy kiểm tra dữ kiện trước khi dùng nội dung AI."
+                                    subtitle="Dùng như gợi ý tham khảo. Hãy kiểm tra dữ kiện trước khi dùng các đề xuất."
                                     footer={<StatusBadge tone="ai">Cần duyệt thủ công</StatusBadge>}
                                 >
                                     <p className="ui-copy ui-prewrap">
-                                        {result.roast_summary || 'CV đã được phân tích. Hãy xem điểm yếu và gợi ý viết lại trước khi xuất file.'}
+                                        {result.roast_summary || 'CV đã được phân tích. Hãy xem điểm yếu và gợi ý viết lại trước khi chỉnh nội dung.'}
                                     </p>
                                 </AIResponsePanel>
                             </div>
@@ -313,7 +287,7 @@ const CVOptimizationPage = () => {
                                 </div>
                             </Panel>
 
-                            <Panel className="span-6" title="Khoảng trống cần kiểm tra" subtitle="Dùng các mục này để chuẩn bị câu hỏi phỏng vấn hoặc bổ sung CV.">
+                            <Panel className="span-6" title="Kỹ năng nên bổ sung" subtitle="Dùng các mục này để chuẩn bị ví dụ phỏng vấn hoặc bổ sung CV.">
                                 <div className="ui-cluster">
                                     {(cvScorecard.missing_skills || []).length > 0
                                         ? cvScorecard.missing_skills.map((skill) => <StatusBadge key={skill} tone="warning">{skill}</StatusBadge>)
@@ -322,7 +296,7 @@ const CVOptimizationPage = () => {
                             </Panel>
 
                             {result.roast_issues?.length > 0 && (
-                                <Panel className="span-12" title="Điểm yếu cần sửa" subtitle="Ưu tiên lỗi nghiêm trọng và các câu mô tả tác động còn mơ hồ.">
+                                <Panel className="span-12" title="Điểm cần sửa" subtitle="Ưu tiên các câu mô tả còn mơ hồ, thiếu số liệu hoặc thiếu kết quả rõ ràng.">
                                     <div className="ui-stack ui-stack--md">
                                         {result.roast_issues.map((issue, index) => (
                                             <article key={`${issue.field}-${index}`} className="card">
@@ -344,7 +318,7 @@ const CVOptimizationPage = () => {
                             )}
 
                             {result.rewritten_sections?.length > 0 && (
-                                <Panel className="span-12" title="Gợi ý viết lại" subtitle="So sánh bản gốc với đề xuất của AI trước khi xuất hoặc sao chép.">
+                                <Panel className="span-12" title="Gợi ý viết lại" subtitle="So sánh bản gốc với đề xuất trước khi sao chép hoặc cập nhật vào CV.">
                                     <div className="ui-stack ui-stack--md">
                                         {result.rewritten_sections.map((section, index) => (
                                             <article key={`${section.field}-${index}`} className="card">
@@ -372,13 +346,13 @@ const CVOptimizationPage = () => {
                                 </Panel>
                             )}
 
-                            <Panel className="span-12" title="Bước tiếp theo" subtitle="Dùng kết quả phân tích để so khớp CV với mô tả công việc hoặc xuất file.">
+                            <Panel className="span-12" title="Bước tiếp theo" subtitle="Dùng kết quả phân tích để so khớp CV với mô tả công việc hoặc quay lại chỉnh dữ liệu đã trích xuất.">
                                 <div className="ui-cluster">
                                     <button className="btn-primary" onClick={() => navigate('/job-matching', { state: { cvId } })}>
                                         So khớp với JD
                                     </button>
-                                    <button className="btn-success" onClick={handleDownloadPDF} disabled={downloading}>
-                                        {downloading ? 'Đang tải PDF...' : 'Tải PDF'}
+                                    <button className="btn-outline" onClick={() => navigate('/cv-extraction-result', { state: { cvId } })}>
+                                        Sửa dữ liệu CV
                                     </button>
                                     <button className="btn-outline" onClick={() => navigate('/cv-upload')}>
                                         Phân tích CV khác

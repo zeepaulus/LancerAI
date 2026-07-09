@@ -41,6 +41,13 @@ export function getCV(cvId) {
     return apiJson(extractionCvPath(cvId), { method: 'GET' });
 }
 
+export function updateCVExtraction(cvId, data) {
+    return apiJson(extractionCvPath(cvId), {
+        method: 'PUT',
+        body: data,
+    });
+}
+
 export function getCVHistory(params = {}) {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {

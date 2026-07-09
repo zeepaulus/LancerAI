@@ -223,6 +223,51 @@ class ExtractionService:
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
+    async def update_extracted_data(
+        self,
+        session: AsyncSession,
+        cv_id: str,
+        user_id: str,
+        extracted_update: dict[str, Any],
+    ) -> CVExtractionResponse | None:
+        """Persist user-reviewed structured extraction before downstream analysis."""
+        cv_record = await self.get_cv(session, cv_id, user_id)
+        if cv_record is None:
+            return None
+
+        existing = cv_record.extracted_data or {}
+        structured = {
+            "raw_text": existing.get("raw_text", ""),
+            **extracted_update,
+        }
+        await self._cv_repo.update(
+            session,
+            cv_id,
+            extracted_data=structured,
+            optimized_data=None,
+            audit_score=None,
+            optimization_mode=None,
+            status="extracted",
+        )
+        await session.commit()
+
+        response = CVExtractionResponse(cv_id=cv_id, **extracted_update)
+
+        try:
+            embed_text = _build_embed_text(response)
+            embedding = await self._llm.embed(embed_text)
+            if embedding:
+                await self._vector_repo.store_embedding(
+                    doc_id=cv_id,
+                    text=embed_text,
+                    embedding=embedding,
+                    metadata={"user_id": user_id, "filename": cv_record.filename, "type": "cv"},
+                )
+        except Exception as exc:
+            logger.warning("[Extraction] Updated embedding/vector store failed (non-fatal): %s", exc)
+
+        return response
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

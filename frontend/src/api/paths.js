@@ -17,8 +17,6 @@ export const extractionCvPath = (cvId) => `/api/v1/extraction/cvs/${cvId}`;
 // Optimization
 export const optimizationAnalyzePath = (cvId) => `/api/v1/optimization/cvs/${cvId}/optimizations`;
 export const optimizationRenderPath = (cvId) => `/api/v1/optimization/cvs/${cvId}/render`;
-export const optimizationPdfPath = (cvId, template = 'harvard') =>
-    `/api/v1/optimization/cvs/${cvId}/pdf?template=${encodeURIComponent(template)}`;
 
 // Job matching
 export const JOB_MATCH_PATH = '/api/v1/jobs/matches';

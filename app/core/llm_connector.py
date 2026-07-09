@@ -91,6 +91,8 @@ class LLMConnector:
         self._cloud_model = cloud_model
 
         self._nvidia_base_url = nvidia_base_url.rstrip("/")
+        if self._nvidia_base_url.endswith("/v1"):
+            self._nvidia_base_url = self._nvidia_base_url[:-3]
         self._nvidia_api_key = nvidia_api_key
         self._nvidia_model = nvidia_model
         self._nvidia_max_tokens = nvidia_max_tokens

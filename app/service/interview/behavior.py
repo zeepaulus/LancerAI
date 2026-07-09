@@ -102,44 +102,44 @@ BEHAVIOR_CATALOG: dict[str, dict[str, str]] = {
         "suggestion": "Phiên vẫn có thể đánh giá qua micro và transcript nếu âm thanh hoạt động ổn định.",
     },
     "camera_analysis_limited": {
-        "label": "Trình duyệt không hỗ trợ nhận diện khuôn mặt native",
+        "label": "Trình duyệt không hỗ trợ nhận diện khuôn mặt",
         "category": "system",
         "sentiment": "neutral",
-        "suggestion": "Có thể bật MediaPipe để đánh giá ánh nhìn/chớp mắt chính xác hơn.",
+        "suggestion": "Báo cáo sẽ bỏ qua phần nhận diện khuôn mặt nếu trình duyệt không hỗ trợ.",
     },
 }
 
 BEHAVIOR_CATALOG.update(
     {
         "detection_unsupported": {
-            "label": "Trinh duyet khong ho tro mot so phep kiem tra hanh vi",
+            "label": "Trình duyệt không hỗ trợ một số kiểm tra hành vi",
             "category": "system",
             "sentiment": "neutral",
-            "suggestion": "Ghi chu gioi han ky thuat nay khi xem report.",
+            "suggestion": "Hãy xem đây là giới hạn kỹ thuật của trình duyệt khi đọc báo cáo.",
         },
         "tab_switch": {
-            "label": "Roi khoi tab/cua so phong van",
+            "label": "Rời khỏi tab hoặc cửa sổ phỏng vấn",
             "category": "integrity",
             "sentiment": "concern",
-            "suggestion": "Giu trang phong van o foreground trong suot buoi phong van.",
+            "suggestion": "Giữ phòng phỏng vấn ở màn hình đang dùng trong suốt buổi phỏng vấn.",
         },
         "secondary_monitor": {
-            "label": "Phat hien man hinh phu hoac moi truong hien thi mo rong",
+            "label": "Phát hiện màn hình phụ hoặc không gian hiển thị mở rộng",
             "category": "integrity",
             "sentiment": "concern",
-            "suggestion": "Chi su dung mot man hinh khi phong van.",
+            "suggestion": "Chỉ sử dụng một màn hình trong buổi phỏng vấn.",
         },
         "gaze_away": {
-            "label": "Nhin ra ngoai man hinh/camera trong thoi gian dai",
+            "label": "Nhìn ra ngoài màn hình hoặc camera trong thời gian dài",
             "category": "attention",
             "sentiment": "concern",
-            "suggestion": "Giu anh nhin tu nhien ve phia man hinh va tra loi tap trung hon.",
+            "suggestion": "Giữ ánh nhìn tự nhiên về phía màn hình và trả lời tập trung hơn.",
         },
         "phone_detected": {
-            "label": "Co tin hieu dien thoai trong khung hinh",
+            "label": "Có tín hiệu điện thoại trong khung hình",
             "category": "integrity",
             "sentiment": "concern",
-            "suggestion": "Dat dien thoai ra khoi khu vuc phong van neu khong can thiet.",
+            "suggestion": "Đặt điện thoại ra khỏi khu vực phỏng vấn nếu không cần thiết.",
         },
         "candidate_silence": {
             "label": "Im lặng quá lâu hoặc không phản hồi",

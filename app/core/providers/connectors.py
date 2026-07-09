@@ -43,6 +43,7 @@ def _create_stt_connector() -> VoiceSTTConnector:
     s = get_settings()
     return VoiceSTTConnector(
         model_size=s.stt_model_size,
+        model_path=s.stt_model_path or None,
         device=s.stt_device,
         compute_type=s.stt_compute_type,
         language=s.stt_language,
