@@ -1,0 +1,53 @@
+{
+  "must_have_skills": [
+    "HTML5",
+    "CSS3",
+    "JavaScript (ES6+)",
+    "React, Angular, Vue.js (một trong ba)",
+    "Node.js (cho ứng viên mong muốn làm backend)",
+    "TypeScript",
+    "JavaScript Frameworks (ví dụ: React, Angular, Vue.js)",
+    "State Management (ví dụ: Redux, Vuex)",
+    "Routing (ví dụ: React Router, Angular Router)",
+    "Forms (ví dụ: Formik, React Hook Form)",
+    "Testing (ví dụ: Jest, Cypress, Enzyme)",
+    "Version Control (ví dụ: Git)",
+    "Deploy (ví dụ: Webpack, Rollup, Vercel)",
+    "Responsive Web Design (ví dụ: Media Queries, Flexbox)",
+    "Performance Optimization (ví dụ: Code Splitting, Lazy Loading)"
+  ],
+  "nice_to_have_skills": [
+    "Nuxt.js",
+    "Next.js",
+    "Gatsby",
+    "Static Site Generation (SSG)",
+    "Web Assembly (WebAssembly)",
+    "AR/VR Development (ví dụ: A-Frame)",
+    "Machine Learning (ví dụ: TensorFlow.js)",
+    "Server-side Rendering (SSR)",
+    "GraphQL",
+    "Serverless Architecture"
+  ],
+  "ats_keywords": [
+    "Frontend Developer",
+    "Web Developer",
+    "JavaScript Developer",
+    "HTML/CSS Developer",
+    "User Experience (UX) Designer",
+    "User Interface (UI) Designer",
+    "Responsive Web Design",
+    "Web Performance Optimization",
+    "Frontend Frameworks (ví dụ: React, Angular, Vue.js)",
+    "JavaScript Libraries (ví dụ: Lodash, Moment.js)",
+    "Testing Frameworks (ví dụ: Jest, Cypress, Enzyme)",
+    "Version Control (ví dụ: Git)",
+    "Deploy Tools (ví dụ: Webpack, Rollup, Vercel)"
+  ],
+  "typical_experience_years": 3,
+  "common_certifications": [
+    "Certified Frontend Developer (CFD)",
+    "Certified Web Developer (CWD)",
+    "Certified JavaScript Developer (CJD)"
+  ],
+  "industry_notes": "Thị trường Frontend Development đang ngày càng phổ biến với sự phát triển của Internet và các công nghệ mới. Các kỹ năng và công nghệ mà ứng viên cần phải có cũng thay đổi nhanh chóng, vì vậy ứng viên cần phải cập nhật và mở rộng kiến thức của mình để có thể thích nghi được."
+}

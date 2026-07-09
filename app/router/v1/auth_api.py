@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
@@ -53,7 +53,6 @@ async def login(
     """Verify credentials and return ``{access_token, token_type}``."""
     token = await auth.login(db, payload.identifier, payload.password)
     return AuthTokenResponse(access_token=token)
-
 
 @router.get("/me")
 @limiter.limit("100/minute")

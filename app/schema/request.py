@@ -2,15 +2,12 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
+import re
 
 
 class AuthSignupRequest(BaseModel):
-    """Payload for POST /auth/signup.
-
-    NOTE: ``email`` is currently a plain ``str``; switch to ``EmailStr`` once
-    ``pydantic[email]`` is added as a dependency.
-    """
+    """Payload for POST /auth/signup."""
 
     email: str = Field(..., description="Account email (used as login identifier).")
     password: str = Field(..., min_length=8, max_length=128, description="Plain password (hashed server-side).")
@@ -24,10 +21,16 @@ class AuthSignupRequest(BaseModel):
         ),
     )
 
-
+    @field_validator("email")
+    @classmethod
+    def validate_email_format(cls, v: str) -> str:
+        v = v.strip().lower()
+        pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+        if not re.match(pattern, v):
+            raise ValueError("Email không đúng định dạng. Ví dụ: user@example.com")
+        return v
 class AuthLoginRequest(BaseModel):
     """Payload for POST /auth/login."""
-
     identifier: str = Field(..., description="Email or display name.")
     password: str = Field(..., min_length=8)
 

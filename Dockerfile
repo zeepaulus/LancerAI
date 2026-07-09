@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 libglib2.0-0 libgomp1 \
     libsm6 libxext6 libxrender-dev \
     poppler-utils tesseract-ocr \
+    build-essential cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy configuration files and README (required by pyproject.toml)

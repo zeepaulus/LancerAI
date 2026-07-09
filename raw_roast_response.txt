@@ -1,0 +1,61 @@
+{
+  "issues": [
+    {
+      "field": "experience[0].descriptions[0]",
+      "severity": "critical",
+      "issue_type": "vague_claim",
+      "original_text": "Conducting research on Natural Language Processing with a focus on Large Language Models, Vietnamese/SinoNom NLP",
+      "explanation": "Không đủ cụ thể về kết quả hoặc tiến bộ nghiên cứu trong project.",
+      "needs_clarification": false
+    },
+    {
+      "field": "projects[0].key_impacts[0]",
+      "severity": "high",
+      "issue_type": "weak_verb",
+      "original_text": "Achieved reaching remarkable result - reaching the final round of the competition",
+      "explanation": "Trả lời về chiến thắng ở xếp hạng trực tuyến không đủ mạnh mẽ",
+      "needs_clarification": false
+    },
+    {
+      "field": "projects[1].description",
+      "severity": "medium",
+      "issue_type": "vague_statement",
+      "original_text": "Built an automated OCR pipeline to digitize 360+ pages of historical documents using DeepSeek-OCR.",
+      "explanation": "Phản ánh quá trình xây dựng nhưng lại thiếu kết quả mong muốn ở đây",
+      "needs_clarification": false
+    },
+    {
+      "field": "personal_info.location",
+      "severity": "low",
+      "issue_type": "missing_metric",
+      "original_text": "Ho Chi Minh City",
+      "explanation": "Không đủ thông tin chi tiết về vị trí hoặc khu vực muốn công tác, dự định hợp tác",
+      "needs_clarification": false
+    },
+    {
+      "field": "projects[0].tech_stack",
+      "severity": "medium",
+      "issue_type": "weak_keyword",
+      "original_text": "PyTorch, OpenCLIP, FAISS, Gemini API, BGE-M3",
+      "explanation": "Danh sách ngôn ngữ thiếu về mục tiêu hoặc mục tiêu của công ty, bao gồm trọng tâm của công ty trong năng lực cần thiết",
+      "needs_clarification": false
+    },
+    {
+      "field": "experience[0].tech_stack",
+      "severity": "low",
+      "issue_type": "missing_metric",
+      "original_text": [],
+      "explanation": "Không có ngôn ngữ cụ thể cho công ty",
+      "needs_clarification": false
+    },
+    {
+      "field": "experience[0].period",
+      "severity": "medium",
+      "issue_type": "vague_phrase",
+      "original_text": "10/2025 – Present",
+      "explanation": "Phản ánh thời gian quá ngắn hoặc không đủ cụ thể ở đây",
+      "needs_clarification": false
+    }
+  ],
+  "summary": "CV của Pham Ngoc Duy có những điểm mạnh và kinh nghiệm nhất định, tuy nhiên cần cung cấp thêm thông tin cụ thể về kết quả và tiến bộ nghiên cứu trong từng dự án, đồng thời cần nhấn mạnh sự phát triển và cố gắng trong quá khứ. Để ghi được điểm cao và ghi nhận trong tiêu chí tuyển chọn, bạn nên phải quan tâm đến mục tiêu cũng như kết quả mà công ty đang đòi hỏi"
+}

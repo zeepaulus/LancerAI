@@ -1,0 +1,37 @@
+{
+  "issues": [
+    {
+      "field": "experience[0].key_impacts",
+      "severity": "high",
+      "issue_type": "vague_claim",
+      "original_text": "Conducting research on Natural Language Processing with a focus on Large Language Models, Vietnamese/SinoNom NLP",
+      "explanation": "Cụm từ \"Conducting research\" và \"focusing on Large Language Models\" quá mơ hồ và không cung cấp thông tin chi tiết về tác động hoặc thành tựu cụ thể.",
+      "needs_clarification": false
+    },
+    {
+      "field": "experience[0].key_impacts",
+      "severity": "high",
+      "issue_type": "weak_verb",
+      "original_text": "Achieved reaching remarkable result - reaching the final round of the competition.",
+      "explanation": "Cụm từ \"Achieved reaching\" không thể hiện rõ tác động hoặc thành tựu cụ thể. Cần sử dụng động từ mạnh hơn như \"Successfuly completed\", \"Proudly represented\" để thể hiện rõ hơn.",
+      "needs_clarification": false
+    },
+    {
+      "field": "projects[0].role",
+      "severity": "medium",
+      "issue_type": "missing_metric",
+      "original_text": "",
+      "explanation": "Không có thông tin về vai trò cụ thể của ứng viên trong dự án \"Multimodal Video Retrieval System (AI Challenge)\", cần bổ sung thông tin này để thể hiện rõ hơn.",
+      "needs_clarification": true
+    },
+    {
+      "field": "education[0].school",
+      "severity": "low",
+      "issue_type": "generic_statement",
+      "original_text": "VNUHCM - University of Science",
+      "explanation": "Thông tin về trường đại học không cung cấp thông tin chi tiết về lĩnh vực và uy tín của trường. Cần bổ sung thông tin này để thể hiện rõ hơn.",
+      "needs_clarification": false
+    }
+  ],
+  "summary": "CV ứng viên có nhiều điểm mạnh, nhưng cần cải thiện một số điểm yếu như cung cấp thông tin chi tiết hơn về tác động và thành tựu của dự án, và bổ sung thông tin về vai trò cụ thể của ứng viên trong dự án."
+}
