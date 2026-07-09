@@ -103,11 +103,13 @@ class VoiceTTSConnector:
         model_path: Path | None = None,
         voice: str = "vi-VN-HoaiMyNeural",
         speed: float = 1.0,
+        local_timeout_seconds: float = 8.0,
     ) -> None:
         self._engine = engine.lower()
         self._model_path = model_path
         self._voice = voice
         self._speed = speed
+        self._local_timeout_seconds = max(1.0, float(local_timeout_seconds or 8.0))
         self._vieneu_tts: object | None = None
 
     async def synthesize(self, text: str, voice: str | None = None) -> bytes:
@@ -263,7 +265,15 @@ class VoiceTTSConnector:
     async def _stream_vieneu_sdk(self, text: str, voice: str) -> AsyncGenerator[bytes, None]:
         """Stream via the official VieNeu SDK."""
         loop = asyncio.get_event_loop()
-        pcm_data = await loop.run_in_executor(None, self._synthesize_vieneu_sync, text, voice)
+        try:
+            pcm_data = await asyncio.wait_for(
+                loop.run_in_executor(None, self._synthesize_vieneu_sync, text, voice),
+                timeout=self._local_timeout_seconds,
+            )
+        except TimeoutError as exc:
+            raise TimeoutError(
+                f"VieNeu SDK exceeded {self._local_timeout_seconds:.1f}s"
+            ) from exc
         if pcm_data:
             yield pcm_data
 

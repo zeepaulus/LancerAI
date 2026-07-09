@@ -129,6 +129,28 @@ function messageTitle(sender) {
     return 'Hệ thống';
 }
 
+function micStatusMeta(status, phase) {
+    if (status === 'unavailable') {
+        return { label: 'Mic lỗi', tone: 'danger', description: 'Micro chưa sẵn sàng hoặc chưa được cấp quyền.' };
+    }
+    if (status === 'requesting') {
+        return { label: 'Đang xin quyền mic', tone: 'warning', description: 'Trình duyệt đang chờ quyền truy cập micro.' };
+    }
+    if (status === 'off') {
+        return { label: 'Mic đã tắt', tone: 'neutral', description: 'Micro đã dừng cho phiên hiện tại.' };
+    }
+    if (phase === 'listening' && status === 'recording') {
+        return { label: 'Đang thu mic', tone: 'success', description: 'Micro đang gửi âm thanh đến phiên phỏng vấn.' };
+    }
+    if (phase === 'listening') {
+        return { label: 'Mic sẵn sàng', tone: 'success', description: 'Bạn có thể trả lời. Micro sẽ gửi âm thanh khi phát hiện tiếng nói.' };
+    }
+    if (status === 'ready') {
+        return { label: 'Mic tạm dừng', tone: 'warning', description: 'Micro đã sẵn sàng nhưng chưa gửi âm thanh khi AI đang hỏi hoặc hệ thống đang xử lý.' };
+    }
+    return { label: 'Đang mở mic', tone: 'neutral', description: 'Hệ thống đang chuẩn bị micro.' };
+}
+
 const ChatPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -141,6 +163,8 @@ const ChatPage = () => {
     const [, setBehaviorEvents] = useState([]);
     const [finalEvaluation, setFinalEvaluation] = useState(null);
     const [loadingReport, setLoadingReport] = useState(false);
+    const [micStatus, setMicStatus] = useState('pending');
+    const [micLevel, setMicLevel] = useState(0);
 
     const chatEndRef = useRef(null);
     const videoPreviewRef = useRef(null);
@@ -151,9 +175,27 @@ const ChatPage = () => {
     const phaseRef = useRef('connecting');
     const behaviorLastSentRef = useRef({});
     const connectionSeqRef = useRef(0);
+    const micLevelUpdateRef = useRef(0);
+    const sessionInfoRef = useRef(null);
+    const reportRedirectingRef = useRef(false);
 
     useEffect(() => {
         phaseRef.current = phase;
+    }, [phase]);
+
+    useEffect(() => {
+        sessionInfoRef.current = sessionInfo;
+    }, [sessionInfo]);
+
+    useEffect(() => {
+        if (phase === 'ended') {
+            setMicStatus((current) => (current === 'unavailable' ? current : 'off'));
+            setMicLevel(0);
+            return;
+        }
+        if (phase !== 'listening') {
+            setMicStatus((current) => (current === 'recording' ? 'ready' : current));
+        }
     }, [phase]);
 
     useEffect(() => {
@@ -418,8 +460,19 @@ const ChatPage = () => {
         }
 
         if (payload.event === 'session_ended') {
+            const evaluation = payload.evaluation || null;
+            const sessionId = evaluation?.session_id || payload.session_id || sessionInfoRef.current?.sessionId;
             setPhase('ended');
-            setFinalEvaluation(payload.evaluation || null);
+            setFinalEvaluation(evaluation);
+            setLoadingReport(true);
+            cleanupConnections();
+            if (sessionId && !reportRedirectingRef.current) {
+                reportRedirectingRef.current = true;
+                navigate('/interview-report', {
+                    replace: true,
+                    state: { sessionId, pendingReport: true },
+                });
+            }
             return;
         }
 
@@ -471,14 +524,18 @@ const ChatPage = () => {
     };
 
     const startRecording = async (ws) => {
+        setMicStatus('requesting');
+        setMicLevel(0);
         if (!window.isSecureContext && !isLocalDevelopmentHost()) {
             setError(mediaAccessMessage(null, 'camera và micro'));
+            setMicStatus('unavailable');
             closeSocketQuietly(ws);
             setPhase('ended');
             return;
         }
         if (!navigator.mediaDevices?.getUserMedia) {
             setError(mediaAccessMessage(null, 'camera và micro'));
+            setMicStatus('unavailable');
             closeSocketQuietly(ws);
             setPhase('ended');
             return;
@@ -487,6 +544,7 @@ const ChatPage = () => {
         const AudioContextClass = getAudioContextConstructor();
         if (!AudioContextClass) {
             setError('Trình duyệt này không hỗ trợ xử lý âm thanh thời gian thực. Hãy dùng Chrome, Edge hoặc Safari bản mới.');
+            setMicStatus('unavailable');
             closeSocketQuietly(ws);
             setPhase('ended');
             return;
@@ -496,8 +554,10 @@ const ChatPage = () => {
         let videoStream = null;
         try {
             stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            setMicStatus('ready');
         } catch (err) {
             setError(mediaAccessMessage(err, 'micro'));
+            setMicStatus('unavailable');
             closeSocketQuietly(ws);
             setPhase('ended');
             return;
@@ -544,8 +604,19 @@ const ChatPage = () => {
             mute.connect(audioCtx.destination);
 
             processor.onaudioprocess = (event) => {
-                if (phaseRef.current !== 'listening') return;
                 const inputData = event.inputBuffer.getChannelData(0);
+                const now = performance.now();
+                if (now - micLevelUpdateRef.current > 140) {
+                    let sum = 0;
+                    for (let index = 0; index < inputData.length; index += 1) {
+                        sum += inputData[index] * inputData[index];
+                    }
+                    const rms = Math.sqrt(sum / inputData.length);
+                    setMicLevel(Math.min(1, rms * 14));
+                    setMicStatus(phaseRef.current === 'listening' ? 'recording' : 'ready');
+                    micLevelUpdateRef.current = now;
+                }
+                if (phaseRef.current !== 'listening') return;
                 const int16Buffer = resampleTo16kInt16(inputData, audioCtx.sampleRate);
                 if (ws.readyState === WebSocket.OPEN) ws.send(int16Buffer);
             };
@@ -555,6 +626,7 @@ const ChatPage = () => {
             stream?.getTracks().forEach((track) => track.stop());
             videoStream?.getTracks?.().forEach((track) => track.stop());
             setError(mediaAccessMessage(err, 'micro'));
+            setMicStatus('unavailable');
             closeSocketQuietly(ws);
             setPhase('ended');
         }
@@ -587,6 +659,8 @@ const ChatPage = () => {
             // Best-effort cleanup.
         }
         recordingRef.current = null;
+        setMicLevel(0);
+        setMicStatus((current) => (current === 'unavailable' ? current : 'off'));
     };
 
     const cleanupConnections = () => {
@@ -629,6 +703,8 @@ const ChatPage = () => {
     };
 
     const phaseMeta = PHASE_META[phase] || PHASE_META.connecting;
+    const micMeta = micStatusMeta(micStatus, phase);
+    const micLevelWidth = `${Math.round(micLevel * 100)}%`;
     const currentQuestion = [...messages].reverse().find((message) => message.sender === 'ai')?.text;
     const transcriptCount = messages.filter((message) => message.sender === 'user').length;
 
@@ -650,6 +726,12 @@ const ChatPage = () => {
                         </div>
                         <div className="interview-room-actions">
                             <StatusBadge tone={phaseMeta.tone}>{phaseMeta.label}</StatusBadge>
+                            <div className="interview-mic-status" title={micMeta.description} aria-label={micMeta.description}>
+                                <StatusBadge tone={micMeta.tone}>{micMeta.label}</StatusBadge>
+                                <span className="interview-mic-meter" aria-hidden="true">
+                                    <span style={{ width: micLevelWidth }} />
+                                </span>
+                            </div>
                             {phase !== 'ended' ? (
                                 <button className="btn-danger" type="button" onClick={handleStopInterview}>Kết thúc</button>
                             ) : (

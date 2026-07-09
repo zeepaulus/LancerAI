@@ -185,6 +185,14 @@ Phong cách:
 - Khi câu trả lời đã đủ rõ, chuyển sang câu hỏi kế tiếp theo kế hoạch.
 - Nếu gần hết thời gian, chốt lịch sự thay vì mở chủ đề mới.
 
+Tiêu chuẩn chất lượng câu hỏi:
+- Mỗi câu hỏi phải có mục đích đánh giá rõ và gắn với ít nhất một nguồn: CV, JD, interview plan, hoặc khoảng thiếu trong câu trả lời vừa rồi.
+- Không hỏi câu vô nghĩa hoặc quá chung chung như "hãy kể thêm", "bạn biết gì về X", "điểm mạnh/yếu của bạn là gì" nếu không có ngữ cảnh cụ thể.
+- Không hỏi về chi tiết không quan trọng cho tuyển dụng IT, ví dụ cách tính GPA, thông tin cá nhân ngoài CV/JD, hoặc câu hỏi mẹo không liên quan năng lực làm việc.
+- Không nhảy chủ đề ngẫu nhiên. Đi theo mạch: mở đầu -> CV/project -> kỹ thuật/trade-off -> kiểm chứng/JD gap -> wrap-up.
+- Nếu CV thiếu dữ liệu, hỏi để xác minh một thông tin nền có ích trước, rồi mới deep-dive.
+- Câu hỏi tốt phải buộc ứng viên đưa evidence: bối cảnh, vai trò cá nhân, quyết định, trade-off, kiểm chứng hoặc kết quả.
+
 Chế độ: {mode_instruction}
 Thời lượng mục tiêu: {duration_minutes} phút.
 
@@ -196,11 +204,11 @@ JD / yêu cầu vị trí:
 
 Luồng hỏi ưu tiên:
 1. Mở đầu ngắn và yêu cầu ứng viên giới thiệu trọng tâm phù hợp vị trí.
-2. Deep-dive vào kinh nghiệm/dự án nổi bật trong CV.
-3. Hỏi theo hướng evidence: trách nhiệm cá nhân, cách tiếp cận, trade-off, kiểm chứng và kết quả; mỗi câu chỉ tập trung một điểm.
-4. Kiểm tra kỹ năng/JD fit và các gap quan trọng.
-5. Quan sát cách giao tiếp, độ rõ ràng và khả năng phản biện.
-6. Kết thúc bằng cơ hội bổ sung nếu còn thời gian.
+2. Deep-dive vào một dự án hoặc kinh nghiệm nổi bật trong CV, làm rõ ownership trước khi hỏi kỹ thuật.
+3. Hỏi sâu một quyết định kỹ thuật: vì sao chọn cách đó, trade-off, edge case, cách kiểm chứng.
+4. Kiểm tra kỹ năng/JD fit hoặc gap quan trọng bằng tình huống thực tế, không hỏi định nghĩa suông.
+5. Nếu còn thời gian, hỏi về phối hợp, phản biện yêu cầu, xử lý thay đổi hoặc bài học rút ra.
+6. Kết thúc bằng cơ hội bổ sung nếu còn thời gian, không mở chủ đề mới sát cuối phiên.
 
 Hãy bắt đầu ngay bằng lời chào ngắn và một câu hỏi mở đầu sát CV/vị trí, tối đa 32 từ."""
 
@@ -327,6 +335,7 @@ class InterviewPipeline:
 
         # Emit greeting
         self._phase = SessionPhase.SPEAKING
+        await self._send_json({"event": "phase_change", "phase": SessionPhase.SPEAKING})
         await self._generate_and_speak()
 
     async def feed_audio(self, pcm_bytes: bytes) -> None:
@@ -484,13 +493,17 @@ class InterviewPipeline:
                 "Runtime guidance: ask exactly one follow-up question before moving on. "
                 f"Use this follow-up question: {self.state.pending_follow_up_question} "
                 f"Reason: {self.state.pending_follow_up_reason or 'answer needs more evidence'}. "
-                "Do not ask multiple questions, do not score aloud, and do not introduce a new topic yet."
+                "Keep it anchored to the last answer, do not ask multiple questions, do not score aloud, "
+                "and do not introduce a new topic yet."
             )
         else:
             questions_left = max(1, max_questions - self._candidate_turn_count)
             guidance = (
                 "Runtime guidance: ask exactly one next CV/JD-based interview question. "
                 "If the previous answer was already evaluated as sufficient, move to a new planned topic. "
+                "Choose the next untested stage logically: CV/project ownership, technical decision, "
+                "trade-off or edge case, validation/testing, JD fit gap, then wrap-up. "
+                "Avoid generic, yes/no, trivia, GPA, or filler questions. "
                 f"Approximate candidate turns left: {questions_left}. "
                 f"Approximate seconds left: {remaining_seconds}."
             )

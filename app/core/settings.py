@@ -122,6 +122,7 @@ class Settings(BaseSettings):
     tts_engine: str = "edge"                     # edge | piper | vieneu
     tts_voice: str = "vi-VN-HoaiMyNeural"        # Edge voice; VieNeu: "Xuân Vĩnh (Nam - Miền Nam)"
     tts_model_path: str = ""                     # VieNeu .gguf model path
+    tts_local_timeout_seconds: float = 8.0       # Max wait for local TTS before falling back to Edge
 
 
 _settings_lock = threading.Lock()
