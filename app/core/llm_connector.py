@@ -136,6 +136,32 @@ class LLMConnector:
 
         return use_cloud, use_nvidia
 
+    def _get_fallback_chain(self, use_cloud: bool, use_nvidia: bool) -> list[tuple[bool, bool, str]]:
+        """Return the sequence of (use_cloud, use_nvidia, label) to try based on priority."""
+        chain = []
+
+        # If user explicitly requested nvidia, start with nvidia, then fallback to groq, then local
+        if use_nvidia:
+            if _is_configured_secret(self._nvidia_api_key):
+                chain.append((False, True, "NVIDIA NIM"))
+            if _is_configured_secret(self._cloud_api_key):
+                chain.append((True, False, "Groq"))
+            chain.append((False, False, "Ollama (Local)"))
+            return chain
+
+        # If cloud requested, prioritize Groq first, then NVIDIA NIM, then local Ollama
+        if use_cloud:
+            if _is_configured_secret(self._cloud_api_key):
+                chain.append((True, False, "Groq"))
+            if _is_configured_secret(self._nvidia_api_key):
+                chain.append((False, True, "NVIDIA NIM"))
+            chain.append((False, False, "Ollama (Local)"))
+            return chain
+
+        # Default is local only
+        chain.append((False, False, "Ollama (Local)"))
+        return chain
+
 
     def _chat_url(self, use_cloud: bool, use_nvidia: bool = False) -> str:
         if use_nvidia:
@@ -250,30 +276,29 @@ class LLMConnector:
         cache_threshold: float = 0.92,
         user_id: str | None = None,
     ) -> str:
-        use_cloud, use_nvidia = self._resolve_nvidia(use_cloud, use_nvidia)
-        model_name = self._model(use_cloud, use_nvidia)
-        backend = self._backend_name(use_cloud, use_nvidia)
+        resolved_cloud, resolved_nvidia = self._resolve_nvidia(use_cloud, use_nvidia)
+        initial_model = self._model(resolved_cloud, resolved_nvidia)
         prompt_str = self._full_prompt_str(messages)
 
         # --- Cache lookup ---------------------------------------------------
         if cache_repo is not None:
-            cached = await self._cache_lookup(cache_repo, prompt_str, model_name, cache_threshold)
+            cached = await self._cache_lookup(cache_repo, prompt_str, initial_model, cache_threshold)
             if cached is not None:
                 entry, score = cached
                 await cache_repo.increment_hit(entry.id)
                 logger.info(
                     "[LLMCache] Serving from cache — score=%.4f model=%s user=%s",
-                    score, model_name, user_id,
+                    score, initial_model, user_id,
                 )
                 return entry.response_text
 
         # --- LLM call -------------------------------------------------------
-        response_text = await self._call_llm(messages, use_cloud, use_nvidia, json_mode)
+        response_text, succeeded_model, succeeded_backend = await self._call_llm(messages, use_cloud, use_nvidia, json_mode)
 
         # --- Persist to cache -----------------------------------------------
         if cache_repo is not None:
             await self._cache_save(
-                cache_repo, prompt_str, response_text, model_name, backend, user_id,
+                cache_repo, prompt_str, response_text, succeeded_model, succeeded_backend, user_id,
             )
 
         return response_text
@@ -284,12 +309,29 @@ class LLMConnector:
         use_cloud: bool,
         use_nvidia: bool,
         json_mode: bool,
-    ) -> str:
+    ) -> tuple[str, str, str]:
+        chain = self._get_fallback_chain(use_cloud, use_nvidia)
+        return await self._call_llm_with_chain(messages, chain, json_mode)
+
+    async def _call_llm_with_chain(
+        self,
+        messages: list[dict[str, str]],
+        chain: list[tuple[bool, bool, str]],
+        json_mode: bool,
+    ) -> tuple[str, str, str]:
+        if not chain:
+            raise RuntimeError("No LLM backend available in the fallback chain")
+
+        use_cloud, use_nvidia, label = chain[0]
         payload = self._build_chat_payload(
             messages, use_cloud, use_nvidia, stream=False, json_mode=json_mode
         )
         url = self._chat_url(use_cloud, use_nvidia)
+        model_name = self._model(use_cloud, use_nvidia)
+        backend = self._backend_name(use_cloud, use_nvidia)
+
         try:
+            logger.info("[LLM] Trying backend: %s", label)
             resp = await self._client.post(
                 url, json=payload, headers=self._headers(use_cloud, use_nvidia)
             )
@@ -298,13 +340,13 @@ class LLMConnector:
             choice = data["choices"][0]
             content = choice["message"]["content"]
             finish_reason = choice.get("finish_reason")
-            logger.info("[LLM] Response received: len=%d, finish_reason=%s", len(content), finish_reason)
-            return typing.cast(str, content)
+            logger.info("[LLM] Response received from %s: len=%d, finish_reason=%s", label, len(content), finish_reason)
+            return typing.cast(str, content), model_name, backend
         except Exception as exc:
-            if use_cloud or use_nvidia:
-                logger.warning("[LLM] Cloud/Nvidia call failed: %s. Falling back to local Ollama.", exc)
-                return await self._call_llm(messages, use_cloud=False, use_nvidia=False, json_mode=json_mode)
-            logger.exception("[LLM] Local Ollama call failed too")
+            if len(chain) > 1:
+                logger.warning("[LLM] Backend %s failed: %s. Falling back to next candidate.", label, exc)
+                return await self._call_llm_with_chain(messages, chain[1:], json_mode)
+            logger.exception("[LLM] All LLM backends in the chain failed")
             raise
 
     # ------------------------------------------------------------------
