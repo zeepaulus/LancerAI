@@ -9,7 +9,7 @@
 LancerAI là web application phục vụ chuẩn bị xin việc qua các module chính:
 
 - **CV Extraction** — Upload CV PDF hoặc ảnh; OCR đọc nội dung, cấu trúc hóa thông tin (cá nhân, kinh nghiệm, kỹ năng, học vấn) bằng LLM.
-- **CV Optimization** — Pipeline agent (LangGraph): phân tích CV, chỉ ra điểm yếu, viết lại có cấu trúc, kiểm tra trung thực trước khi xuất.
+- **CV Optimization** — Pipeline agent (LangGraph): phân tích CV, chỉ ra điểm yếu, viết lại cấu trúc, kiểm tra trung thực trước khi xuất.
 - **Job Matching** — Hybrid Scoring (tần suất từ khóa, vị trí xuất hiện, semantic similarity) giữa CV và JD; gợi ý kỹ năng thiếu và mức độ ảnh hưởng.
 - **Voice Interview** — Phỏng vấn mô phỏng real-time qua WebSocket: PCM microphone → STT → LLM → TTS; chấm điểm theo STAR.
 
