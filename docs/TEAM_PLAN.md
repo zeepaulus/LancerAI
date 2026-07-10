@@ -1,103 +1,121 @@
-# Team Implementation Plan — LancerAI
+# Team Implementation Plan - LancerAI
 
-Bảng phân công module và kiến trúc đề xuất cho giai đoạn chuyển từ MVP mock → real implementation.
+Cập nhật: 2026-07-10.
 
----
+Kế hoạch này phản ánh trạng thái code hiện tại: nhiều module đã có implementation thật, nên trọng tâm tiếp theo là hardening, UX hoàn chỉnh, kiểm thử tích hợp và vận hành production-like.
 
-## Phân công module
+## 1. Phân Công Đề Xuất
 
-| Module | Owner / Role | Scope |
+| Nhóm | Owner/Role | Scope |
 |---|---|---|
-| **Backend/API/DB** | Backend Lead | FastAPI router, Pydantic schema, PostgreSQL, Alembic migrations, DI container |
-| **CV Extraction (M1)** | ML Engineer + Backend | PyMuPDF text extraction, PaddleOCR fallback, LLM structuring, embedding indexing |
-| **CV Optimization (M2)** | ML Engineer + Backend | Sequential pipeline (retrieve → analyze → rewrite → audit), LangGraph optional |
-| **Job Matching (M3)** | Backend + Data Eng. | Hybrid scoring (frequency + position + semantic), JD crawling, skill gap analysis |
-| **Interview Voice (M4)** | ML Engineer + Backend | STT (PhoWhisper), TTS (edge-tts), turn-based pipeline, STAR evaluation |
-| **Frontend** | Frontend Dev | Auth flow, CV upload/display, optimization view, matching results, interview UI |
+| Backend/API/DB | Backend Lead | FastAPI routers, service boundary, Alembic, PostgreSQL, auth, rate limit |
+| AI Platform | ML/AI Engineer | LLM routing, prompt quality, semantic cache, embedding, OCR/STT/TTS readiness |
+| CV Intelligence | Backend + AI | Extraction quality, review loop, optimization agents, scorecard, PDF/DOCX export |
+| Job Matching | Backend + Data | TopCV crawler, job corpus, matching score, recommendations, skill taxonomy |
+| Interview Voice | Backend + AI + FE | WebSocket protocol, VAD/STT/TTS, report persistence, frontend room UX |
+| Frontend/Product | Frontend Dev | Candidate journey, error/degraded states, report/dashboard polish, accessibility |
+| QA/Ops | QA/DevOps | Test matrix, Docker/prod compose, observability, deployment checklist |
 
----
+## 2. Workstreams
 
-## Kiến trúc đề xuất theo module
+### A. Backend Hardening
 
-### M1 — CV Extraction
-
-**Pipeline:** `File upload → PyMuPDF (text layer) → [nếu scan: PaddleOCR fallback] → LLM structuring → persist + embedding`
-
-Đề xuất:
-- **Bước 1:** PyMuPDF (`fitz`) extract text trước. Tính text density.
-- **Bước 2:** Nếu density thấp (scan PDF/ảnh), fallback sang PaddleOCR hoặc VietOCR.
-- **Bước 3:** LLM structuring — prompt yêu cầu JSON schema, evidence quotes, không bịa số liệu.
-- **Bước 4:** Embedding qua `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`.
-- **Lưu ý:** Mỗi bước phải có error handling riêng. Không dùng hidden chain-of-thought.
-
-### M2 — CV Optimization
-
-**Pipeline:** `retrieve_context → analyze_issues → rewrite_sections → audit_truthfulness`
-
-Đề xuất:
-- **Bắt đầu sequential** — không LangGraph-first. LangGraph chỉ khi team maintain/debug được.
-- `retrieve_context`: Vector DB → industry benchmarks, keyword frequency map.
-- `analyze_issues`: LLM prompt phân loại vấn đề (vague_claim, missing_metric, weak_verb, buzzword).
-- `rewrite_sections`: Áp dụng Google XYZ formula. Prompt PHẢI require JSON schema output.
-- `audit_truthfulness`: So sánh rewrite với gốc. Không cho phép bịa số liệu.
-- **Prompts phải require:** JSON schema, evidence quotes, no invented metrics.
-
-### M3 — Job Matching
-
-**Pipeline:** `parse JD → skill overlap + section weighting → embedding similarity → aggregate score`
-
-Đề xuất:
-- **Skill overlap + section weighting trước**, embedding similarity sau.
-- Crawl JD: rate limit, cache (hash nội dung).
-- Hybrid scoring: `0.20 × frequency + 0.30 × position + 0.50 × semantic`.
-- Gap analysis: phân loại critical / important / nice_to_have.
-
-### M4 — Interview Voice
-
-**Pipeline:** `PCM mic → turn detection → STT → LLM → TTS → PCM speaker`
-
-Đề xuất:
-- **Turn-based voice trước**, realtime/VAD sau.
-- STT: `vinai/PhoWhisper-base` — CPU/GPU.
-- TTS: `edge-tts` voices `vi-VN-HoaiMyNeural` hoặc `vi-VN-NamMinhNeural`.
-- Evaluation: STAR framework (Situation, Task, Action, Result).
-- **Không request hidden chain-of-thought.**
-
----
-
-## Công cụ đề xuất
-
-| Category | Tool | Notes |
+| Priority | Task | Output |
 |---|---|---|
-| LLM | Qwen2.5 3B/7B hoặc Llama 3.1 8B | Local qua Ollama; Groq/OpenAI-compatible fallback |
-| OCR | PyMuPDF → PaddleOCR/VietOCR fallback | PyMuPDF cho PDF có text layer |
-| Embedding | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | 384 dims, multilingual |
-| STT | `vinai/PhoWhisper-base` | HuggingFace Transformers, Vietnamese ASR |
-| TTS | `edge-tts` vi-VN voices | Hoặc Piper ONNX local |
-| Vector DB | ChromaDB (dev) / Qdrant (prod) | Configured qua `VECTOR_DB_BACKEND` |
+| P0 | Magic-byte validation for CV files | Reject spoofed/corrupt uploads before parser |
+| P0 | Better PDF error handling | 422 for encrypted/corrupt/unreadable PDFs |
+| P0 | Startup/preflight checks | `/ready` or admin check includes DB/vector/LLM/STT/TTS/OCR status |
+| P1 | Validate `OptimizationRequest.mode` | `Literal["standard","roast"]` |
+| P1 | Consolidate CV optimization DB updates | Fewer partial-commit states |
 
----
+### B. AI/Model Reliability
 
-## Quy trình chuyển mock → real
+| Priority | Task | Output |
+|---|---|---|
+| P0 | LLM fallback telemetry | Know which backend generated each output |
+| P0 | STT/TTS availability check | Fail early with clear message |
+| P1 | Mark fallback/cached outputs | Better user trust in reports |
+| P1 | Tune extraction prompt with examples | Fewer empty/misaligned CV fields |
+| P2 | Skill graph seed data | Better related-skill adjustment |
 
-1. **Chọn module** theo priority (M1 → M2 → M3 → M4).
-2. **Implement service method** — replace `NotImplementedError` trong connector/service.
-3. **Giữ mock data trong test** — test vẫn dùng deterministic mock.
-4. **Thêm integration test** với real connector (mark `@pytest.mark.slow` nếu cần).
-5. **Router không đổi** — chỉ thay service internals.
-6. **PR review** — chạy đủ `pytest`, `ruff`, `mypy` trước merge.
+### C. Frontend UX
 
----
+| Priority | Task | Output |
+|---|---|---|
+| P0 | Degraded-state UI | Explain when AI/vector/voice services are down |
+| P0 | Upload timeout/retry | Avoid hanging multipart requests |
+| P1 | CV review before downstream flows | User can fix extraction before optimize/match/interview |
+| P1 | Interview event feedback | Show listening, transcribing, thinking, speaking, no-speech |
+| P2 | Match/report history dashboards | Better long-term candidate tracking |
 
-## Quality gates bắt buộc
+### D. Workers/Data
+
+| Priority | Task | Output |
+|---|---|---|
+| P0 | TopCV crawler runbook | Safe repeatable job corpus build |
+| P1 | Crawler health metrics | Jobs seen/added/updated/skipped visible |
+| P1 | Document export persistence | Store PDF/DOCX in object storage or local artifact store |
+| P2 | Additional job sources | ITviec or curated seed jobs |
+
+## 3. Quality Gates
+
+Before merging backend changes:
 
 ```bash
-uv run pytest -q               # All tests pass
-uv run ruff check app tests     # No lint errors
-uv run mypy app tests            # No type errors
+uv run pytest
+uv run ruff check app tests
+uv run mypy app tests
 ```
 
-Frontend (nếu có script):
+Before merging frontend changes:
+
 ```bash
-cd frontend && npm run build    # Build clean
+cd frontend
+npm run build
 ```
+
+Before demo/prod-like deployment:
+
+```bash
+docker compose up -d
+uv run alembic upgrade head
+uv run pytest
+cd frontend && npm run build
+```
+
+For integration tests:
+
+```bash
+uv run pytest -m integration
+```
+
+## 4. Release Checklist
+
+- `.env` has strong `AUTH_SECRET_KEY`.
+- `AUTH_ALLOW_WEAK_SECRET=false` in production.
+- `ALLOWED_ORIGINS` points to real frontend domains.
+- `FRONTEND_BASE_URL` points to deployed frontend.
+- PostgreSQL migrations applied.
+- Redis reachable for Celery.
+- Vector DB reachable and collection writable.
+- Neo4j credentials valid or graph-dependent fallbacks accepted.
+- At least one LLM backend is reachable.
+- Voice mode has STT/TTS path configured.
+- Browser media works over HTTPS, except localhost.
+- Nginx proxy routes `/api/` and WebSocket upgrades correctly.
+
+## 5. Suggested Sprint Order
+
+1. Hardening upload + AI readiness checks.
+2. Interview persistence and event UX.
+3. CV review/edit loop polish.
+4. Job corpus runbook and recommendations health.
+5. Export/document flow persistence.
+6. Dashboard/report polish and analytics.
+
+## 6. References
+
+- [../README.md](../README.md)
+- [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)
+- [FLOW_STUDY_CASES.md](FLOW_STUDY_CASES.md)
+- [PROJECT_REPORT.md](PROJECT_REPORT.md)

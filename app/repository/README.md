@@ -1,87 +1,86 @@
-# `app/repository/` — Data Access Layer
+# `app/repository/` - Data Access Layer
 
-Package triển khai Repository pattern — cô lập toàn bộ logic truy cập dữ liệu khỏi service layer. Service không được phép gọi SQLAlchemy, ChromaDB, hay Neo4j trực tiếp; mọi I/O đi qua các lớp repository này.
-
-## Design Principles
-
-- **Dependency Inversion**: service layer chỉ phụ thuộc vào contract (class interface), không phụ thuộc vào implementation.
-- **Session injection**: không giữ session trong repository — `AsyncSession` được inject vào từng method, đảm bảo transaction boundary nằm ở service layer.
-- **Generic typing**: `RelationalRepository[ModelT]` dùng Python `Generic[T]` và `TypeVar`, một class duy nhất phục vụ tất cả ORM models.
+Repository layer cô lập truy cập dữ liệu khỏi service layer. Service không nên gọi SQLAlchemy, ChromaDB, Qdrant hoặc Neo4j trực tiếp nếu đã có repository tương ứng.
 
 ## Files
 
-### `relational_repository.py` — PostgreSQL CRUD
-Generic async CRUD repository cho toàn bộ SQLAlchemy ORM models.
+| File | Role |
+|---|---|
+| `relational_repository.py` | Generic async CRUD repository for SQLAlchemy models |
+| `base_vector_repository.py` | Abstract vector store contract |
+| `vector_repository.py` | ChromaDB and Qdrant implementations plus factory |
+| `graph_repository.py` | Neo4j skill graph queries |
+| `llm_cache_repository.py` | Exact and semantic lookup for cached LLM responses |
+
+## RelationalRepository
+
+Generic CRUD wrapper:
 
 ```python
 user_repo = RelationalRepository(User)
-cv_repo   = RelationalRepository(CVRecord)
+cv_repo = RelationalRepository(CVRecord)
 ```
-
-**Methods:**
-
-| Method | Signature | Description |
-|---|---|---|
-| `get_by_id` | `(session, id) → ModelT \| None` | Lookup by PK |
-| `get_all` | `(session, limit, offset) → Sequence[ModelT]` | Paginated fetch |
-| `filter_by` | `(session, **kwargs) → Sequence[ModelT]` | AND filter trên bất kỳ column nào |
-| `create` | `(session, **kwargs) → ModelT` | Insert; auto-gen UUID nếu `id` thiếu |
-| `update` | `(session, id, **kwargs) → ModelT \| None` | Partial update |
-| `delete` | `(session, id) → bool` | Hard delete by PK |
-| `exists` | `(session, id) → bool` | Kiểm tra tồn tại |
-
-Tất cả write operations dùng `session.flush()` thay vì `commit()` — commit được quản lý bởi `get_db_session()` dependency ở tầng trên.
-
-**Technology:** `SQLAlchemy 2.0+` async API (`AsyncSession`, `select()`, typed `Mapped` columns).
-
-### `vector_repository.py` — Vector Database
-Abstraction layer cho embedding storage và semantic search.
-
-Dùng bởi:
-- **Module 1 (Extraction)**: lưu CV embeddings sau khi trích xuất.
-- **Module 2 (Optimization)**: retrieve industry benchmarks cho Roast/Rewrite agents.
-- **Module 3 (Matching)**: semantic similarity scoring giữa CV và JD.
-
-**Methods:**
 
 | Method | Description |
 |---|---|
-| `store_embedding(doc_id, text, embedding, metadata)` | Lưu vector + metadata vào collection |
-| `search_similar(query_embedding, top_k)` | ANN search, trả về top-K kết quả |
+| `get_by_id(session, id)` | Lookup by primary key |
+| `get_all(session, limit, offset)` | Paginated fetch |
+| `filter_by(session, **kwargs)` | AND filter by model columns |
+| `create(session, **kwargs)` | Insert and flush |
+| `update(session, id, **kwargs)` | Partial update and flush |
+| `delete(session, id)` | Hard delete |
+| `exists(session, id)` | Boolean existence check |
 
-**Technology:** ChromaDB hoặc Qdrant — chọn bằng `Settings.vector_db_backend` + factory `create_vector_repository` (`app/repository/vector_repository.py`). Contract: `BaseVectorRepository`.
+Repositories flush but do not own high-level transaction decisions; callers commit/rollback.
 
-### `base_vector_repository.py`
+## Vector Repository
 
-ABC `store_embedding` / `search_similar` — service chỉ import lớp này.
-
-### `graph_repository.py` — Knowledge Graph
-Abstraction layer cho Neo4j — quan hệ giữa skills/technologies.
-
-Relationship examples trong graph:
-```
-(React) -[:BELONGS_TO]-> (Frontend)
-(Docker) -[:REQUIRES]-> (Linux)
-(Kubernetes) -[:EXTENDS]-> (Docker)
-```
-
-Dùng bởi:
-- **Module 2 (Optimization)**: hiểu ngữ cảnh skill để roast chính xác hơn.
-- **Module 3 (Matching)**: domain-aware weighting trong Hybrid Scoring.
-
-**Methods:**
+Contract:
 
 | Method | Description |
 |---|---|
-| `get_related_skills(skill, depth)` | Graph traversal N-hops từ một skill node |
-| `get_skill_importance(skill, domain)` | Tính importance score của skill trong domain |
+| `store_embedding(doc_id, text, embedding, metadata)` | Upsert document vector |
+| `search_similar(query_embedding, top_k)` | Return nearest vectors |
 
-**Technology (planned):** Neo4j via `neo4j` Python driver (async).
+Backends:
 
-## Technology Summary
-
-| Repository | Backend | Status |
+| Backend | Class | Selection |
 |---|---|---|
-| `RelationalRepository` | PostgreSQL + SQLAlchemy | Implemented |
-| `vector_repository` (`BaseVectorRepository`) | ChromaDB / Qdrant | Implemented (backend theo config) |
-| `GraphRepository` | Neo4j | Stub — pending |
+| ChromaDB | `ChromaVectorRepository` | Default, `VECTOR_DB_BACKEND=chroma` |
+| Qdrant | `QdrantVectorRepository` | `VECTOR_DB_BACKEND=qdrant` or Qdrant cloud host |
+
+Used by:
+
+- CV extraction for CV embeddings.
+- Optimization retrieval context.
+- Job matching recommendations.
+- Crawler worker job embeddings.
+
+## Graph Repository
+
+`GraphRepository` wraps Neo4j operations.
+
+| Method | Description |
+|---|---|
+| `get_related_skills(skill_name, depth)` | N-hop related skill lookup |
+| `get_skill_importance(skill_name, domain)` | Importance score based on shortest path |
+| `close()` | Release driver |
+
+If Neo4j driver is unavailable, graph operations return empty/zero where possible. Query failures raise `GraphRepositoryError`.
+
+## LLM Cache Repository
+
+Stores prompt/response pairs in `llm_response_cache`.
+
+Typical flow:
+
+1. Exact SHA-256 hash lookup.
+2. Embedding similarity lookup using cosine similarity.
+3. Increment hit counter on cache hit.
+4. Save prompt/response/embedding on miss.
+
+## Design Notes
+
+- Service layer type-hints vector access against `BaseVectorRepository`.
+- Vector writes are usually best-effort because core user actions should not fail only because semantic search is down.
+- Graph access is optional enrichment, not a hard dependency for matching.

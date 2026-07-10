@@ -1,127 +1,182 @@
-# TODO — LancerAI
+# TODO - LancerAI
 
-Checklist triển khai theo module. `[ ]` chưa xong, `[~]` đang làm một phần, `[x]` đã xong.
+Checklist này phản ánh trạng thái code hiện tại sau đợt rà soát tài liệu ngày 2026-07-10.
 
----
+Ký hiệu:
 
-## M0 — Authentication
+- `[x]` đã có implementation hoặc test cơ bản.
+- `[~]` đã có một phần, còn phụ thuộc hạ tầng/model hoặc cần hardening.
+- `[ ]` chưa làm hoặc nên làm tiếp.
 
-**Files:** `app/service/auth/service.py`, `app/core/security.py`, `app/core/providers/auth.py`, `app/router/v1/auth_api.py`
+## P0 - Hardening Trước Demo/Production-Like
 
-- [x] `security.hash_password`, `verify_password`, `create_access_token`, `decode_access_token` (bcrypt, PyJWT)
-- [x] `AuthService.signup`, `login`, `resolve_token` — real implementation
-- [x] Gắn endpoint trong `auth_api.py` (signup/login/me — production code)
-- [x] Integration test: đăng ký → đăng nhập → `GET /auth/me`
-- [ ] (Tuỳ chọn) `tenants`, RBAC chi tiết, audit log
+- [ ] Thêm magic-byte/file signature validation cho CV upload.
+- [ ] Trả lỗi rõ cho PDF encrypted/corrupt/unreadable thay vì 500 generic.
+- [ ] Reject hoặc mark partial khi raw text trích xuất quá ít.
+- [ ] Thêm preflight/health cho LLM, vector DB, OCR, STT, TTS.
+- [ ] Persist interview transcript incrementally trong WebSocket session.
+- [ ] Thêm max utterance duration để tránh buffer audio tăng không giới hạn.
+- [ ] Thêm server-side throttle cho `behavior_event`.
+- [ ] Thêm frontend degraded-state khi AI/vector/voice service unavailable.
 
----
+## M0 - Authentication
 
-## M1 — CV extraction
+Files: `app/service/auth/service.py`, `app/core/security.py`, `app/core/providers/auth.py`, `app/router/v1/auth_api.py`
 
-**Files:** `app/core/ocr_processor.py`, `app/core/llm_connector.py`, `app/service/extraction/service.py`, `app/router/v1/extraction_api.py`
+- [x] Hash/verify password bằng bcrypt.
+- [x] JWT create/decode bằng PyJWT.
+- [x] Signup/login/me.
+- [x] Update profile bằng `PATCH /auth/me`.
+- [x] Change password bằng `PUT /auth/password`.
+- [x] Auth dependency `get_current_user`.
+- [x] WebSocket token validation helper.
+- [~] Email hiện là `str`.
+- [ ] Thêm `pydantic[email]` và `EmailStr`.
+- [ ] RBAC/tenant organization flow chi tiết.
+- [ ] Audit log cho hành động nhạy cảm.
 
-- [ ] `OCRProcessor.extract_text` / `extract_text_grouped` (ví dụ PaddleOCR)
-- [ ] `ExtractionService.extract_from_pdf` — PyMuPDF khi có text layer; OCR khi scan
-- [ ] `ExtractionService.extract_from_image`
-- [ ] LLM cấu trúc hoá raw text → schema `CVExtractionResponse`
-- [x] Lưu `cv_records` (đọc/ghi theo `user_id`) — MVP mock persists deterministic structured data
-- [ ] Lưu embedding CV qua `BaseVectorRepository` (phục vụ M2/M3)
-- [x] Gắn `extraction_api` với service — MVP mock returns structured CV
-- [x] Upload validates content-type + size → 415 / 413
-- [x] GET CV validates ownership → 404 if not found
+## M1 - CV Extraction
 
----
+Files: `app/service/extraction/service.py`, `app/core/ocr_processor.py`, `app/router/v1/extraction_api.py`
 
-## M2 — CV optimization (LangGraph)
+- [x] Upload endpoint với content-type allowlist.
+- [x] Giới hạn file 10 MB.
+- [x] PyMuPDF đọc PDF text layer.
+- [x] OCR fallback cho PDF scan/image khi PaddleOCR có sẵn.
+- [x] LLM structured extraction theo `CVExtractionResponse`.
+- [x] Retry extraction khi thiếu tên.
+- [x] Lưu `CVRecord` theo `user_id`.
+- [x] List CV history.
+- [x] Fetch CV theo ownership.
+- [x] Update reviewed extracted data.
+- [x] Store/update embedding best-effort.
+- [~] Production Docker hiện loại PaddleOCR để giảm image size.
+- [ ] Magic-byte validation.
+- [ ] UX phân biệt extraction partial/fallback.
+- [ ] Background extraction job cho file scan lớn.
 
-**Files:** `app/service/optimization/` (service, graph, state, `*_agent.py`), `app/service/optimization/template_renderer.py`, `app/router/v1/optimization_api.py`
+## M2 - CV Optimization
 
-- [ ] `LLMConnector` gọi Ollama / OpenAI-compatible (generate, chat, streaming)
-- [ ] `retrieval_agent` — vector DB → `industry_benchmarks`, `keyword_frequency_map`
-- [ ] `roast_agent` — `RoastIssue`
-- [ ] `rewrite_agent` — `RewrittenSection`
-- [ ] `audit_agent` — `AuditFlag`, merge `optimized_cv`
-- [ ] `OptimizationService.analyze_cv` — chạy graph đã compile, persist `optimized_data`
-- [ ] `CVTemplateRenderer.render_cv` / `render_pdf`
-- [x] Gắn `optimization_api` — MVP mock returns deterministic optimized_data
-- [x] Ownership check: cv_id must belong to user
-- [ ] PDF export (WeasyPrint) — currently 501
+Files: `app/service/optimization/`, `app/service/cv_analysis/scorecard.py`, `app/router/v1/optimization_api.py`
 
----
+- [x] LangGraph graph assembly.
+- [x] Retrieval agent.
+- [x] Roast agent.
+- [x] Rewrite agent.
+- [x] Audit agent.
+- [x] Deterministic CV scorecard.
+- [x] Persist `optimized_data`, `audit_score`, `optimization_mode`, `status`.
+- [x] Render template JSON.
+- [x] PDF endpoint with streaming response.
+- [x] Document worker PDF export path.
+- [~] `OptimizationRequest.mode` vẫn là `str`.
+- [ ] Đổi `mode` sang `Literal["standard","roast"]`.
+- [ ] Gom transaction hoặc recovery cho nhiều DB updates.
+- [ ] Metadata output source: `llm`, `fallback`, `cached`.
+- [ ] Inquiry loop để hỏi thêm dữ liệu trước rewrite.
 
-## M3 — Job matching
+## M3 - Job Matching And Job Corpus
 
-**Files:** `app/service/matching/service.py`, `app/repository/vector_repository.py`, `app/router/v1/job_matching_api.py`
+Files: `app/service/matching/service.py`, `app/router/v1/job_matching_api.py`, `app/workers/crawler_worker.py`
 
-- [ ] MatchingService dùng `BaseVectorRepository` + LLM đúng lifecycle CV/JD
-- [ ] `match_cv_to_jd` — Hybrid Scoring (tần suất / vị trí / semantic theo spec)
-- [ ] Crawl JD từ URL (rate limit) — có thể gọi worker
-- [ ] Cache parse JD (hash nội dung)
-- [ ] `get_recommendations` — semantic search trên `job_listings` (currently 501)
-- [x] Gắn `job_matching_api` — MVP mock returns deterministic scores + gap list
-- [x] Ownership check: cv_id must belong to user
+- [x] Hybrid scoring: frequency, position, semantic.
+- [x] Renormalize score khi semantic embedding unavailable.
+- [x] LLM missing skills feedback.
+- [x] Deterministic fallback feedback/gaps.
+- [x] Safe public URL checks cho JD fetch.
+- [x] Persist `JobMatchResult`.
+- [x] List/detail job listings.
+- [x] Recommendations via vector search.
+- [x] TopCV crawler worker.
+- [x] TopCV parser tests.
+- [~] Recommendations cần job corpus và embeddings đã populate.
+- [ ] Job corpus seed/runbook cho demo.
+- [ ] Full-text search index cho job listings.
+- [ ] Saved/applied/rejected workflow endpoints exposed to frontend.
+- [ ] Admin trigger/status endpoint cho crawler.
 
----
+## M4 - Voice Interview
 
-## M4 — Voice interview
+Files: `app/service/interview/`, `app/core/voice_stt_connector.py`, `app/core/voice_tts_connector.py`, `app/router/v1/interview_api.py`
 
-**Files:** `app/core/voice_stt_connector.py`, `app/core/voice_tts_connector.py`, `app/service/interview/pipeline.py`, `app/service/interview/service.py`, `app/router/v1/interview_api.py`
+- [x] Create interview session.
+- [x] Build interview plan from CV/JD.
+- [x] JD scrape endpoint.
+- [x] List sessions.
+- [x] Get report.
+- [x] WebSocket first-message JWT/session validation.
+- [x] PCM audio intake.
+- [x] VAD/turn detection.
+- [x] STT via Groq or faster-whisper.
+- [x] LLM streaming interviewer response.
+- [x] TTS via Edge/Piper/VieNeu.
+- [x] Behavior event scoring.
+- [x] STAR/final scorecard persistence on stop.
+- [~] Transcript persistence mostly final-stop based.
+- [ ] Incremental transcript persistence.
+- [ ] Explicit events: `no_speech_detected`, `stt_started`, `llm_thinking`, `tts_started`, `tts_error`.
+- [ ] Preflight check for local STT/TTS model paths.
+- [ ] Server-side behavior-event throttle.
 
-- [ ] `VoiceSTTConnector.transcribe` / `stream_transcribe`
-- [ ] `VoiceTTSConnector.synthesize` / `synthesize_stream`
-- [ ] `InterviewPipeline.start` / `feed_audio` / `stop`
-- [ ] `InterviewService.persist_session`, `get_report`, `create_session` — replace MVP mock with real implementation
-- [x] POST /interview/sessions — MVP mock returns deterministic session
-- [x] GET /interview/sessions/{session_id}/report — MVP mock returns STAR scores
-- [x] WebSocket JWT auth validated; audio processing stub
-- [ ] Frontend: PCM capture 16 kHz (mic) + playback 24 kHz (TTS) via WebSocket audio channel
+## M5 - Background Workers
 
----
+Files: `app/workers/celery_app.py`, `app/workers/crawler_worker.py`, `app/workers/document_worker.py`
 
-## M5 — Background workers
+- [x] Celery app configured.
+- [x] Redis broker/result backend config.
+- [x] TopCV crawler worker.
+- [x] Job upsert by `source_url`.
+- [x] Job embedding best-effort.
+- [x] Document worker PDF export.
+- [x] Document worker DOCX export.
+- [ ] Celery Beat schedule.
+- [ ] Persist generated documents to object storage/local artifact store.
+- [ ] Retry queue for failed embeddings.
 
-**Files:** `app/workers/celery_app.py`, `app/workers/crawler_worker.py`, `app/workers/document_worker.py`
+## Storage And Graph
 
-- [x] Celery app + Redis broker/backend — configured
-- [ ] `crawl_job_listings` — Scrapy/Playwright
-- [ ] `generate_document` — PDF/DOCX
-- [ ] Celery Beat — lịch crawl
-- [ ] Endpoint admin trigger crawl (sau M0 RBAC)
-
----
-
-## Lưu trữ & graph
-
-**Files:** `app/repository/vector_repository.py`, `app/repository/graph_repository.py`
-
-- [x] `ChromaVectorRepository` / `QdrantVectorRepository` + factory
-- [ ] `GraphRepository` Neo4j — `get_related_skills`, `get_skill_importance`
-- [ ] (Tuỳ chọn) tenant routing trong `RelationalRepository`
-- [x] Migration Alembic bao phủ toàn bộ model (see `migration/alembic/versions/`)
-
----
+- [x] `RelationalRepository` generic CRUD.
+- [x] ChromaDB vector repository.
+- [x] Qdrant vector repository.
+- [x] Vector repository factory.
+- [x] Neo4j `GraphRepository` with related skill and importance queries.
+- [x] LLM response cache model/repository.
+- [x] Alembic migrations for current schema.
+- [ ] Seed skill graph data.
+- [ ] pgvector or external ANN strategy for large LLM cache if needed.
 
 ## Frontend
 
-**Files:** `frontend/src/`
+Files: `frontend/src/`
 
-- [ ] Đăng nhập / đăng ký — JWT storage
-- [ ] Upload CV — multipart, hiển thị extraction
-- [ ] Optimization — trigger phân tích, xem roast/rewrite, tải PDF
-- [ ] Job matching — JD URL / paste, điểm + gap
-- [ ] Phỏng vấn — WebSocket + audio
-- [ ] Dashboard lịch sử / STAR
-- [ ] Routing tổng thể
+- [x] Landing/about/auth routes.
+- [x] Auth guard.
+- [x] Dashboard/candidate/profile/settings routes.
+- [x] CV upload route.
+- [x] CV extraction result/review routes.
+- [x] CV optimization route.
+- [x] Job matching/recommendations routes.
+- [x] Interview/chat/report routes.
+- [x] API wrappers for auth/extraction/optimization/matching/interview.
+- [x] JSON API timeout and error sanitizer.
+- [~] Multipart upload wrapper has no timeout.
+- [ ] Add `AbortController` timeout/retry to `uploadCV`.
+- [ ] Strong degraded-state UI for AI/vector/voice service outages.
+- [ ] Show interview state events clearly.
+- [ ] More complete reports dashboard.
 
----
+## DX / QA
 
-## DX
+- [x] `uv run pytest --collect-only -q` collected `171/178` default tests after integration deselect.
+- [x] Unit/integration-style tests for auth, routes, models, schemas, security, vector, graph, matching, interview, workers.
+- [x] CI workflow exists under `.github/workflows/ci.yml`.
+- [ ] Run full quality gate after docs/code changes:
 
-- [x] `tests/conftest.py` — fixture SQLite async
-- [x] Integration tests: 123 passed (auth + extraction + optimization + matching + interview)
-- [x] ruff check: All checks passed
-- [x] mypy: no issues found in 79 source files
-- [ ] Pre-commit: ruff, mypy
-- [x] CI — lint + test (`.github/workflows/ci.yml`): ruff, mypy, pytest, frontend build
-- [ ] OpenAPI: `response_model` nhất quán
-- [ ] `EmailStr` cho email đăng ký nếu bật validation
+```bash
+uv run pytest
+uv run ruff check app tests
+uv run mypy app tests
+cd frontend && npm run build
+```
+
+- [ ] Add frontend lint/test setup if project needs stricter FE CI.
