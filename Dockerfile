@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev shared-mime-info \
     libgl1 libglib2.0-0 libgomp1 \
     libsm6 libxext6 libxrender-dev \
-    poppler-utils tesseract-ocr \
+    poppler-utils tesseract-ocr tesseract-ocr-vie \
     build-essential cmake \
     && rm -rf /var/lib/apt/lists/*
 

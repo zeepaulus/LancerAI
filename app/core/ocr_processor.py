@@ -136,19 +136,45 @@ class OCRProcessor:
             )
         return results
 
+    def _run_tesseract(self, image_bytes: bytes) -> str:
+        """Run system tesseract binary to perform lightweight OCR."""
+        import subprocess
+        # Try with Vietnamese + English first
+        try:
+            proc = subprocess.run(
+                ["tesseract", "-", "-", "-l", "vie+eng"],
+                input=image_bytes,
+                capture_output=True,
+                check=True,
+            )
+            return proc.stdout.decode("utf-8", errors="ignore").strip()
+        except Exception as e:
+            logger.warning("[OCR] Tesseract with vie+eng failed: %s. Retrying with eng...", e)
+            
+        # Fallback to English only
+        try:
+            proc = subprocess.run(
+                ["tesseract", "-", "-", "-l", "eng"],
+                input=image_bytes,
+                capture_output=True,
+                check=True,
+            )
+            return proc.stdout.decode("utf-8", errors="ignore").strip()
+        except Exception as e:
+            logger.error("[OCR] Tesseract English fallback failed: %s", e)
+            return ""
+
     def extract_text_grouped(self, image_bytes: bytes, min_confidence: float = 0.4) -> str:
-        """Return a single concatenated string of all detected text blocks.
+        """Return a single concatenated string of all detected text blocks."""
+        self._ensure_ocr()
+        if self._ocr is False:
+            # Fallback to Tesseract OCR
+            tess_text = self._run_tesseract(image_bytes)
+            if tess_text:
+                logger.info("[OCR] Extracted text using system Tesseract OCR fallback.")
+                return tess_text
+            return "[OCR Tạm Thời Không Khả Dụng - Vui lòng tải CV PDF định dạng văn bản]"
 
-        Blocks are sorted top-to-bottom (primary) and left-to-right (secondary)
-        to reconstruct the natural reading order of the document.
-        Blocks on roughly the same line are joined with a space; otherwise a
-        newline is inserted.
-
-        Improvements over the original:
-          - Dynamic y_threshold based on average block height (adapts to font size).
-          - Confidence filtering: blocks below ``min_confidence`` are skipped.
-          - Empty/whitespace-only blocks are silently dropped.
-        """
         blocks = self.extract_text(image_bytes)
         if not blocks:
             return ""
