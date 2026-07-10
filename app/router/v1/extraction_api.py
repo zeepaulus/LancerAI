@@ -129,7 +129,8 @@ async def get_cv(
     return CVExtractionResponse(cv_id=cv.id, **cv.extracted_data)
 
 
-@router.put("/cvs/{cv_id}")
+@router.put("/cv/{cv_id}")
+@router.put("/cvs/{cv_id}", include_in_schema=False)
 @limiter.limit("30/minute")
 async def update_cv_extraction(
     request: Request,
