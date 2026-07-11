@@ -72,7 +72,7 @@ Date: 2026-07-12
 - No split backend/frontend/docker/security/release/deploy workflows are required for the final CI-only setup.
 - No workflow validation/actionlint.
 - No safe CI env template.
-- No Dependabot config.
+- Dependabot config was removed after the project scope was clarified to CI checks only.
 - No Docker smoke stack.
 - Frontend has no lint/test scripts.
 - Strict mypy config exists but current code is not type-clean.

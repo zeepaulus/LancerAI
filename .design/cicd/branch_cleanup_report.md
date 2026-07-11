@@ -55,10 +55,9 @@ Remote:
 ```text
 origin/main
 origin/Hung-version
-origin/dependabot/*
 ```
 
-`origin/Hung-version` was retained because it contains two commits not present in `main`. Dependabot branches were retained because each contains dependency-update work not present in `main`.
+`origin/Hung-version` was retained because it contains two commits not present in `main`.
 
 ## 3. Branches Deleted Locally
 
@@ -79,6 +78,7 @@ Deleted with `git push origin --delete` after verifying branch-only commit count
 Bao-version
 refactor/technical-debt
 ui
+dependabot/*
 ```
 
 ## 5. Branches Not Deleted And Why
@@ -89,12 +89,6 @@ origin/Hung-version
 
 Reason: contains unique commits not present in `main`.
 
-```text
-origin/dependabot/*
-```
-
-Reason: Dependabot branches contain unique dependency updates and should be reviewed, merged, or closed through the normal PR process.
-
 ## 6. Unique Commits Protected
 
 `origin/Hung-version`:
@@ -104,7 +98,7 @@ Reason: Dependabot branches contain unique dependency updates and should be revi
 cf7008b feat(data): improve schema and persist component scores
 ```
 
-Each Dependabot branch has one unique dependency-update commit and was preserved.
+Dependabot branches were deleted after the project scope was clarified to CI checks only. The `.github/dependabot.yml` config was also removed so GitHub does not recreate those branches.
 
 ## 7. Backup Tag
 
@@ -193,5 +187,4 @@ Full Docker smoke stack after workflow consolidation
 - Prefer squash merge.
 - Delete short-lived branches after merge.
 - Configure required checks from `CI` and `Security`.
-- Review or close preserved Dependabot branches.
 - Review `origin/Hung-version` and merge/cherry-pick only if the two unique commits are still desired.

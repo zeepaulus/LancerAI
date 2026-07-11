@@ -13,7 +13,7 @@ Date: 2026-07-12
 - Removed after consolidation: `.github/workflows/release.yml`
 - Removed after consolidation: `.github/workflows/deploy-staging.yml`
 - Removed after consolidation: `.github/workflows/deploy-production.yml`
-- Created: `.github/dependabot.yml`
+- Removed after CI-only clarification: `.github/dependabot.yml`
 
 ## Supporting Files Created Or Updated
 
