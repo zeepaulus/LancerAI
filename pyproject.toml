@@ -19,7 +19,7 @@ dependencies = [
     "asyncpg>=0.30.0",
     "alembic>=1.14.0",
     # Task Queue
-    "celery[redis]>=5.4.0",
+    "celery[redis]>=5.6.3",
     "redis>=5.2.0",
     # Module 1: CV Extraction
     "pymupdf>=1.24.0",
