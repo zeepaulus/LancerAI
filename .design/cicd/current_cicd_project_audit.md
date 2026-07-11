@@ -98,13 +98,8 @@ Date: 2026-07-12
 - Frontend lint/test coverage is absent because package scripts are absent.
 - FastAPI lifespan warms vector storage and seeds dummy jobs; CI import checks avoid running lifespan.
 
-## 13. Proposed Workflow Structure
+## 13. Final Workflow Structure
 
-- `ci.yml`: actionlint, shell syntax, compose config validation.
-- `backend-ci.yml`: uv install, Ruff, compile/import checks, pytest coverage, Alembic validation with PostgreSQL service.
-- `frontend-ci.yml`: npm ci, optional lint/test scripts, Vite production build, dist artifact.
-- `docker-ci.yml`: compose config, backend/frontend Docker builds, lightweight smoke stack.
-- `security.yml`: Gitleaks, pip-audit, npm audit, Trivy filesystem scan, CodeQL.
-- `release.yml`: versioned GHCR images, release metadata, GitHub Release.
-- `deploy-staging.yml`: build SHA images, deploy over SSH to staging.
-- `deploy-production.yml`: deploy immutable release tag over SSH with GitHub Environment protection.
+- `ci.yml`: actionlint, shell syntax, compose config validation, backend checks/tests/migrations, frontend install/build, and Docker smoke validation.
+- `security.yml`: Gitleaks, pip-audit, npm audit, Trivy filesystem scan, and CodeQL.
+- `release-deploy.yml`: versioned GHCR images, GitHub Release creation, staging deploy, production deploy with GitHub Environment protection, and rollback.

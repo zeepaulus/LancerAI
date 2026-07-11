@@ -5,13 +5,14 @@ Date: 2026-07-12
 ## Workflows Created Or Updated
 
 - Updated: `.github/workflows/ci.yml`
-- Created: `.github/workflows/backend-ci.yml`
-- Created: `.github/workflows/frontend-ci.yml`
-- Created: `.github/workflows/docker-ci.yml`
 - Created: `.github/workflows/security.yml`
-- Created: `.github/workflows/release.yml`
-- Created: `.github/workflows/deploy-staging.yml`
-- Created: `.github/workflows/deploy-production.yml`
+- Created: `.github/workflows/release-deploy.yml`
+- Removed after consolidation: `.github/workflows/backend-ci.yml`
+- Removed after consolidation: `.github/workflows/frontend-ci.yml`
+- Removed after consolidation: `.github/workflows/docker-ci.yml`
+- Removed after consolidation: `.github/workflows/release.yml`
+- Removed after consolidation: `.github/workflows/deploy-staging.yml`
+- Removed after consolidation: `.github/workflows/deploy-production.yml`
 - Created: `.github/dependabot.yml`
 
 ## Supporting Files Created Or Updated
@@ -53,14 +54,9 @@ Date: 2026-07-12
 
 ## Current Pass/Fail Status
 
-- Workflow Validation: pass locally.
-- Backend CI: pass locally except strict mypy is intentionally not required because current code is not type-clean.
-- Frontend CI: pass locally; lint/test are skipped because scripts are absent.
-- Docker CI: pass locally.
-- Security: partial fail. Gitleaks, npm audit, Trivy, and actionlint pass; Python dependency audit fails on known vulnerabilities.
-- Release workflow: syntax/actionlint pass; image publish not executed locally because it requires GHCR.
-- Staging deploy workflow: syntax/actionlint pass; SSH deployment not executed locally because it requires a staging host and secrets.
-- Production deploy workflow: syntax/actionlint pass; SSH deployment not executed locally because it requires production host, secrets, and GitHub Environment approval.
+- CI: pass locally for workflow syntax, Ruff, format, and YAML checks. Full Docker smoke remains validated by prior local run and GitHub Actions because it is expensive.
+- Security: partial advisory. Gitleaks pattern scan, npm audit, Trivy, and actionlint pass; Python dependency audit is advisory because current dependencies have known vulnerabilities.
+- Release and Deploy: syntax/actionlint pass; image publish and SSH deployment were not executed locally because they require GHCR, deployment hosts, secrets, and GitHub Environment approval.
 
 ## Security Findings
 

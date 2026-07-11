@@ -2,21 +2,17 @@
 
 ## Workflow Overview
 
-- `Workflow Validation`: validates workflow YAML with actionlint, shell syntax, and compose config.
-- `Backend CI`: validates Python backend quality, imports, tests, coverage, and Alembic migrations.
-- `Frontend CI`: validates npm install and Vite production build; lint/test run only when scripts exist.
-- `Docker CI`: builds backend and frontend images, then smoke-tests `/health`, `/ready`, and frontend `/health`.
-- `Security`: runs Gitleaks, pip-audit, npm audit, Trivy filesystem scan, and CodeQL.
-- `Release`: publishes immutable backend/frontend images to GHCR and creates a GitHub Release.
-- `Deploy Staging`: pushes SHA-tagged images from `main` and deploys over SSH.
-- `Deploy Production`: deploys a semantic version image tag with production environment approval.
+- `ci.yml`: validates workflow syntax, shell scripts, Docker Compose files, backend quality/tests/migrations, frontend install/build, and Docker smoke checks.
+- `security.yml`: runs secret scanning, dependency audit, Trivy filesystem scanning, and CodeQL.
+- `release-deploy.yml`: builds immutable GHCR images, creates GitHub releases for production tags, deploys staging or production through GitHub Environments, and supports rollback.
 
 ## Triggers
 
-- Pull requests to `main` or `dev`: validation, backend, frontend, Docker, security.
-- Push to `main`: validation, backend, frontend, Docker, security, staging deploy.
-- Tag `v*`: release and production deploy.
-- Manual dispatch: all major workflows support manual execution where useful.
+- Pull requests to `main`: `ci.yml` and `security.yml`.
+- Push to `main`: `ci.yml` and `security.yml`.
+- Weekly schedule: `security.yml`.
+- Tags matching `v*`: `release-deploy.yml` defaults to production deploy.
+- Manual dispatch: `ci.yml`, `security.yml`, and `release-deploy.yml`.
 
 ## Dependencies
 
@@ -24,33 +20,39 @@
 - Frontend CI: Node 22, npm lockfile.
 - Docker CI: Docker Buildx, Docker Compose v2.
 - Security: Gitleaks, pip-audit, npm audit, Trivy, CodeQL.
-- Deployments: SSH server with Docker Compose and a production `.env`.
+- Deployments: SSH server with Docker Compose and a production-ready `.env`.
 
-## Job Graph
+## CI Job Graph
 
-- Backend CI is a single job because tests and migrations share uv setup.
-- Frontend CI is a single job because the project has no separate lint/test toolchain yet.
-- Docker CI builds backend and frontend images before running smoke tests.
-- Staging deployment has two jobs: `build-images` then `deploy`.
-- Production deployment verifies immutable images before SSH deployment.
+- `workflow-validation`: actionlint, deployment shell script syntax, and Compose config validation.
+- `backend`: Ruff, format check, compile check, import check, pytest coverage, and Alembic validation.
+- `frontend`: npm install, optional lint/test scripts when present, and Vite production build.
+- `docker`: backend/frontend image builds plus lightweight compose smoke checks.
+
+## Release And Deploy Job Graph
+
+- `resolve`: normalizes operation, target environment, image tag, and image names.
+- `build-images`: builds and pushes backend/frontend images for deploy operations.
+- `github-release`: creates a GitHub Release for production deploys.
+- `deploy-staging` and `deploy-production`: deploy through the corresponding GitHub Environment.
+- `rollback-staging` and `rollback-production`: run the rollback helper on the selected host.
 
 ## Artifacts
 
 - Backend coverage: `coverage.xml`.
 - Frontend dist: `frontend/dist`.
-- Release metadata: `release-metadata.json`.
 - Docker smoke logs on failure: `docker-compose-smoke.log`.
 
 ## Environments
 
-- `staging`: required for `deploy-staging.yml`; should have reviewer rules if staging is shared.
-- `production`: required for `deploy-production.yml`; must require manual reviewer approval.
+- `staging`: used by `release-deploy.yml`; should have reviewer rules if staging is shared.
+- `production`: used by `release-deploy.yml`; must require manual reviewer approval.
 
 ## Image Tags
 
-- Main/staging: `ghcr.io/<owner>/lancerai-backend:<short-sha>` and `staging-latest`.
-- Release: `ghcr.io/<owner>/lancerai-backend:<version>`, `<short-sha>`, and `latest`.
-- Production deploys only an immutable semantic version tag.
+- Staging manual deploy: `ghcr.io/<owner>/lancerai-backend:<short-sha>` and `staging-latest`.
+- Production tag deploy: `ghcr.io/<owner>/lancerai-backend:<version>` and `production-latest`.
+- Production deploys require an immutable semantic version tag.
 
 ## Service Exposure
 

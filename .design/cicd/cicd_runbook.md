@@ -82,13 +82,18 @@ Production should require reviewer approval and disallow bypass for normal maint
 
 ## Trigger Staging
 
-- Push to `main`, or run `Deploy Staging` manually.
+- Run `Release and Deploy` manually with `operation=deploy` and `target_environment=staging`.
 - The workflow builds and pushes SHA-tagged images, logs the remote host into GHCR, pulls images, backs up PostgreSQL, runs Alembic, restarts services, and checks health.
 
 ## Trigger Production
 
-- Push a semantic version tag such as `v1.2.3`, or run `Deploy Production` manually with `image_tag`.
-- The workflow verifies the GHCR images exist, waits for `production` environment approval, then deploys via `scripts/deploy/compose_deploy.sh`.
+- Push a semantic version tag such as `v1.2.3`, or run `Release and Deploy` manually with `operation=deploy`, `target_environment=production`, and `image_tag`.
+- The workflow creates or verifies the GitHub Release, waits for `production` environment approval, then deploys via `scripts/deploy/compose_deploy.sh`.
+
+## Trigger Rollback
+
+- Run `Release and Deploy` manually with `operation=rollback` and the target environment.
+- The workflow uses `.deploy/previous.env` on the selected host and runs `scripts/deploy/compose_rollback.sh`.
 
 ## Inspect Failed Runs
 
@@ -102,10 +107,10 @@ Production should require reviewer approval and disallow bypass for normal maint
 
 Require pull requests before merge into `main`, one approval, conversation resolution, no force pushes, no branch deletion, and these status checks:
 
-- `Workflow Validation / actionlint, shell, and compose validation`
-- `Backend CI / lint, import, test, and migrate`
-- `Frontend CI / install, optional checks, and build`
-- `Docker CI / compose, build, and smoke`
+- `CI / actionlint, shell, and compose validation`
+- `CI / backend lint, tests, and migrations`
+- `CI / frontend install, checks, and build`
+- `CI / docker compose, build, and smoke`
 - `Security / Gitleaks secret scan`
 - `Security / Python and npm dependency audit`
 - `Security / Trivy filesystem scan`

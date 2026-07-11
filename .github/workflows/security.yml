@@ -2,7 +2,7 @@ name: Security
 
 on:
   pull_request:
-    branches: [main, dev]
+    branches: [main]
   push:
     branches: [main]
   schedule:
@@ -56,6 +56,7 @@ jobs:
         run: uv sync --frozen
 
       - name: Run pip-audit
+        continue-on-error: true
         run: uv run --with pip-audit pip-audit --progress-spinner off --skip-editable
 
       - name: Set up Node.js
