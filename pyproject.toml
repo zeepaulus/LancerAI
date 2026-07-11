@@ -9,33 +9,33 @@ authors = [{ name = "ZeePaul" }]
 
 dependencies = [
     # Core Framework
-    "fastapi>=0.115.0",
+    "fastapi>=0.139.0",
     "uvicorn[standard]>=0.30.0",
-    "pydantic>=2.9.0",
-    "pydantic-settings>=2.5.0",
-    "python-multipart>=0.0.12",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.2",
+    "python-multipart>=0.0.32",
     # Database
     "sqlalchemy[asyncio]>=2.0.0",
     "asyncpg>=0.30.0",
-    "alembic>=1.14.0",
+    "alembic>=1.18.5",
     # Task Queue
     "celery[redis]>=5.4.0",
     "redis>=5.2.0",
     # Module 1: CV Extraction
-    "pymupdf>=1.24.0",
+    "pymupdf>=1.28.0",
     # paddleocr and paddlepaddle are intentionally excluded from production builds.
     # They pull CUDA-linked binaries (~700 MB) and are replaced by pymupdf in prod.
     # See Dockerfile: uv pip uninstall paddlepaddle paddleocr paddle2onnx
     # Module 2: Intelligence (LangGraph Multi-Agent)
     "langgraph>=0.2.0",
-    "langchain-core>=0.3.0",
-    "langchain-community>=0.3.0",
-    "chromadb>=0.5.0",
+    "langchain-core>=1.4.9",
+    "langchain-community>=0.4.2",
+    "chromadb>=1.5.9",
     "qdrant-client>=1.7.0",
     # Module 3: Job Matching
-    "sentence-transformers>=3.0.0",
-    "scrapy>=2.11.0",
-    "playwright>=1.48.0",
+    "sentence-transformers>=5.6.0",
+    "scrapy>=2.17.0",
+    "playwright>=1.61.0",
     # Module 4: Voice AI
     "faster-whisper>=1.0.0", # STT — CTranslate2 int8 engine (spec requirement)
     "torch>=2.0.0", # Required by silero-vad
@@ -47,15 +47,15 @@ dependencies = [
     # Document Generation
     "weasyprint>=62.0",
     "python-docx>=1.1.0",
-    "websockets>=16.0",
-    "soundfile>=0.13.1",
-    "numpy>=2.0.0",
+    "websockets>=16.1",
+    "soundfile>=0.14.0",
+    "numpy>=2.4.6",
     "Pillow>=10.0.0",
-    "vieneu>=2.4.3", # TODO: uncommit khi VoiceTTSConnector (vieneu engine) được implement
-    "onnxruntime>=1.20.0", # TODO: phụ thuộc của vieneu/PaddleOCR
+    "vieneu>=3.2.0", # TODO: uncommit khi VoiceTTSConnector (vieneu engine) được implement
+    "onnxruntime>=1.27.0", # TODO: phụ thuộc của vieneu/PaddleOCR
     "bcrypt>=4.2.0",
-    "pyjwt>=2.12.1",
-    "slowapi>=0.1.9",
+    "pyjwt>=2.13.0",
+    "slowapi>=0.1.10",
     "neo4j>=5.0.0",
     "beautifulsoup4>=4.12.0",
     "llama-cpp-python>=0.3.16",
@@ -63,10 +63,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3.0",
-    "pytest-asyncio>=0.24.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "pytest-cov>=5.0.0",
-    "ruff>=0.7.0",
+    "ruff>=0.15.21",
     "mypy>=1.12.0",
     "pre-commit>=4.0.0",
     "aiosqlite>=0.20.0",
@@ -111,10 +111,10 @@ warn_unused_configs = true
 
 [tool.uv]
 dev-dependencies = [
-    "pytest>=8.3.0",
-    "pytest-asyncio>=0.24.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "pytest-cov>=5.0.0",
-    "ruff>=0.7.0",
+    "ruff>=0.15.21",
     "mypy>=1.12.0",
     "pre-commit>=4.0.0",
     "aiosqlite>=0.22.1",
