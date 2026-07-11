@@ -53,61 +53,18 @@ cd frontend && npm audit --audit-level=high
 docker run --rm -v "$PWD:/repo" aquasec/trivy:0.58.2 fs --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --skip-dirs /repo/frontend/node_modules --skip-dirs /repo/.venv /repo
 ```
 
-## Required GitHub Secrets
-
-Staging:
-
-- `STAGING_HOST`
-- `STAGING_USER`
-- `STAGING_SSH_KEY`
-- `STAGING_DEPLOY_PATH`
-- `GHCR_USERNAME`
-- `GHCR_TOKEN`
-
-Production:
-
-- `PRODUCTION_HOST`
-- `PRODUCTION_USER`
-- `PRODUCTION_SSH_KEY`
-- `PRODUCTION_DEPLOY_PATH`
-- `GHCR_USERNAME`
-- `GHCR_TOKEN`
-
-## Required GitHub Environments
-
-- `staging`
-- `production`
-
-Production should require reviewer approval and disallow bypass for normal maintainers.
-
-## Trigger Staging
-
-- Run `Release and Deploy` manually with `operation=deploy` and `target_environment=staging`.
-- The workflow builds and pushes SHA-tagged images, logs the remote host into GHCR, pulls images, backs up PostgreSQL, runs Alembic, restarts services, and checks health.
-
-## Trigger Production
-
-- Push a semantic version tag such as `v1.2.3`, or run `Release and Deploy` manually with `operation=deploy`, `target_environment=production`, and `image_tag`.
-- The workflow creates or verifies the GitHub Release, waits for `production` environment approval, then deploys via `scripts/deploy/compose_deploy.sh`.
-
-## Trigger Rollback
-
-- Run `Release and Deploy` manually with `operation=rollback` and the target environment.
-- The workflow uses `.deploy/previous.env` on the selected host and runs `scripts/deploy/compose_rollback.sh`.
-
 ## Inspect Failed Runs
 
 - Backend failures: inspect Ruff output, pytest failure, `coverage.xml`, or Alembic logs.
 - Frontend failures: inspect `npm ci` and Vite build output.
 - Docker failures: download `docker-compose-smoke-logs`.
 - Security failures: inspect Gitleaks, pip-audit, npm audit, Trivy, or CodeQL results.
-- Deploy failures: inspect SSH step logs and remote `docker compose -f docker-compose.prod.yml logs`.
 
 ## Branch Protection Recommendations
 
 Require pull requests before merge into `main`, one approval, conversation resolution, no force pushes, no branch deletion, and these status checks:
 
-- `CI / actionlint, shell, and compose validation`
+- `CI / actionlint and compose validation`
 - `CI / backend lint, tests, and migrations`
 - `CI / frontend install, checks, and build`
 - `CI / docker compose, build, and smoke`

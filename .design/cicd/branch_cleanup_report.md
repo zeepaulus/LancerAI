@@ -116,7 +116,6 @@ No backup tag was created. The meaningful current CI/CD commit already existed o
 .github/workflows/
   ci.yml
   security.yml
-  release-deploy.yml
 ```
 
 Removed workflow files:
@@ -128,6 +127,7 @@ Removed workflow files:
 .github/workflows/release.yml
 .github/workflows/deploy-staging.yml
 .github/workflows/deploy-production.yml
+.github/workflows/release-deploy.yml
 ```
 
 ## 9. Final Branching Strategy
@@ -143,14 +143,9 @@ docs/<documentation>
 test/<testing>
 ```
 
-Use GitHub Environments for:
-
-```text
-staging
-production
-```
-
 Do not keep permanent `staging`, `production`, `release`, or workflow-specific branches.
+
+Deployment automation is intentionally not configured. The current GitHub Actions setup is CI-only.
 
 ## 10. CI Validation Results
 
@@ -159,7 +154,6 @@ Passed locally:
 ```text
 git diff --check
 docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.7 -color
-bash -n scripts/deploy/compose_deploy.sh scripts/deploy/compose_rollback.sh
 docker compose config --quiet
 docker compose --env-file .env.test.example -f docker-compose.test.yml config --quiet
 docker compose --env-file .env.test.example -f docker-compose.prod.yml config --quiet
@@ -186,10 +180,6 @@ d4e5f6a7b8c9
 Not executed locally:
 
 ```text
-Docker image publish to GHCR
-SSH staging deployment
-SSH production deployment
-GitHub Environment approval flow
 Full Docker smoke stack after workflow consolidation
 ```
 
@@ -203,8 +193,5 @@ Full Docker smoke stack after workflow consolidation
 - Prefer squash merge.
 - Delete short-lived branches after merge.
 - Configure required checks from `CI` and `Security`.
-- Create GitHub Environments named `staging` and `production`.
-- Require reviewer approval for `production`.
-- Add deployment secrets for staging and production hosts.
 - Review or close preserved Dependabot branches.
 - Review `origin/Hung-version` and merge/cherry-pick only if the two unique commits are still desired.

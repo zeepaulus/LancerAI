@@ -32,7 +32,7 @@ env:
 
 jobs:
   workflow-validation:
-    name: actionlint, shell, and compose validation
+    name: actionlint and compose validation
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -41,11 +41,6 @@ jobs:
 
       - name: Validate GitHub Actions workflows
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
-
-      - name: Validate deployment shell scripts
-        run: |
-          bash -n scripts/deploy/compose_deploy.sh
-          bash -n scripts/deploy/compose_rollback.sh
 
       - name: Validate Docker Compose files
         env:

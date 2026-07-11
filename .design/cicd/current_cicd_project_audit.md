@@ -67,15 +67,12 @@ Date: 2026-07-12
 - It used Node 18, which is incompatible with the current Vite 8 lockfile.
 - It ran mypy as required, but current mypy state is not green.
 
-## 10. Missing CI/CD Capabilities Found
+## 10. CI Capabilities Found Or Added
 
-- No split backend/frontend/docker/security/release/deploy workflows.
+- No split backend/frontend/docker/security/release/deploy workflows are required for the final CI-only setup.
 - No workflow validation/actionlint.
 - No safe CI env template.
 - No Dependabot config.
-- No release workflow or immutable GHCR image tagging.
-- No staging/production deployment workflow with environment protection.
-- No rollback runbook.
 - No Docker smoke stack.
 - Frontend has no lint/test scripts.
 - Strict mypy config exists but current code is not type-clean.
@@ -100,6 +97,5 @@ Date: 2026-07-12
 
 ## 13. Final Workflow Structure
 
-- `ci.yml`: actionlint, shell syntax, compose config validation, backend checks/tests/migrations, frontend install/build, and Docker smoke validation.
+- `ci.yml`: actionlint, compose config validation, backend checks/tests/migrations, frontend install/build, and Docker smoke validation.
 - `security.yml`: Gitleaks, pip-audit, npm audit, Trivy filesystem scan, and CodeQL.
-- `release-deploy.yml`: versioned GHCR images, GitHub Release creation, staging deploy, production deploy with GitHub Environment protection, and rollback.

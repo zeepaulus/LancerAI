@@ -6,7 +6,7 @@ Date: 2026-07-12
 
 - Updated: `.github/workflows/ci.yml`
 - Created: `.github/workflows/security.yml`
-- Created: `.github/workflows/release-deploy.yml`
+- Removed after CI-only clarification: `.github/workflows/release-deploy.yml`
 - Removed after consolidation: `.github/workflows/backend-ci.yml`
 - Removed after consolidation: `.github/workflows/frontend-ci.yml`
 - Removed after consolidation: `.github/workflows/docker-ci.yml`
@@ -20,8 +20,8 @@ Date: 2026-07-12
 - Created: `.env.test.example`
 - Created: `.gitleaks.toml`
 - Created: `docker-compose.test.yml`
-- Created: `scripts/deploy/compose_deploy.sh`
-- Created: `scripts/deploy/compose_rollback.sh`
+- Removed after CI-only clarification: `scripts/deploy/compose_deploy.sh`
+- Removed after CI-only clarification: `scripts/deploy/compose_rollback.sh`
 - Updated: `docker-compose.yml`
 - Updated: `docker-compose.prod.yml`
 - Updated: `nginx/nginx.conf`
@@ -46,7 +46,6 @@ Date: 2026-07-12
 | Docker frontend | `docker build --target frontend-prod -t lancerai-frontend:ci .` | Pass |
 | Docker backend | `docker build --target backend -t lancerai-backend:ci .` | Pass |
 | Docker smoke | test compose stack, migration, `/health`, `/ready`, frontend `/health` | Pass |
-| Shell syntax | `bash -n scripts/deploy/*.sh` | Pass |
 | Workflow lint | `rhysd/actionlint:1.7.7` | Pass |
 | Gitleaks | `gitleaks detect --config .gitleaks.toml` | Pass |
 | pip-audit | `uv run --with pip-audit pip-audit --skip-editable` | Fail, 39 vulnerabilities in 15 packages |
@@ -56,7 +55,7 @@ Date: 2026-07-12
 
 - CI: pass locally for workflow syntax, Ruff, format, and YAML checks. Full Docker smoke remains validated by prior local run and GitHub Actions because it is expensive.
 - Security: partial advisory. Gitleaks pattern scan, npm audit, Trivy, and actionlint pass; Python dependency audit is advisory because current dependencies have known vulnerabilities.
-- Release and Deploy: syntax/actionlint pass; image publish and SSH deployment were not executed locally because they require GHCR, deployment hosts, secrets, and GitHub Environment approval.
+- Deploy: intentionally not configured. The repository currently keeps CI and security workflows only.
 
 ## Security Findings
 
@@ -70,5 +69,5 @@ Date: 2026-07-12
 - Python dependency vulnerabilities are unresolved and should be patched before making the security workflow a required green check.
 - Frontend lint/test are not present. The workflow detects and skips those scripts honestly.
 - Playwright E2E was not added because the frontend has no E2E setup and adding browser mocks would be a separate test-design task.
-- Staging and production deployment were not executed because no SSH host/secrets are available in this workspace.
+- Deployment automation is intentionally out of scope.
 - Docker backend build is heavy because the real backend dependency graph includes AI/audio/vector libraries; no GPU or model downloads were required.
