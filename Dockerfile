@@ -2,7 +2,7 @@
 # Stage: backend — Python / FastAPI (port 8000)
 # Build: docker build --target backend -t lancerai-backend .
 # =============================================================================
-FROM python:3.11-slim AS backend
+FROM python:3.14-slim AS backend
 
 WORKDIR /opt/app
 
@@ -100,7 +100,7 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 
 # Serve static files via lightweight nginx
-FROM nginx:1.27-alpine AS frontend-prod
+FROM nginx:1.31-alpine AS frontend-prod
 
 COPY --from=frontend-builder /app/dist /usr/share/nginx/html
 
