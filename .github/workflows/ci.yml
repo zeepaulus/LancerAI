@@ -147,7 +147,7 @@ jobs:
 
       - name: Upload backend coverage artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-coverage
           path: coverage.xml
@@ -196,7 +196,7 @@ jobs:
         run: npm run build
 
       - name: Upload frontend dist artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: frontend/dist
@@ -265,7 +265,7 @@ jobs:
 
       - name: Save Docker Compose logs artifact
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docker-compose-smoke-logs
           path: docker-compose-smoke.log
