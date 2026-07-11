@@ -1,0 +1,20 @@
+[allowlist]
+description = "Local artifacts and intentional placeholder values"
+paths = [
+  '''^\.env$''',
+  '''^\.venv/''',
+  '''^frontend/node_modules/''',
+  '''^frontend/dist/''',
+  '''^coverage\.xml$''',
+  '''^requirements-ci\.txt$''',
+  '''^docker-compose-smoke\.log$''',
+]
+regexes = [
+  '''REPLACE_[A-Z0-9_]+''',
+  '''YOUR_[A-Z0-9_]+''',
+  '''your-[a-z0-9-]+''',
+  '''dev-password-change-me''',
+  '''ci-secret-key-for-lancerai-32chars-minimum''',
+  '''ci-neo4j-password''',
+  '''mock-[a-z0-9-]+''',
+]

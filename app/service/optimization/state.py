@@ -59,6 +59,7 @@ class AuditFlag(BaseModel):
 # Main LangGraph State
 # ---------------------------------------------------------------------------
 
+
 def list_reducer(left: list[Any] | None, right: Any) -> list[Any]:
     """Reducer that wraps single items into lists and safely appends them."""
     safe_left: list[Any] = left if left is not None else []
@@ -67,6 +68,7 @@ def list_reducer(left: list[Any] | None, right: Any) -> list[Any]:
     if not isinstance(right, list):
         right = [right]
     from typing import cast
+
     return safe_left + cast(list[Any], right)
 
 

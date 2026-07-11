@@ -95,9 +95,7 @@ class CVTemplateRenderer:
         according to the template's conventions, and returns the structured dict.
         """
         if template not in _ALLOWED_TEMPLATES:
-            raise ValueError(
-                f"Unknown template '{template}'. Allowed: {sorted(_ALLOWED_TEMPLATES)}"
-            )
+            raise ValueError(f"Unknown template '{template}'. Allowed: {sorted(_ALLOWED_TEMPLATES)}")
 
         cv_json = json.dumps(cv_data, ensure_ascii=False)[:5000]
 
@@ -248,11 +246,7 @@ def _build_sections_html(cv_data: dict[str, Any]) -> str:
 
     # Skills (non-modern templates)
     skills: dict[str, Any] = cv_data.get("skills_matrix", {})
-    all_skills = (
-        skills.get("languages", [])
-        + skills.get("frameworks", [])
-        + skills.get("tools", [])
-    )
+    all_skills = skills.get("languages", []) + skills.get("frameworks", []) + skills.get("tools", [])
     if all_skills:
         html_parts.append("<h2>Kỹ năng</h2>")
         html_parts.append(f"<p>{', '.join(all_skills[:30])}</p>")
@@ -280,8 +274,6 @@ def _build_skills_sidebar(cv_data: dict[str, Any]) -> str:
         if items:
             html_parts.append(f"<p style='font-weight:bold;margin-bottom:2px'>{label}</p>")
             html_parts.append(
-                "<ul style='margin:0 0 8px 12px;color:#cde'>"
-                + "".join(f"<li>{i}</li>" for i in items[:10])
-                + "</ul>"
+                "<ul style='margin:0 0 8px 12px;color:#cde'>" + "".join(f"<li>{i}</li>" for i in items[:10]) + "</ul>"
             )
     return "\n".join(html_parts)

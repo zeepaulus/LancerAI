@@ -187,27 +187,18 @@ class TestQdrantVectorRepositoryIntegration:
     async def test_dimension_mismatch_raises_error(self) -> None:
         """Existing collection with different dimension should raise error."""
         from app.repository.vector_repository import VectorRepositoryError
+
         repo = self._make_repo()
 
         # Store an embedding with dimension 3
-        await repo.store_embedding(
-            doc_id="doc-dim-3",
-            text="text",
-            embedding=[1.0, 0.0, 0.0],
-            metadata={}
-        )
+        await repo.store_embedding(doc_id="doc-dim-3", text="text", embedding=[1.0, 0.0, 0.0], metadata={})
 
         # Reset ensured flag to force validation again
         repo._collection_ensured = False
 
         # Try to store an embedding with dimension 4
         with pytest.raises(VectorRepositoryError, match="dimension mismatch: expected 3, got 4"):
-            await repo.store_embedding(
-                doc_id="doc-dim-4",
-                text="text",
-                embedding=[1.0, 0.0, 0.0, 0.0],
-                metadata={}
-            )
+            await repo.store_embedding(doc_id="doc-dim-4", text="text", embedding=[1.0, 0.0, 0.0, 0.0], metadata={})
 
 
 class TestChromaVectorRepositoryIntegration:

@@ -92,6 +92,7 @@ def _parse_extraction_response(raw: str, cv_id: str) -> CVExtractionResponse:
     """Parse LLM JSON output into CVExtractionResponse, with a safe fallback."""
     try:
         from app.core.json_extractor import clean_and_parse_json
+
         data: dict[str, Any] = clean_and_parse_json(raw)
         result = CVExtractionResponse(cv_id=cv_id, **data)
         return result
@@ -110,7 +111,8 @@ def _validate_extraction(extraction: CVExtractionResponse, raw_text: str) -> lis
 
     # Check if email exists in raw text but wasn't extracted
     import re
-    email_pattern = re.compile(r'[\w.+-]+@[\w-]+\.[\w.-]+')
+
+    email_pattern = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
     if not extraction.personal_info.email and email_pattern.search(raw_text):
         warnings.append("Email found in raw text but not extracted")
 
@@ -190,6 +192,7 @@ class ExtractionService:
             raise ValueError(f"File too large: {len(file_bytes)} bytes (max {MAX_FILE_SIZE})")
 
         import asyncio
+
         loop = asyncio.get_event_loop()
         raw_text = await loop.run_in_executor(None, self._ocr.extract_text_grouped, file_bytes)
         return await self._parse_and_persist(raw_text, filename, user_id, session)
@@ -215,10 +218,7 @@ class ExtractionService:
 
         safe_limit = max(1, min(int(limit or 50), 100))
         stmt = (
-            select(CVRecord)
-            .where(CVRecord.user_id == user_id)
-            .order_by(CVRecord.created_at.desc())
-            .limit(safe_limit)
+            select(CVRecord).where(CVRecord.user_id == user_id).order_by(CVRecord.created_at.desc()).limit(safe_limit)
         )
         result = await session.execute(stmt)
         return list(result.scalars().all())
@@ -280,9 +280,7 @@ class ExtractionService:
         try:
             import fitz  # type: ignore[import-untyped]
         except ImportError as exc:
-            raise RuntimeError(
-                "PyMuPDF is not installed. Run: pip install pymupdf"
-            ) from exc
+            raise RuntimeError("PyMuPDF is not installed. Run: pip install pymupdf") from exc
 
         loop = asyncio.get_event_loop()
 

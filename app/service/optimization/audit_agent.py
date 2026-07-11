@@ -69,12 +69,7 @@ async def audit_agent(state: CVOptimizationState, llm: LLMConnector) -> dict[str
     raw_cv = state.get("raw_cv_data", {})
     roast_issues = state.get("roast_issues", [])
 
-    severity_penalties = {
-        "critical": 15.0,
-        "high": 10.0,
-        "medium": 5.0,
-        "low": 2.0
-    }
+    severity_penalties = {"critical": 15.0, "high": 10.0, "medium": 5.0, "low": 2.0}
 
     if not rewritten_sections:
         logger.info("[audit_agent] No rewrites to audit — passing through raw CV")
@@ -116,6 +111,7 @@ Kiểm tra tính trung thực và trả về JSON:"""
             json_mode=True,
         )
         from app.core.json_extractor import clean_and_parse_json
+
         data: dict[str, Any] = clean_and_parse_json(raw)
         verdicts_raw: list[dict[str, Any]] = data.get("verdicts", [])
 
@@ -202,12 +198,7 @@ Kiểm tra tính trung thực và trả về JSON:"""
 
     # Calculate penalties for roast issues
     roast_issues = state.get("roast_issues", [])
-    severity_penalties = {
-        "critical": 15.0,
-        "high": 10.0,
-        "medium": 5.0,
-        "low": 2.0
-    }
+    severity_penalties = {"critical": 15.0, "high": 10.0, "medium": 5.0, "low": 2.0}
 
     # Identify which fields have approved rewrites
     approved_fields = {sec.field for sec in approved_sections}

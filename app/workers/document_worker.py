@@ -31,6 +31,7 @@ def _run_async(coro: Any) -> Any:
 
     if loop.is_running():
         from concurrent.futures import ThreadPoolExecutor
+
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(asyncio.run, coro)
             return future.result()

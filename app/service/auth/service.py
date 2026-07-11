@@ -180,4 +180,3 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         return user
-

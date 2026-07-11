@@ -114,6 +114,7 @@ class InterviewService:
 
         # Persist new columns (additive — does not affect existing logic)
         from app.core.settings import get_settings as _get_settings
+
         _s = _get_settings()
         _jd_snapshot = (jd_data or {}).get("jd_text") or None
         await self._sessions.update(
@@ -161,8 +162,7 @@ class InterviewService:
 
         # Map STAR scores from pipeline payload
         star_scores_raw: list[dict[str, Any]] = [
-            s if isinstance(s, dict) else s.model_dump()
-            for s in payload.get("star_scores", [])
+            s if isinstance(s, dict) else s.model_dump() for s in payload.get("star_scores", [])
         ]
         scorecard: dict[str, Any] = payload.get("scorecard", {})
         scorecard_overall = float(scorecard.get("overall_score", 0.0))
@@ -172,7 +172,6 @@ class InterviewService:
             overall_score: float = float(payload.get("overall_score", 0.0))
             overall_confidence = min(100.0, overall_score * 10)
 
-        strengths: list[str] = payload.get("strengths", [])
         improvements: list[str] = payload.get("improvements", [])
         behavior_observations: list[dict[str, Any]] = payload.get("behavior_observations", [])
         behavior_issues: list[str] = payload.get("behavior_issues", [])

@@ -166,7 +166,7 @@ Recommended local edits in `.env`:
 AUTH_SECRET_KEY=<random-string-at-least-32-characters>
 AUTH_ALLOW_WEAK_SECRET=true
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/lancerai
-NEO4J_PASSWORD=deochodau123
+NEO4J_PASSWORD=dev-password-change-me
 VECTOR_DB_HOST=http://localhost
 VECTOR_DB_PORT=8001
 FRONTEND_BASE_URL=http://localhost:3000

@@ -129,15 +129,11 @@ class MatchingService:
             for gap in missing_skills:
                 try:
                     related = await self._graph_repo.get_related_skills(gap.skill_name, depth=2)
-                    related_matches = [
-                        r["name"] for r in related
-                        if r["name"].lower() in cv_tokens_set
-                    ]
+                    related_matches = [r["name"] for r in related if r["name"].lower() in cv_tokens_set]
                     if related_matches:
                         orig_reason = gap.reason or ""
                         gap.reason = (
-                            f"{orig_reason} (Ứng viên có kỹ năng liên quan trong CV: "
-                            f"{', '.join(related_matches[:3])})"
+                            f"{orig_reason} (Ứng viên có kỹ năng liên quan trong CV: {', '.join(related_matches[:3])})"
                         ).strip()
                         if gap.impact_level == "critical":
                             gap.impact_level = "important"
@@ -148,7 +144,10 @@ class MatchingService:
 
         logger.info(
             "[Matching] freq=%.2f pos=%.2f sem=%.2f → overall=%.1f",
-            freq_score, pos_score, sem_score, overall,
+            freq_score,
+            pos_score,
+            sem_score,
+            overall,
         )
 
         return JobMatchResponse(
@@ -270,9 +269,7 @@ class MatchingService:
         try:
             new_status = MatchStatus(status)
         except ValueError as err:
-            raise ValueError(
-                f"Invalid status '{status}'. Allowed: {[s.value for s in MatchStatus]}"
-            ) from err
+            raise ValueError(f"Invalid status '{status}'. Allowed: {[s.value for s in MatchStatus]}") from err
 
         await self._job_repo.update(session, match_result_id, status=new_status)
         await session.commit()
@@ -288,7 +285,9 @@ class MatchingService:
             self._llm.embed(jd_text[:2000]),
         )
         if not cv_embed or not jd_embed or len(cv_embed) != len(jd_embed):
-            logger.warning("[Matching] Embedding unavailable or dimension mismatch; semantic score excluded from overall")
+            logger.warning(
+                "[Matching] Embedding unavailable or dimension mismatch; semantic score excluded from overall"
+            )
             return None
         return _cosine_similarity(cv_embed, jd_embed)
 
@@ -390,8 +389,6 @@ def _fallback_match_feedback(cv_data: dict[str, Any], jd_text: str, gaps: list[S
         skills = ", ".join(gap.skill_name for gap in gaps[:4])
         return f"Đã so khớp CV với JD bằng quy tắc xác định. Nên bổ sung bằng chứng liên quan đến: {skills}."
     return "Đã so khớp CV với JD bằng quy tắc xác định. Chưa phát hiện khoảng trống kỹ năng lớn; hãy kiểm tra lại các mô tả impact trước khi ứng tuyển."
-
-
 
 
 def _tokenize(text: str) -> list[str]:
@@ -562,10 +559,5 @@ def _hostname_resolves_publicly(hostname: str) -> bool:
 
 def _is_public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     return not (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-        or ip.is_unspecified
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified
     )

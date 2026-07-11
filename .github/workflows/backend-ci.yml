@@ -1,0 +1,146 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "app/**"
+      - "tests/**"
+      - "migration/**"
+      - "alembic.ini"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/backend-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "tests/**"
+      - "migration/**"
+      - "alembic.ini"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/backend-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_LINK_MODE: copy
+  APP_ENV: test
+  APP_DEBUG: "false"
+  AUTH_SECRET_KEY: ci-secret-key-for-lancerai-32chars-minimum
+  AUTH_ALLOW_WEAK_SECRET: "false"
+  NEO4J_PASSWORD: ci-neo4j-password
+  VECTOR_DB_HOST: tests/.chromadb_ci_data
+  VECTOR_DB_BACKEND: chroma
+  LLM_CACHE_ENABLED: "false"
+  STT_MODEL_SIZE: tiny
+  STT_MODEL_PATH: ""
+  STT_DEVICE: cpu
+  TTS_ENGINE: edge
+  TTS_MODEL_PATH: ""
+
+jobs:
+  backend:
+    name: lint, import, test, and migrate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: lancerai_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d lancerai_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install backend dependencies
+        run: uv sync --frozen
+
+      - name: Ruff lint
+        run: uv run ruff check app tests
+
+      - name: Ruff format check
+        run: uv run ruff format --check app tests
+
+      - name: Python compile check
+        run: uv run python -m compileall -q app tests
+
+      - name: FastAPI and Celery import check
+        env:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          REDIS_URL: redis://localhost:6379/0
+          CELERY_BROKER_URL: redis://localhost:6379/1
+          CELERY_RESULT_BACKEND: redis://localhost:6379/2
+          NEO4J_URI: bolt://localhost:7687
+        run: |
+          uv run python - <<'PY'
+          from app.main import app
+          from app.workers.celery_app import celery_app
+
+          assert app.title == "LancerAI API"
+          assert "app.workers.crawler_worker.crawl_job_listings" in celery_app.tasks
+          assert "app.workers.document_worker.generate_document" in celery_app.tasks
+          PY
+
+      - name: Pytest with coverage
+        run: uv run pytest --cov=app --cov-report=xml --cov-report=term-missing
+
+      - name: Validate Alembic migration heads
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/lancerai_ci
+        run: |
+          heads="$(uv run alembic heads)"
+          printf '%s\n' "$heads"
+          head_count="$(printf '%s\n' "$heads" | sed '/^[[:space:]]*$/d' | wc -l)"
+          test "$head_count" -eq 1
+
+      - name: Run Alembic upgrade on clean PostgreSQL
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/lancerai_ci
+        run: |
+          uv run alembic upgrade head
+          uv run alembic current
+
+      - name: Upload backend coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: coverage.xml
+          if-no-files-found: warn

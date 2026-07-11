@@ -282,11 +282,11 @@ class TestModelMetadata:
     def test_foreign_key_indexes_are_set(self) -> None:
         """Kiểm tra các FK quan trọng đã được set index=True để tránh full table scan."""
         # interview_sessions
-        assert InterviewSession.__table__.columns['cv_id'].index is True
-        assert InterviewSession.__table__.columns['job_listing_id'].index is True
-        assert InterviewSession.__table__.columns['user_id'].index is True
+        assert InterviewSession.__table__.columns["cv_id"].index is True
+        assert InterviewSession.__table__.columns["job_listing_id"].index is True
+        assert InterviewSession.__table__.columns["user_id"].index is True
 
         # job_match_results
-        assert JobMatchResult.__table__.columns['cv_id'].index is True
-        assert JobMatchResult.__table__.columns['job_id'].index is True
-        assert JobMatchResult.__table__.columns['user_id'].index is True
+        assert JobMatchResult.__table__.columns["cv_id"].index is True
+        assert JobMatchResult.__table__.columns["job_id"].index is True
+        assert JobMatchResult.__table__.columns["user_id"].index is True

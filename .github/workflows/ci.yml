@@ -1,53 +1,50 @@
-name: CI
+name: Workflow Validation
 
 on:
-  push:
-    branches: [main, dev]
   pull_request:
     branches: [main, dev]
+    paths:
+      - ".github/**"
+      - "docker-compose*.yml"
+      - "scripts/**"
+      - ".env.test.example"
+  push:
+    branches: [main]
+    paths:
+      - ".github/**"
+      - "docker-compose*.yml"
+      - "scripts/**"
+      - ".env.test.example"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-validation-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  backend:
+  validate-workflows-and-scripts:
+    name: actionlint, shell, and compose validation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
+      - name: Validate GitHub Actions workflows
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
 
-      - name: Install dependencies
-        run: uv sync
+      - name: Validate deployment shell scripts
+        run: |
+          bash -n scripts/deploy/compose_deploy.sh
+          bash -n scripts/deploy/compose_rollback.sh
 
-      - name: Lint (ruff)
-        run: uv run ruff check app tests
-
-      - name: Type check (mypy)
-        run: uv run mypy app tests
-
-      - name: Test (pytest)
-        run: uv run pytest -q
-
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Clean npm cache
-        run: npm cache clean --force
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci --include=optional
-
-      - name: Build
-        working-directory: frontend
-        run: npm run build
+      - name: Validate Docker Compose files
+        env:
+          ENV_FILE: .env.test.example
+        run: |
+          docker compose config --quiet
+          docker compose --env-file .env.test.example -f docker-compose.test.yml config --quiet
+          docker compose --env-file .env.test.example -f docker-compose.prod.yml config --quiet

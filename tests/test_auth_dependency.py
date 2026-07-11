@@ -117,4 +117,3 @@ class TestResolveTokenNotImplemented:
         )
         with pytest.raises(NotImplementedError):
             await get_current_user(db=async_db_session, auth=stub, authorization=f"Bearer {token}")
-

@@ -1,9 +1,9 @@
 """Pydantic schemas for API request validation."""
 
+import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator, field_validator
-import re
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class AuthSignupRequest(BaseModel):
@@ -29,8 +29,11 @@ class AuthSignupRequest(BaseModel):
         if not re.match(pattern, v):
             raise ValueError("Email không đúng định dạng. Ví dụ: user@example.com")
         return v
+
+
 class AuthLoginRequest(BaseModel):
     """Payload for POST /auth/login."""
+
     identifier: str = Field(..., description="Email or display name.")
     password: str = Field(..., min_length=8)
 

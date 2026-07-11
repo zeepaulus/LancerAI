@@ -105,6 +105,7 @@ class _VADProcessor:
         # 1. Try local package import first (offline-friendly, avoids Snakers4 download hang/fail)
         try:
             import silero_vad
+
             model = silero_vad.load_silero_vad(onnx=False)
             self._model = model
             logger.info("[VAD] silero-vad loaded locally from package")
@@ -256,9 +257,7 @@ class VoiceSTTConnector:
             )
             logger.info("[STT] faster-whisper ready")
         except ImportError as exc:
-            raise RuntimeError(
-                "faster-whisper is not installed. Run: uv add faster-whisper"
-            ) from exc
+            raise RuntimeError("faster-whisper is not installed. Run: uv add faster-whisper") from exc
 
     # ------------------------------------------------------------------
     # Public API — VAD
@@ -278,11 +277,13 @@ class VoiceSTTConnector:
 
     async def _transcribe_groq(self, audio_bytes: bytes, sample_rate: int) -> str | None:
         """Call Groq Cloud speech-to-text API (whisper-large-v3-turbo)."""
-        from app.core.settings import get_settings
         import io
-        import wave
-        import httpx
         import os
+        import wave
+
+        import httpx
+
+        from app.core.settings import get_settings
 
         s = get_settings()
         api_key = s.llm_cloud_api_key
@@ -297,7 +298,7 @@ class VoiceSTTConnector:
             audio = _pcm_bytes_to_float32(audio_bytes)
             if sample_rate != SAMPLE_RATE:
                 audio = _resample(audio, sample_rate, SAMPLE_RATE)
-            
+
             # Convert float32 array back to int16 bytes
             pcm_int16 = (audio * 32768.0).clip(-32768, 32767).astype(np.int16).tobytes()
 
