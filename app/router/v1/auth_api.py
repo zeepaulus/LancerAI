@@ -10,7 +10,7 @@ from app.core.providers.auth import get_current_user
 from app.core.providers.services import get_auth_service
 from app.core.rate_limit import limiter
 from app.models.user import User
-from app.schema.request import AuthLoginRequest, AuthSignupRequest, PasswordChangeRequest, UserProfileUpdateRequest
+from app.schema.request import AuthLoginRequest, AuthSignupRequest, PasswordChangeRequest
 from app.schema.response import AuthTokenResponse, UserProfileResponse
 from app.service.auth.service import AuthService
 
@@ -65,26 +65,6 @@ async def me(request: Request, current_user: Annotated[User, Depends(get_current
         display_name=current_user.display_name,
         tenant_id=current_user.tenant_id,
         role=current_user.role.value,  # serialize enum as plain string
-    )
-
-
-@router.patch("/me")
-@limiter.limit("30/minute")
-async def update_me(
-    request: Request,
-    payload: UserProfileUpdateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
-    auth: Annotated[AuthService, Depends(get_auth_service)],
-    db: Annotated[AsyncSession, Depends(get_db_session)],
-) -> UserProfileResponse:
-    """Update the current user's visible profile information."""
-    user = await auth.update_profile(db, current_user, display_name=payload.display_name)
-    return UserProfileResponse(
-        id=user.id,
-        email=user.email,
-        display_name=user.display_name,
-        tenant_id=user.tenant_id,
-        role=user.role.value,
     )
 
 

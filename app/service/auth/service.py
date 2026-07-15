@@ -114,31 +114,6 @@ class AuthService:
 
         return create_access_token(user.id, user.tenant_id, user.role.value)
 
-    async def update_profile(
-        self,
-        session: AsyncSession,
-        user: User,
-        *,
-        display_name: str,
-    ) -> User:
-        """Update mutable profile fields for the current user."""
-        cleaned_name = display_name.strip()
-        if not cleaned_name:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Display name is required.",
-            )
-
-        updated = await self._users.update(session, user.id, display_name=cleaned_name)
-        if updated is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found.",
-            )
-        await session.commit()
-        await session.refresh(updated)
-        return updated
-
     async def change_password(
         self,
         session: AsyncSession,

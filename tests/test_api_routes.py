@@ -436,6 +436,32 @@ class TestAuthRoutes:
         resp = integration_client.get("/api/v1/auth/me", headers={"Authorization": "Bearer invalid.token.here"})
         assert resp.status_code == 401
 
+    def test_display_name_cannot_be_updated(self, integration_client: TestClient) -> None:
+        integration_client.post(
+            "/api/v1/auth/signup",
+            json={
+                "email": "immutable-name@example.com",
+                "password": "secret123",
+                "display_name": "Original Name",
+            },
+        )
+        token = integration_client.post(
+            "/api/v1/auth/login",
+            json={"identifier": "immutable-name@example.com", "password": "secret123"},
+        ).json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        response = integration_client.patch(
+            "/api/v1/auth/me",
+            json={"display_name": "Changed Name"},
+            headers=headers,
+        )
+
+        assert response.status_code == 405
+        profile = integration_client.get("/api/v1/auth/me", headers=headers)
+        assert profile.status_code == 200
+        assert profile.json()["display_name"] == "Original Name"
+
 
 class TestExtractionRoutes:
     def test_upload_wrong_content_type_returns_415(self, client_with_mock_user: TestClient) -> None:
