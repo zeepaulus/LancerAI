@@ -44,7 +44,7 @@ class AuthService:
         """Create a new user and return the persisted record."""
         email_norm = email.lower().strip()
         display_name_norm = display_name.strip()
-        
+
         if not display_name_norm:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
