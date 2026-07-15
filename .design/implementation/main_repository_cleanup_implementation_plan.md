@@ -295,7 +295,7 @@ Expected: hygiene tests pass, both paths are ignored, and the commit contains no
 - Consumes: all cleanup tasks.
 - Produces: verified `main` with only intentional cleanup commits and no unrelated staged/untracked report content.
 
-- [ ] **Step 1: Run the complete quality gate**
+- [x] **Step 1: Run the complete quality gate**
 
 ```powershell
 uv run ruff check app tests
@@ -307,11 +307,11 @@ Pop-Location
 
 Expected: Ruff passes, pytest reports zero failures, and Vite exits 0.
 
-- [ ] **Step 2: Verify repository references and Markdown links**
+- [x] **Step 2: Verify repository references and Markdown links**
 
 Run source/reference scans for removed social auth strings, deleted asset names, `docs/superpowers`, the old profile PATCH claim, and broken relative Markdown links. Expected: no unintended stale reference.
 
-- [ ] **Step 3: Inspect the final Git boundary**
+- [x] **Step 3: Inspect the final Git boundary**
 
 Run:
 
@@ -323,7 +323,7 @@ git log -8 --oneline
 
 Expected: no whitespace errors; only the plan checklist may remain modified before its final commit; `.design/` remains present.
 
-- [ ] **Step 4: Commit the completed implementation plan**
+- [x] **Step 4: Commit the completed implementation plan**
 
 ```powershell
 git add -- .design/implementation/main_repository_cleanup_implementation_plan.md
