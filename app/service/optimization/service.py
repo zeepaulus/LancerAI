@@ -44,7 +44,6 @@ class OptimizationService:
         # Build the compiled graph once per service instance (thread-safe, stateless)
         self._graph = build_cv_optimization_graph(llm_connector, graph_repository)
 
-
     async def analyze_cv(
         self,
         cv_id: str,
@@ -143,10 +142,14 @@ class OptimizationService:
             roast_issues=[
                 issue.model_dump() if hasattr(issue, "model_dump") else dict(issue)
                 for issue in final_state.get("roast_issues", [])
-            ] if final_state.get("roast_issues") is not None else None,
+            ]
+            if final_state.get("roast_issues") is not None
+            else None,
             rewritten_sections=[
                 sec.model_dump() if hasattr(sec, "model_dump") else dict(sec)
                 for sec in final_state.get("rewritten_sections", [])
-            ] if final_state.get("rewritten_sections") is not None else None,
+            ]
+            if final_state.get("rewritten_sections") is not None
+            else None,
             cv_scorecard=deterministic_scorecard,
         )

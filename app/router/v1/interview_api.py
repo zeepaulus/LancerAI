@@ -13,8 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
-from app.core.providers.auth import get_current_user, validate_ws_token
 from app.core.llm_connector import LLMConnector
+from app.core.providers.auth import get_current_user, validate_ws_token
 from app.core.providers.services import (
     get_extraction_service,
     get_interview_pipeline_factory,
@@ -83,18 +83,19 @@ async def scrape_job_description(
 
     url = url.strip()
     from app.service.matching.service import _fetch_jd_from_url
+
     raw_text = await _fetch_jd_from_url(url)
 
     if not raw_text or len(raw_text.strip()) < 50:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Không thể cào dữ liệu từ URL này. Vui lòng kiểm tra lại link hoặc copy-paste thủ công."
+            detail="Không thể cào dữ liệu từ URL này. Vui lòng kiểm tra lại link hoặc copy-paste thủ công.",
         )
 
     # Ask LLM to clean and structure it
     prompt = [
         {"role": "system", "content": _JD_SCRAPE_SYSTEM},
-        {"role": "user", "content": f"URL tuyển dụng: {url}\n\nNội dung thô:\n{raw_text[:6000]}"}
+        {"role": "user", "content": f"URL tuyển dụng: {url}\n\nNội dung thô:\n{raw_text[:6000]}"},
     ]
 
     try:
@@ -106,12 +107,7 @@ async def scrape_job_description(
     except Exception as exc:
         _logger.error("Failed to parse JD via LLM: %s", exc)
         # Fallback to returning raw text in standard schema
-        return {
-            "job_title": "",
-            "company": "",
-            "jd_text": raw_text[:4000],
-            "focus_area": ""
-        }
+        return {"job_title": "", "company": "", "jd_text": raw_text[:4000], "focus_area": ""}
 
 
 @router.post("/sessions", status_code=status.HTTP_201_CREATED)
@@ -138,6 +134,7 @@ async def create_interview_session(
     jd_text = (payload.jd_text or "").strip()
     if jd_url and not jd_text:
         from app.service.matching.service import _fetch_jd_from_url
+
         jd_text = await _fetch_jd_from_url(jd_url)
 
     jd_data = build_manual_jd_data(
@@ -357,9 +354,14 @@ async def interview_websocket(
             _logger.debug("WS send_bytes failed (client disconnected): %s", e)
 
     from sqlalchemy.orm import selectinload
-    stmt = select(InterviewSession).options(selectinload(InterviewSession.transcripts)).where(
-        InterviewSession.id == session_id,
-        InterviewSession.user_id == str(user_id),
+
+    stmt = (
+        select(InterviewSession)
+        .options(selectinload(InterviewSession.transcripts))
+        .where(
+            InterviewSession.id == session_id,
+            InterviewSession.user_id == str(user_id),
+        )
     )
     result = await db.execute(stmt)
     session_record = result.scalars().first()
@@ -401,10 +403,12 @@ async def interview_websocket(
     if not jd_data:
         stored_jd = setup_context.get("jd_data") if isinstance(setup_context, dict) else {}
         jd_data = stored_jd if isinstance(stored_jd, dict) else {}
-    job_title: str = normalise_it_role(str(
-        (setup_context.get("job_title") if isinstance(setup_context, dict) else "")
-        or infer_job_title(cv_data, jd_data)
-    ))
+    job_title: str = normalise_it_role(
+        str(
+            (setup_context.get("job_title") if isinstance(setup_context, dict) else "")
+            or infer_job_title(cv_data, jd_data)
+        )
+    )
     mode: str = session_record.mode
     try:
         stored_duration = setup_context.get("duration_minutes") if isinstance(setup_context, dict) else None

@@ -1,81 +1,97 @@
-# `app/workers/` — Celery Background Task Workers
+# `app/workers/` - Celery Background Workers
 
-Package chứa các **Celery shared tasks** xử lý công việc nặng/chậm không phù hợp để chạy trong request-response cycle của FastAPI. Tasks được broker qua **Redis** và có thể schedule bằng Celery Beat hoặc Prefect/Airflow.
+`app/workers/` contains Celery tasks for work that should not block the FastAPI request-response cycle.
 
 ## Architecture
 
-```
-FastAPI Router
-  └─→ .delay() / .apply_async()
-      └─→ Redis (broker, DB 1)
-          └─→ Celery Worker process
-              └─→ Result → Redis (backend, DB 2)
+```text
+FastAPI / CLI / scheduler
+  -> Celery task
+  -> Redis broker
+  -> Celery worker
+  -> PostgreSQL / vector DB / document output
+  -> Redis result backend
 ```
 
-Workers chạy trên process riêng biệt (hoặc Spot instances), hoàn toàn độc lập với API server.
+Configuration is read from `Settings`:
+
+- `CELERY_BROKER_URL`
+- `CELERY_RESULT_BACKEND`
 
 ## Files
 
-### `crawler_worker.py` — JD Collection Task
-
-```python
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def crawl_job_listings(self, source="topcv", max_pages=5) -> dict
-```
-
-**Purpose**: Thu thập Job Descriptions từ các job boards về lưu vào `job_listings` table.
-
-**Design decisions:**
-- `max_retries=3`, `default_retry_delay=60s` — retry-safe cho Spot instance interruptions.
-- Light-crawl strategy: giới hạn `max_pages` mỗi run, schedule daily.
-- `bind=True` — `self` cho phép gọi `self.retry()` trong exception handler.
-
-**Target sources:**
-- `topcv` — TopCV.vn
-- `itviec` — ITviec.com
-- `linkedin` — LinkedIn (future)
-
-**Technology (planned):** Scrapy hoặc Playwright cho dynamic pages.
-
----
-
-### `document_worker.py` — CV Export Task
-
-```python
-@shared_task(bind=True, max_retries=2, default_retry_delay=30)
-def generate_document(self, cv_data, template="standard_ats", output_format="pdf") -> dict
-```
-
-**Purpose**: Render structured CV data thành file PDF hoặc DOCX với ATS-friendly templates.
-
-**Templates:**
-- `standard_ats` — Clean, ATS-parseable format
-- `modern_tech` — Tech-focused visual layout
-- `management` — Executive/management style
-
-**Output formats:**
-- `pdf` — via **WeasyPrint** (HTML → PDF)
-- `docx` — via **python-docx**
-
-**Design**: Chạy async để tránh block API response khi render PDF. Kết quả được lưu vào object storage (S3/MinIO) và trả về signed URL.
-
-## Technology
-
-| Component | Library |
+| File | Role |
 |---|---|
-| Task queue | **Celery** (`shared_task`, `bind=True`) |
-| Message broker | **Redis** (DB 1) |
-| Result backend | **Redis** (DB 2) |
-| Web scraping | Scrapy / Playwright (planned) |
-| PDF rendering | **WeasyPrint** (planned) |
-| DOCX generation | **python-docx** (planned) |
-| Scheduling | Celery Beat / Prefect / Airflow |
+| `celery_app.py` | Celery app factory/config |
+| `crawler_worker.py` | TopCV job crawler and parser |
+| `document_worker.py` | CV export task for PDF/DOCX |
 
-## Configuration
+## Run Worker
 
-Broker và backend URLs được cấu hình trong `core/settings.py`:
+```bash
+uv run celery -A app.workers.celery_app worker --loglevel=info -P threads -c 2
+```
+
+Production compose uses:
+
+```bash
+uv run --no-sync celery -A app.workers.celery_app worker --loglevel=info -P threads -c 2
+```
+
+## `crawler_worker.py`
+
+Task:
 
 ```python
-celery_broker_url  = "redis://localhost:6379/1"
-celery_result_backend = "redis://localhost:6379/2"
+crawl_job_listings(source="topcv", max_pages=5)
 ```
+
+Current behavior:
+
+- Supports `topcv`.
+- Builds approved TopCV listing URLs.
+- Fetches static HTML with polite headers and delay.
+- Falls back to Playwright only when static HTML does not expose job links.
+- Parses listing cards and detail pages.
+- Filters for IT/software-related jobs.
+- Upserts `JobListing` by `source_url`.
+- Stores job embeddings best-effort.
+
+Result payload includes:
+
+- `status`
+- `crawl_status`
+- `source`
+- `approved_source_url`
+- `pages_crawled`
+- `jobs_seen`
+- `jobs_added`
+- `jobs_updated`
+- `jobs_skipped`
+
+Smoke utility:
+
+```bash
+uv run python -m app.workers.crawler_worker --smoke
+```
+
+## `document_worker.py`
+
+Task:
+
+```python
+generate_document(cv_data, template="standard_ats", output_format="pdf")
+```
+
+Supported output:
+
+- `pdf`: uses `CVTemplateRenderer.render_pdf`.
+- `docx`: uses `python-docx` to build an ATS-friendly document.
+
+The task returns base64 document bytes in `document_b64`.
+
+## Follow-Ups
+
+- Store generated documents in object storage or a local artifact directory instead of only returning base64.
+- Add scheduled crawler runbook and monitoring.
+- Add retry job for embeddings that failed during crawl.

@@ -102,7 +102,7 @@ class AuthService:
         if user is None or not verify_password(password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password.",
+                detail="Invalid email, display name, or password.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         if not user.is_active:
@@ -195,4 +195,3 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         return user
-

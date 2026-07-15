@@ -1,51 +1,70 @@
-Config, DB session, external service connectors, DI providers, logging, and security primitives. No product business logic here.
+# `app/core/` - Infrastructure, Connectors And Providers
+
+`app/core/` chứa các primitive dùng chung cho backend: settings, database, security, logging, rate limit, lifecycle, DI providers và connectors tới hệ thống AI.
+
+Không đặt product business logic ở đây. Business logic nằm trong `app/service/`.
 
 ## Principles
 
-- Heavy connectors (LLM, ASR, TTS, vector DB) use **lazy initialization** via thread-safe singletons (`app/core/sync_singleton.py`), exposed through providers in `app/core/providers/`.
-- Connector methods are **connector contracts** (`raise NotImplementedError`) until a real implementation is wired. Do not call them directly; always inject via `Depends`.
-- FastAPI `Depends` wires repositories and services at `app/core/providers/services.py` (including `get_interview_pipeline_factory`).
+- Settings đọc từ `.env` qua `pydantic-settings`.
+- DB access dùng SQLAlchemy async engine và `AsyncSession`.
+- Heavy connectors được lazy-load qua providers/singletons.
+- Routers nhận service bằng `Depends`; service nhận dependencies qua constructor.
+- Security, rate limit và logging là cross-cutting concerns.
 
-## File
+## Key Files
 
-### `settings.py`
-`pydantic-settings`: `.env` + biến môi trường. `get_settings()` cache một bản `Settings` trong process (khóa thread-safe).
+| File/Folder | Vai trò |
+|---|---|
+| `settings.py` | `Settings` model, env validation, cached `get_settings()` |
+| `database.py` | Async engine/session factory, `get_db_session` |
+| `security.py` | Password hash/verify, JWT create/decode |
+| `rate_limit.py` | SlowAPI limiter và IP key function |
+| `logger.py` | Console/file logging |
+| `lifespan.py` | Startup/shutdown hooks |
+| `json_extractor.py` | Clean/parse JSON từ LLM responses |
+| `sync_singleton.py` | Thread-safe singleton helper |
+| `providers/` | FastAPI dependency factories |
+| `llm_connector.py` | Ollama, self-hosted, Groq, NVIDIA NIM, streaming, embeddings, cache hooks |
+| `ocr_processor.py` | PaddleOCR lazy-load, grouped text extraction |
+| `voice_stt_connector.py` | Groq Whisper fallback, faster-whisper, silero/energy VAD helpers |
+| `voice_tts_connector.py` | Edge TTS, Piper, VieNeu, PCM output |
 
-### `database.py`
-Engine async SQLAlchemy + `get_db_session`.
+## Providers
 
-### `providers/`
-- `providers/connectors.py` — `get_llm_connector`, `get_ocr_processor`, STT/TTS, vector, graph.
-- `providers/repositories.py` — `get_*_repository` cho từng model.
-- `providers/services.py` — `get_*_service`, `get_template_renderer`, `get_interview_pipeline_factory`.
-- `providers/auth.py` — `get_current_user`.
+| Provider file | Exposes |
+|---|---|
+| `providers/auth.py` | `get_current_user`, `validate_ws_token` |
+| `providers/connectors.py` | LLM, OCR, STT, TTS, vector repo, graph repo |
+| `providers/repositories.py` | Repositories for ORM models |
+| `providers/services.py` | Auth/extraction/optimization/matching/interview services, renderer, pipeline factory |
 
-### `lifespan.py`
-Startup: kiểm tra DB, warm-up vector repository (best-effort).
+## Settings Groups
 
-### `llm_connector.py`
-Ollama / OpenAI-compatible — method hiện stub.
+| Nhóm | Biến tiêu biểu |
+|---|---|
+| App | `APP_ENV`, `APP_DEBUG`, `APP_HOST`, `APP_PORT`, `ALLOWED_ORIGINS` |
+| Auth | `AUTH_SECRET_KEY`, `AUTH_JWT_ALGORITHM`, token TTLs |
+| DB/Redis | `DATABASE_URL`, `REDIS_URL`, Celery URLs |
+| Vector | `VECTOR_DB_BACKEND`, `VECTOR_DB_HOST`, `VECTOR_DB_PORT`, `VECTOR_DB_COLLECTION` |
+| Graph | `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` |
+| LLM | Ollama, self-hosted, Groq, NVIDIA NIM variables |
+| Cache | `LLM_CACHE_ENABLED`, `LLM_CACHE_SIMILARITY_THRESHOLD` |
+| Voice | STT, VAD, TTS engine/model/voice variables |
 
-### `voice_stt_connector.py` / `voice_tts_connector.py`
-STT/TTS — stub.
+## LLM Routing Summary
 
-### `ocr_processor.py`
-OCR — stub.
+- Default local calls use Ollama.
+- Cloud-heavy calls can route to self-hosted endpoint, Groq or NVIDIA NIM.
+- Streaming is implemented for interview responses.
+- Embeddings try Ollama first, then NVIDIA, then OpenAI-compatible endpoint when cloud is requested.
+- Semantic cache is optional and stored through `LLMCacheRepository`.
 
-### `security.py`
-bcrypt hash/verify; JWT encode/decode (`HS256`, secret từ settings).
+## Voice Contract
 
-### `logger.py`
-Console UTF-8; file xoay vòng nếu `LOG_TO_FILE` không tắt. Thư mục: `LOG_DIR` hoặc `<project>/logs`.
+| Direction | Format |
+|---|---|
+| Browser -> backend | PCM Int16 mono 16 kHz |
+| Backend -> browser | PCM Int16 mono 24 kHz |
 
-### `sync_singleton.py`
-Helper `thread_safe_singleton(factory)` cho getter sync.
-
-## Công nghệ
-
-| Thành phần | Gói |
-|------------|-----|
-| Config | pydantic-settings |
-| ORM / DB | SQLAlchemy 2, asyncpg |
-| Auth | PyJWT, bcrypt |
-| Logging | stdlib `logging` |
+STT skips very short/low-RMS audio before loading a model. TTS sanitizes markdown-like characters before synthesis.

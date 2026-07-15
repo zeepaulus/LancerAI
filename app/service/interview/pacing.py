@@ -30,17 +30,13 @@ _INSTRUCTIONS: dict[PacingSignal, str] = {
         "thank the candidate, and do not ask a new question."
     ),
     PacingSignal.FORCE_END: (
-        "The hard time limit has been reached. Close the interview immediately "
-        "in one short, polite turn."
+        "The hard time limit has been reached. Close the interview immediately in one short, polite turn."
     ),
     PacingSignal.DEAD_AIR: (
         "The candidate has been quiet for a while. Rephrase the last question "
         "or offer a short prompt to help them continue."
     ),
-    PacingSignal.ABANDON: (
-        "The candidate has been silent too long. Close the session and mark it "
-        "as incomplete."
-    ),
+    PacingSignal.ABANDON: ("The candidate has been silent too long. Close the session and mark it as incomplete."),
 }
 
 _TERMINAL = {PacingSignal.FORCE_END, PacingSignal.ABANDON}

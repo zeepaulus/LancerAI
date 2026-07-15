@@ -70,6 +70,7 @@ Cung cấp benchmark ngành và các từ khóa ATS quan trọng nhất cho vị
             json_mode=True,
         )
         from app.core.json_extractor import clean_and_parse_json
+
         data: dict[str, Any] = clean_and_parse_json(raw)
 
         # Build keyword_frequency_map from all skill/keyword lists

@@ -29,6 +29,7 @@ Thumbs.db
 
 # Testing & Quality
 .coverage
+coverage.xml
 htmlcov/
 .pytest_cache/
 .mypy_cache/
@@ -58,7 +59,19 @@ logs/
 # Temporary tool output
 mypy_output.txt
 ruff_errors.json
+requirements-ci.txt
+docker-compose-smoke.log
 codeprobe-reports/
+scratch/
+*.code-workspace
+raw_response.txt
+raw_roast_response.txt
+extracted_response.txt
+extracted_roast_response.txt
+exact_rewrite_raw.txt
+exact_roast_raw.txt
+evaluation_report.md
+katalon_test_guide.md
 
 # Audio test artifacts
 *.wav

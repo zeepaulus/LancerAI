@@ -412,8 +412,7 @@ async def wrap_up_node(state: InterviewState, llm: LLMConnector) -> dict[str, An
     overall score, strengths, areas for improvement, and final feedback.
     """
     transcript_text = "\n".join(
-        f"{'Phỏng vấn viên' if t.role == 'interviewer' else 'Ứng viên'}: {t.content}"
-        for t in state.turns
+        f"{'Phỏng vấn viên' if t.role == 'interviewer' else 'Ứng viên'}: {t.content}" for t in state.turns
     )
 
     star_summary = ""
@@ -444,8 +443,7 @@ Tổng kết phiên phỏng vấn:"""
 
     if state.interview_plan:
         prompt += (
-            "\n\n## Interview plan / evaluation brief\n"
-            f"{json.dumps(state.interview_plan, ensure_ascii=False)[:2500]}"
+            f"\n\n## Interview plan / evaluation brief\n{json.dumps(state.interview_plan, ensure_ascii=False)[:2500]}"
         )
 
     raw = ""
@@ -486,8 +484,7 @@ async def scorecard_node(
 ) -> InterviewScorecard:
     """Inspector-style final scoring: LLM scores competencies, code computes overall."""
     transcript_text = "\n".join(
-        f"{'Phỏng vấn viên' if t.role == 'interviewer' else 'Ứng viên'}: {t.content}"
-        for t in state.turns
+        f"{'Phỏng vấn viên' if t.role == 'interviewer' else 'Ứng viên'}: {t.content}" for t in state.turns
     )
     star_summary = "\n".join(
         f"- Câu {s.answer_index + 1}: overall={s.overall_score}/10; "
@@ -496,8 +493,7 @@ async def scorecard_node(
         for s in state.star_scores
     )
     behavior_summary_text = "\n".join(
-        f"- {obs.label}: {obs.severity}, {obs.count} lần, {obs.detail}"
-        for obs in behavior_summary.observations
+        f"- {obs.label}: {obs.severity}, {obs.count} lần, {obs.detail}" for obs in behavior_summary.observations
     )
 
     prompt = f"""## Vị trí ứng tuyển
@@ -523,8 +519,7 @@ Hãy chấm scorecard theo đúng schema."""
 
     if state.interview_plan:
         prompt += (
-            "\n\n## Interview plan / evaluation brief\n"
-            f"{json.dumps(state.interview_plan, ensure_ascii=False)[:2500]}"
+            f"\n\n## Interview plan / evaluation brief\n{json.dumps(state.interview_plan, ensure_ascii=False)[:2500]}"
         )
 
     raw = ""
@@ -599,10 +594,7 @@ def _clamp_score(value: Any, *, max_score: float) -> float:
 
 def _answer_overall_score(situation: float, task: float, action: float, result: float) -> float:
     return round(
-        situation * 0.15
-        + task * 0.20
-        + action * 0.35
-        + result * 0.30,
+        situation * 0.15 + task * 0.20 + action * 0.35 + result * 0.30,
         1,
     )
 

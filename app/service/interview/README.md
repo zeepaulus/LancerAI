@@ -1,114 +1,111 @@
-# `app/service/interview/` — Real-time Voice Interview Pipeline (Module 4)
+# `app/service/interview/` - Real-Time Voice Interview
 
-Sub-package triển khai **real-time voice interview** qua WebSocket. Một instance `InterviewPipeline` quản lý toàn bộ lifecycle của một phiên phỏng vấn giọng nói: nhận PCM audio từ microphone, transcribe, generate AI response, synthesize speech, và gửi lại client.
+This bounded context owns interview planning, realtime voice conversation and final reporting.
 
-## Audio Flow
+## Components
 
-```
-Mic PCM (16kHz)
-  └─→ silence-based turn detection (energy gate)
-      └─→ VoiceSTTConnector.transcribe()         → candidate transcript
-          └─→ LLMConnector.generate_chat_stream() → interviewer tokens
-              └─→ VoiceTTSConnector.synthesize_stream() → PCM chunks (24kHz)
-                  └─→ WebSocket.send_bytes()      → speaker
-```
-
-## Files
-
-### `service.py` — InterviewService (REST Companion)
-
-REST-side orchestrator của Module 4. Không xử lý audio hay conversation — chỉ quản lý session lifecycle qua REST endpoints.
-
-| Method | Description |
+| File | Role |
 |---|---|
-| `create_session(cv_id, user_id, mode, job_listing_id, duration_minutes)` | Tạo session shell record (status: created), trả về `session_id` |
-| `persist_session(payload)` | Chuyển `InterviewState` hoàn chỉnh → `InterviewSession` row + `InterviewTranscript` rows (PostgreSQL) |
-| `get_report(session_id)` | Assemble `InterviewReportResponse` cho frontend analytics dashboard |
+| `service.py` | REST-side session lifecycle, persistence and report assembly |
+| `pipeline.py` | WebSocket session orchestrator: audio -> STT -> LLM -> TTS |
+| `agents.py` | Question, evaluation and wrap-up LLM node functions |
+| `planning.py` | Builds interview plan from CV/JD/job title/focus |
+| `pacing.py` | Time and pacing helpers |
+| `behavior.py` | Browser/candidate behavior event scoring |
+| `scoring.py` | STAR/report score helpers and fallbacks |
+| `state.py` | Interview state and sub-schemas |
+| `state_machine.py` | Phase/state transition helpers |
 
-Dependencies: `LLMConnector` (post-hoc scoring), `RelationalRepository[InterviewSession]`.
+## REST Flow
 
-`InterviewService` không inject STT/TTS — xử lý audio trong `InterviewPipeline`.
-
----
-
-### `state.py` — Interview Session State Schema
-
-`InterviewState` (Pydantic `BaseModel`) là shared state của một phiên phỏng vấn.
-
-**State sections:**
-
-| Section | Fields | Description |
-|---|---|---|
-| Session info | `session_id`, `cv_data`, `jd_data`, `job_title`, `interview_mode` | Context khởi tạo phiên |
-| Duration | `duration_minutes`, `start_time`, `elapsed_seconds` | Time-based session control (không phải question-count-based) |
-| Chat history | `chat_history: list[ChatMessage]` | LLM context window (system + assistant + user messages) |
-| Turns | `turns: Annotated[list[InterviewTurn], operator.add]` | Conversation transcript (append-only, cho STAR analysis) |
-| STAR scores | `star_scores: Annotated[list[STARScore], operator.add]` | Per-answer evaluation (filled post-hoc) |
-| Current state | `current_question`, `waiting_for_answer`, `latest_transcript` | STT output từ user turn gần nhất |
-| Final assessment | `overall_score`, `strengths`, `improvements`, `final_feedback` | Tổng kết phiên |
-| Control | `next_action: Literal[...]`, `error` | `ask` / `evaluate` / `follow_up` / `wrap_up` / `done` |
-
-**Sub-schemas:**
-
-| Schema | Description |
-|---|---|
-| `STARScore` | Structured per-answer eval: `situation_score`, `task_score`, `action_score`, `result_score` (0–10 each), `overall_score`, `feedback`, `follow_up_triggered` |
-| `ChatMessage` | LLM message format: `role` (`system`/`assistant`/`user`), `content`, `timestamp` |
-| `InterviewTurn` | Transcript turn: `role` (`interviewer`/`candidate`), `content`, `audio_duration_ms` |
-
-**Helper methods:**
-- `get_remaining_seconds()` — tính thời gian còn lại dựa trên `start_time` + `duration_minutes`.
-- `is_time_up()` — boolean check, dùng bởi pipeline để trigger wrap-up.
-- `to_llm_messages()` — convert `chat_history` sang `list[dict]` format của LLM API.
-
-**Design note**: Interview chạy theo **time-based model** (flexible, không phải question-count-based) — phù hợp với real conversation flow.
-
-### `pipeline.py` — Interview Session Orchestrator
-
-`InterviewPipeline` quản lý một WebSocket session.
-
-```python
-class InterviewPipeline:
-    def __init__(self, llm, stt, tts, send_json, send_bytes): ...
+```text
+POST /api/v1/interview/sessions
+  -> validate InterviewSessionRequest
+  -> verify CV ownership
+  -> build JD data from text/url/job_listing_id
+  -> infer/normalize job title
+  -> build interview plan
+  -> create InterviewSession
+  -> return session_id, room_name, meeting_url, plan
 ```
 
-Dependencies được inject qua constructor (không phụ thuộc FastAPI); `send_json` và `send_bytes` là callables — dễ mock trong tests.
+Report flow:
 
-| Method | Description |
-|---|---|
-| `start(job_title, cv_data, jd_data, mode, duration_minutes)` | Build system prompt từ CV + JD context, emit interviewer greeting |
-| `feed_audio(pcm_bytes)` | Consume một chunk PCM Int16 mono 16kHz, trigger turn detection |
-| `stop()` | Teardown session, chạy STAR evaluation, return final payload |
-
-**Internal components (planned):**
-- `_silence_detection_loop`: energy-based turn detection, flush user audio đến STT.
-- `_generate_and_speak`: stream LLM tokens → sentence-by-sentence TTS → send PCM chunks.
-- `_run_final_evaluation`: STAR scoring cho toàn bộ conversation (Vietnamese).
-
-State machine điều phối bởi `InterviewState.next_action`:
-```
-ask → (candidate answers) → evaluate → [follow_up | ask | wrap_up] → done
+```text
+GET /api/v1/interview/sessions/{session_id}/report
+  -> verify session ownership
+  -> read star_scores JSON
+  -> read transcript rows
+  -> InterviewReportResponse
 ```
 
-### `agents.py` — Interview Agent Node Functions
+## WebSocket Flow
 
-Ba async functions đóng vai trò "agent nodes" trong interview state machine. Không dùng LangGraph wiring (driven imperatively bởi `InterviewPipeline`) — có thể nâng cấp thành LangGraph graph sau nếu cần LangSmith tracing.
+Endpoint: `WS /api/v1/interview/ws`
 
-| Function | Description |
+First client message:
+
+```json
+{"token":"<jwt>","session_id":"<session_id>","duration_minutes":5}
+```
+
+Then:
+
+```text
+Client binary PCM Int16 mono 16 kHz
+  -> InterviewPipeline.feed_audio
+  -> VAD detects end of utterance
+  -> VoiceSTTConnector.transcribe
+  -> transcript event
+  -> LLM evaluate/respond
+  -> VoiceTTSConnector.synthesize_stream
+  -> server binary PCM Int16 mono 24 kHz
+```
+
+JSON actions:
+
+- `{"action":"stop"}`
+- `{"action":"text_answer","text":"..."}`
+- `{"action":"behavior_event","event":{...}}`
+
+## Audio Contract
+
+| Direction | Format |
 |---|---|
-| `question_node(state, llm)` | Generate câu hỏi tiếp theo từ CV + JD context |
-| `evaluate_node(state, llm)` | STAR-score candidate's most recent answer (json_mode=True) |
-| `wrap_up_node(state, llm)` | Produce final holistic assessment cho phiên |
+| Client -> server | PCM Int16 mono 16 kHz |
+| Server -> client | PCM Int16 mono 24 kHz |
 
-Prompt templates: Vietnamese-friendly, structured JSON output.
+STT:
 
-## Technology
+- Attempts Groq Whisper API when a real key is configured.
+- Falls back to faster-whisper local.
+- Skips very short or low-energy audio before loading a heavy model.
 
-| Component | Library |
-|---|---|
-| State schema | **Pydantic v2** (`BaseModel`, `Annotated`, `operator.add`) |
-| Speech-to-Text | `VoiceSTTConnector` (PhoWhisper-base @ 16kHz) |
-| Text-to-Speech | `VoiceTTSConnector` (Edge TTS / Piper / VieNeu @ 24kHz) |
-| LLM | `LLMConnector` streaming API (`generate_chat_stream`) |
-| Transport | FastAPI `WebSocket` (binary frames for PCM, JSON frames for events) |
-| Async | Python `asyncio` (`asyncio.Event` cho abort generation) |
+TTS:
+
+- `edge`: Edge TTS with MP3 decode to PCM.
+- `piper`: local Piper CLI/model with Edge fallback if missing.
+- `vieneu`: VieNeu SDK/CLI/GGUF. Local GGUF failure raises so it does not silently use network TTS.
+
+## Persistence
+
+`InterviewService.create_session` creates a session shell and stores setup context plus interview plan in `star_scores`.
+
+`InterviewService.persist_session` updates:
+
+- `total_questions`
+- `overall_confidence`
+- `star_scores`
+- `logic_issues`
+- `improvement_suggestions`
+- `completed_at`
+- `status="completed"`
+- `InterviewTranscript` rows
+
+## Current Risks And Follow-Ups
+
+- Transcript turns are mainly persisted at final stop; incremental persistence is recommended.
+- Add server-side throttle for behavior events.
+- Add max utterance duration to avoid unbounded audio buffers.
+- Add explicit frontend events for no-speech, STT started, LLM thinking, TTS started and TTS error.
+- Add preflight health checks for STT/TTS local models.

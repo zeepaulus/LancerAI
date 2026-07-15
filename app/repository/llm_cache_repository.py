@@ -111,7 +111,9 @@ class LLMCacheRepository:
         if best_id is None or best_score < threshold:
             logger.debug(
                 "[LLMCache] MISS — best score=%.4f < threshold=%.4f for model=%s",
-                best_score, threshold, model_name,
+                best_score,
+                threshold,
+                model_name,
             )
             return None
 
@@ -124,7 +126,10 @@ class LLMCacheRepository:
 
         logger.info(
             "[LLMCache] HIT — id=%s score=%.4f model=%s hit_count=%d",
-            best_id, best_score, model_name, entry.hit_count,
+            best_id,
+            best_score,
+            model_name,
+            entry.hit_count,
         )
         return entry, best_score
 
@@ -171,7 +176,9 @@ class LLMCacheRepository:
         await self._session.flush()  # assign DB id without committing
         logger.debug(
             "[LLMCache] Saved new entry id=%s model=%s backend=%s",
-            entry.id, model_name, backend,
+            entry.id,
+            model_name,
+            backend,
         )
         return entry
 
@@ -200,9 +207,7 @@ class LLMCacheRepository:
     # Convenience — exact hash lookup (O(1) fast path)
     # ------------------------------------------------------------------
 
-    async def find_exact(
-        self, prompt_text: str, model_name: str
-    ) -> LLMResponseCache | None:
+    async def find_exact(self, prompt_text: str, model_name: str) -> LLMResponseCache | None:
         """Fast exact-match lookup by prompt hash before doing vector scan.
 
         This short-circuits the similarity computation for identical prompts,

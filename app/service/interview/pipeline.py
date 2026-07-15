@@ -88,8 +88,7 @@ def _build_system_prompt(
             "nhưng vẫn phải hỏi chuyên nghiệp và có chiều sâu."
         ),
         "mock": (
-            "Mock interview: nghiêm túc như phỏng vấn thật, không gợi ý đáp án, "
-            "chỉ hỏi follow-up khi cần evidence."
+            "Mock interview: nghiêm túc như phỏng vấn thật, không gợi ý đáp án, chỉ hỏi follow-up khi cần evidence."
         ),
         "quick": "Phỏng vấn nhanh: chọn câu hỏi có giá trị đánh giá cao nhất, tránh lan man.",
     }.get(mode, "Phỏng vấn tiêu chuẩn, chuyên nghiệp, tập trung vào CV/JD.")
@@ -241,7 +240,7 @@ class InterviewPipeline:
 
         chat_history = [ChatMessage(role="system", content=system_prompt)]
         turns = []
-        
+
         if existing_turns:
             for turn in existing_turns:
                 role = turn.get("role")
@@ -257,7 +256,7 @@ class InterviewPipeline:
                 else:
                     chat_role = "system"
                     turn_role = "system"
-                
+
                 chat_history.append(ChatMessage(role=chat_role, content=content))
                 turns.append(InterviewTurn(role=turn_role, content=content))
             logger.info("[Pipeline] Resuming session %s with %d existing turns", session_id, len(turns))
@@ -314,6 +313,7 @@ class InterviewPipeline:
             self._speech_buffer.extend(window_bytes)
 
             import numpy as np
+
             window_f32 = np.frombuffer(window_bytes, dtype=np.int16).astype(np.float32) / 32768.0
 
             if self._stt.check_vad(window_f32):
@@ -484,6 +484,7 @@ class InterviewPipeline:
             self._last_pacing_signal = signal
             if signal in {PacingSignal.DEAD_AIR, PacingSignal.ABANDON} and self.state:
                 from app.service.interview.behavior import BehaviorEvent
+
                 # Check if already added
                 if not any(e.kind == "candidate_silence" for e in self.state.behavior_events):
                     self.state.behavior_events.append(
@@ -494,7 +495,7 @@ class InterviewPipeline:
                             severity="medium",
                             confidence=0.9,
                             detail="Ứng viên im lặng quá lâu hoặc không phản hồi câu hỏi.",
-                            ts=time.time()
+                            ts=time.time(),
                         )
                     )
         return signal
@@ -547,19 +548,19 @@ class InterviewPipeline:
         finally:
             assistant_content = "".join(full_response).strip()
             if assistant_content and self.state:
-                self.state.chat_history.append(
-                    ChatMessage(role="assistant", content=assistant_content)
-                )
-                self.state.turns.append(
-                    InterviewTurn(role="interviewer", content=assistant_content)
-                )
+                self.state.chat_history.append(ChatMessage(role="assistant", content=assistant_content))
+                self.state.turns.append(InterviewTurn(role="interviewer", content=assistant_content))
                 self.state.current_question = assistant_content
                 self.state.pending_follow_up_question = ""
                 self.state.pending_follow_up_reason = ""
                 await self._send_json({"event": "assistant_text", "text": assistant_content})
 
             # Check time-based wrap-up
-            if self.state and (self._is_interview_over() or self.state.next_action == "wrap_up") and self._phase != SessionPhase.STOPPED:
+            if (
+                self.state
+                and (self._is_interview_over() or self.state.next_action == "wrap_up")
+                and self._phase != SessionPhase.STOPPED
+            ):
                 await self._send_json({"event": "time_up"})
                 await self.stop()
             else:
@@ -698,6 +699,7 @@ class InterviewPipeline:
             has_silence_event = any(e.kind == "candidate_silence" for e in self.state.behavior_events)
             if silence_dur >= getattr(self._pacing_clock, "_dead_air_sec", 45) and not has_silence_event:
                 from app.service.interview.behavior import BehaviorEvent
+
                 self.state.behavior_events.append(
                     BehaviorEvent(
                         kind="candidate_silence",
@@ -706,7 +708,7 @@ class InterviewPipeline:
                         severity="medium",
                         confidence=0.9,
                         detail=f"Ứng viên im lặng kéo dài {int(silence_dur)} giây tại thời điểm kết thúc phỏng vấn.",
-                        ts=time.time()
+                        ts=time.time(),
                     )
                 )
 

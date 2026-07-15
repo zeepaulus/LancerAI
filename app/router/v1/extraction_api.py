@@ -29,10 +29,7 @@ def _cv_summary_response(cv: CVRecord) -> CVRecordSummaryResponse:
     extracted = cv.extracted_data or {}
     personal_info = extracted.get("personal_info") or {}
     skills_matrix = extracted.get("skills_matrix") or {}
-    skills_count = sum(
-        len(skills_matrix.get(key) or [])
-        for key in ("languages", "frameworks", "tools", "soft_skills")
-    )
+    skills_count = sum(len(skills_matrix.get(key) or []) for key in ("languages", "frameworks", "tools", "soft_skills"))
     has_analysis = bool(cv.audit_score is not None or cv.optimized_data or cv.status == "optimized")
     return CVRecordSummaryResponse(
         cv_id=cv.id,

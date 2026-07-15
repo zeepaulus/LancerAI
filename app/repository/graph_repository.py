@@ -31,6 +31,7 @@ class GraphRepository:
         if self._driver is None:
             try:
                 from neo4j import AsyncGraphDatabase
+
                 self._driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
             except ImportError:
                 logger.warning("Neo4j python package is not installed. Driver init skipped.")
@@ -60,10 +61,7 @@ class GraphRepository:
             async with self._driver.session() as session:
                 result = await session.run(query, {"skill_name": skill_name})
                 records = await result.data()
-                return [
-                    {"name": str(r["name"]), "distance": int(r["distance"])}
-                    for r in records
-                ]
+                return [{"name": str(r["name"]), "distance": int(r["distance"])} for r in records]
         except Exception as e:
             logger.exception("Neo4j: get_related_skills failed")
             raise GraphRepositoryError("Failed to query related skills") from e
@@ -92,4 +90,3 @@ class GraphRepository:
         except Exception as e:
             logger.exception("Neo4j: get_skill_importance failed")
             raise GraphRepositoryError("Failed to calculate skill importance") from e
-

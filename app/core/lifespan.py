@@ -48,11 +48,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # ── Seed Dummy Job Listings ──────────────────────────────────────────────
     try:
-        from datetime import datetime, UTC
-        from sqlalchemy import select, func
+        from datetime import UTC, datetime
+
+        from sqlalchemy import func, select
+
         from app.core.database import _get_session_factory
-        from app.models.job_listing import JobListing
         from app.core.providers.connectors import get_llm_connector, get_vector_repository
+        from app.models.job_listing import JobListing
 
         session_factory = _get_session_factory()
         async with session_factory() as session:
@@ -74,10 +76,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                             "skills": ["Python", "FastAPI", "PostgreSQL", "Docker", "Git", "RESTful API"],
                             "raw_requirements": "Có ít nhất 2 năm kinh nghiệm làm việc với Python, hiểu biết tốt về database SQL và lập trình bất đồng bộ (asyncio).",
                             "benefits": "Bảo hiểm đầy đủ, thưởng tháng 13, cấp MacBook Pro làm việc.",
-                            "tags": ["Python", "FastAPI", "Backend"]
+                            "tags": ["Python", "FastAPI", "Backend"],
                         },
                         "experience_level": "Junior/Middle",
-                        "job_type": "Full-time"
+                        "job_type": "Full-time",
                     },
                     {
                         "source": "topcv",
@@ -91,10 +93,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                             "skills": ["React", "TypeScript", "Tailwind CSS", "Redux", "WebSockets", "Git"],
                             "raw_requirements": "Thành thạo ReactJS, TypeScript. Có kinh nghiệm tối ưu hóa frontend performance và làm việc với WebSocket stream.",
                             "benefits": "Thưởng dự án, bảo hiểm sức khỏe cao cấp, làm việc hybrid.",
-                            "tags": ["React", "TypeScript", "Frontend"]
+                            "tags": ["React", "TypeScript", "Frontend"],
                         },
                         "experience_level": "Junior/Middle",
-                        "job_type": "Full-time"
+                        "job_type": "Full-time",
                     },
                     {
                         "source": "topcv",
@@ -108,10 +110,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                             "skills": ["AWS", "Docker", "Kubernetes", "CI/CD", "Terraform", "Nginx"],
                             "raw_requirements": "Kinh nghiệm trên 3 năm triển khai ứng dụng lên AWS, thiết lập hệ thống log Prometheus/Grafana, tự động hóa script Bash/Python.",
                             "benefits": "Làm việc remote, nghỉ phép 15 ngày/năm, xét tăng lương 2 lần/năm.",
-                            "tags": ["DevOps", "AWS", "Cloud"]
+                            "tags": ["DevOps", "AWS", "Cloud"],
                         },
                         "experience_level": "Senior",
-                        "job_type": "Full-time"
+                        "job_type": "Full-time",
                     },
                     {
                         "source": "topcv",
@@ -125,10 +127,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                             "skills": ["Selenium", "Playwright", "Cypress", "Python", "API Testing", "Git"],
                             "raw_requirements": "Kinh nghiệm viết test suite tự động bằng Python/JS. Có tư duy logic tốt, biết lập kế hoạch test plan và viết tài liệu QC.",
                             "benefits": "Cấp thiết bị test, lớp học tiếng Anh miễn phí, teambuilding hàng quý.",
-                            "tags": ["QA", "QC", "Automation"]
+                            "tags": ["QA", "QC", "Automation"],
                         },
                         "experience_level": "Junior/Middle",
-                        "job_type": "Full-time"
+                        "job_type": "Full-time",
                     },
                     {
                         "source": "topcv",
@@ -142,11 +144,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                             "skills": ["SQL", "PowerBI", "Python", "Excel", "Data Analysis", "Statistics"],
                             "raw_requirements": "Kinh nghiệm phân tích dữ liệu, thành thạo SQL (Join, Subquery, Window function). Biết sử dụng PowerBI và thư viện Pandas.",
                             "benefits": "Được đào tạo bài bản, môi trường cởi mở, cơ hội thăng tiến lên Data Engineer.",
-                            "tags": ["Data", "SQL", "Analyst"]
+                            "tags": ["Data", "SQL", "Analyst"],
                         },
                         "experience_level": "Junior/Middle",
-                        "job_type": "Full-time"
-                    }
+                        "job_type": "Full-time",
+                    },
                 ]
 
                 llm = get_llm_connector()
