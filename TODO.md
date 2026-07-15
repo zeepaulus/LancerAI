@@ -26,7 +26,7 @@ Files: `app/service/auth/service.py`, `app/core/security.py`, `app/core/provider
 - [x] Hash/verify password bằng bcrypt.
 - [x] JWT create/decode bằng PyJWT.
 - [x] Signup/login/me.
-- [x] Update profile bằng `PATCH /auth/me`.
+- [x] Tên hiển thị được đặt khi đăng ký và không thể chỉnh sửa sau đó.
 - [x] Change password bằng `PUT /auth/password`.
 - [x] Auth dependency `get_current_user`.
 - [x] WebSocket token validation helper.
@@ -167,7 +167,7 @@ Files: `frontend/src/`
 
 ## DX / QA
 
-- [x] `uv run pytest --collect-only -q` collected `171/178` default tests after integration deselect.
+- [x] `uv run pytest --collect-only -q` collected `176/183` tests after integration deselect.
 - [x] Unit/integration-style tests for auth, routes, models, schemas, security, vector, graph, matching, interview, workers.
 - [x] CI workflow exists under `.github/workflows/ci.yml`.
 - [ ] Run full quality gate after docs/code changes:

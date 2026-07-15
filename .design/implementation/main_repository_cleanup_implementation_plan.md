@@ -248,7 +248,7 @@ git commit -m "chore(api): remove unused patch configuration"
 - Consumes: current verified test totals and tracked auth behavior.
 - Produces: ignore rules for local report/tool folders and a TODO that describes immutable display names and current verification state.
 
-- [ ] **Step 1: Add a failing ignore-rule test**
+- [x] **Step 1: Add a failing ignore-rule test**
 
 Append to `tests/test_repository_hygiene.py`:
 
@@ -259,21 +259,21 @@ def test_local_report_directories_are_ignored() -> None:
     assert "bao_cao_UI/" in gitignore
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run: `uv run pytest tests/test_repository_hygiene.py::test_local_report_directories_are_ignored -v`
 
 Expected: FAIL because neither directory has an explicit ignore rule.
 
-- [ ] **Step 3: Update tracked hygiene and TODO files**
+- [x] **Step 3: Update tracked hygiene and TODO files**
 
 Use `apply_patch` to add `.codex_tmp/` and `bao_cao_UI/` to `.gitignore`. Update `TODO.md` so authentication states display names are immutable after signup, removes the obsolete profile PATCH claim, preserves valid open backlog, and uses the fresh test total from final verification.
 
-- [ ] **Step 4: Delete explicitly authorized/generated local artifacts safely**
+- [x] **Step 4: Delete explicitly authorized/generated local artifacts safely**
 
 Resolve the workspace root and each existing target to an absolute path. Before deletion, require every resolved target to start with the workspace root plus a directory separator. Then use `Remove-Item -LiteralPath` only for the exact local paths in this task; do not use `git clean` and do not delete `.env`, `.venv`, `frontend/node_modules`, `models`, `.agent`, or `.agents`.
 
-- [ ] **Step 5: Verify GREEN and commit hygiene files**
+- [x] **Step 5: Verify GREEN and commit hygiene files**
 
 Run:
 

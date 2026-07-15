@@ -57,6 +57,8 @@ logs/
 *.log
 
 # Temporary tool output
+.codex_tmp/
+bao_cao_UI/
 mypy_output.txt
 ruff_errors.json
 requirements-ci.txt

@@ -42,3 +42,9 @@ OBSOLETE_TRACKED_PATHS = (
 def test_obsolete_tracked_artifacts_are_absent() -> None:
     for relative_path in OBSOLETE_TRACKED_PATHS:
         assert not (ROOT / relative_path).exists(), relative_path
+
+
+def test_local_report_directories_are_ignored() -> None:
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert ".codex_tmp/" in gitignore
+    assert "bao_cao_UI/" in gitignore
