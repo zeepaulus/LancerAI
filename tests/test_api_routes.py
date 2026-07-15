@@ -462,6 +462,17 @@ class TestAuthRoutes:
         assert profile.status_code == 200
         assert profile.json()["display_name"] == "Original Name"
 
+    def test_cors_rejects_patch_preflight(self, integration_client: TestClient) -> None:
+        response = integration_client.options(
+            "/api/v1/auth/me",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "PATCH",
+            },
+        )
+
+        assert response.status_code == 400
+
 
 class TestExtractionRoutes:
     def test_upload_wrong_content_type_returns_415(self, client_with_mock_user: TestClient) -> None:

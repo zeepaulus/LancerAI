@@ -2,9 +2,8 @@
 
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -46,19 +45,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 app.add_middleware(SlowAPIMiddleware)
-
-
-@app.exception_handler(NotImplementedError)
-async def _not_implemented_handler(_request: Request, exc: NotImplementedError) -> JSONResponse:
-    detail = str(exc) or "Feature not implemented yet." if _settings.app_debug else "Feature not implemented yet."
-    return JSONResponse(status_code=501, content={"detail": detail})
 
 
 @app.get("/", tags=["system"])

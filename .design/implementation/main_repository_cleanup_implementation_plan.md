@@ -187,7 +187,7 @@ git commit -m "chore: remove obsolete repository artifacts"
 - Consumes: FastAPI CORS middleware and current registered route methods.
 - Produces: CORS rejects PATCH preflight; no unused app-level `NotImplementedError` handler or `JSONResponse` import.
 
-- [ ] **Step 1: Write the failing CORS test**
+- [x] **Step 1: Write the failing CORS test**
 
 Add to the system/auth route tests in `tests/test_api_routes.py`:
 
@@ -204,13 +204,13 @@ def test_cors_rejects_patch_preflight(integration_client: TestClient) -> None:
     assert response.status_code == 400
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run: `uv run pytest tests/test_api_routes.py::TestAuthRoutes::test_cors_rejects_patch_preflight -v`
 
 Expected: FAIL because current CORS configuration permits PATCH and returns 200.
 
-- [ ] **Step 3: Remove dead configuration**
+- [x] **Step 3: Remove dead configuration**
 
 In `app/main.py`:
 
@@ -218,7 +218,7 @@ In `app/main.py`:
 - remove the `JSONResponse` import;
 - delete `_not_implemented_handler` and its decorator.
 
-- [ ] **Step 4: Verify GREEN and run focused backend checks**
+- [x] **Step 4: Verify GREEN and run focused backend checks**
 
 Run:
 
@@ -229,7 +229,7 @@ uv run ruff check app tests
 
 Expected: tests and Ruff pass.
 
-- [ ] **Step 5: Commit backend cleanup**
+- [x] **Step 5: Commit backend cleanup**
 
 ```powershell
 git add -- app/main.py tests/test_api_routes.py
