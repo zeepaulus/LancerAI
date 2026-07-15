@@ -24,3 +24,22 @@ def test_fake_social_authentication_is_absent() -> None:
 
     for name in ("google_logo.png", "microsoft_logo.png", "linkedin_logo.png", "github_logo.png"):
         assert not (ROOT / "frontend/src/assets/Logo" / name).exists()
+
+
+OBSOLETE_TRACKED_PATHS = (
+    "docs/superpowers",
+    "frontend/src/assets/backgrounds/lancerai-grid.svg",
+    "frontend/src/assets/icons/alert-triangle.svg",
+    "frontend/src/assets/icons/badge-check.svg",
+    "frontend/src/assets/icons/lightbulb.svg",
+    "frontend/src/assets/icons/search.svg",
+    "frontend/src/assets/landing_image.png",
+    "frontend/src/assets/lottie/ai-thinking-dots.json",
+    "frontend/src/assets/lottie/recording-pulse.json",
+    "frontend/src/assets/illustrations/vendor/storyset",
+)
+
+
+def test_obsolete_tracked_artifacts_are_absent() -> None:
+    for relative_path in OBSOLETE_TRACKED_PATHS:
+        assert not (ROOT / relative_path).exists(), relative_path

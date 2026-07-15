@@ -18,18 +18,6 @@ All illustration assets below are downloaded SVG files from Storyset, saved loca
 | `candidate-workspace.svg` | Candidate profile/workspace | Storyset Resume, Bro | `https://stories.freepiklabs.com/storage/13477/Resume-bro.svg` | Storyset / Freepik license, attribution required | Existing resume/profile visual for candidate workspace surfaces | Candidate, Profile |
 | `empty-interviews.svg` | Empty interview state | Storyset Interview, Rafiki | `https://stories.freepiklabs.com/storage/6326/314-Interview_Artboard-1.svg` | Storyset / Freepik license, attribution required | Existing interview visual for “no sessions yet” state | Interview empty state |
 
-## Vendor Copies Kept For Reference
-
-These were already downloaded under `frontend/src/assets/illustrations/vendor/storyset/` and remain local reference/fallback assets.
-
-| Asset | Source | License |
-|---|---|---|
-| `vendor/storyset/job-hunt-bro.svg` | Storyset Job hunt | Storyset / Freepik license, attribution required |
-| `vendor/storyset/image-upload-bro.svg` | Storyset Image upload | Storyset / Freepik license, attribution required |
-| `vendor/storyset/artificial-intelligence-bro.svg` | Storyset Artificial intelligence | Storyset / Freepik license, attribution required |
-| `vendor/storyset/data-extraction-bro.svg` | Storyset Data extraction | Storyset / Freepik license, attribution required |
-| `vendor/storyset/chat-bot-pana.svg` | Storyset Chat bot | Storyset / Freepik license, attribution required |
-
 ## Icon And Motion Notes
 
 The user specifically requested checking/replacing the generated SVG files in `illustrations/`. Icons and Lottie files were not changed in this pass.

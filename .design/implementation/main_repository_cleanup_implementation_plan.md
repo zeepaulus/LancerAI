@@ -125,7 +125,7 @@ git commit -m "fix(auth): remove fake social login"
 - Consumes: the retained canonical illustrations imported by `frontend/src/components/Common/Visuals.jsx`.
 - Produces: no tracked Superpowers workflow output, no unreferenced listed asset, and no stale asset manifest row for deleted vendor files.
 
-- [ ] **Step 1: Add a failing obsolete-artifact test**
+- [x] **Step 1: Add a failing obsolete-artifact test**
 
 Append to `tests/test_repository_hygiene.py`:
 
@@ -149,17 +149,17 @@ def test_obsolete_tracked_artifacts_are_absent() -> None:
         assert not (ROOT / relative_path).exists(), relative_path
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [x] **Step 2: Run the test and verify RED**
 
 Run: `uv run pytest tests/test_repository_hygiene.py::test_obsolete_tracked_artifacts_are_absent -v`
 
 Expected: FAIL on `docs/superpowers` or the first unused asset.
 
-- [ ] **Step 3: Delete only the enumerated tracked artifacts**
+- [x] **Step 3: Delete only the enumerated tracked artifacts**
 
 Use `apply_patch` to delete the four Superpowers files and the exact unused asset files from the design. Remove manifest/source rows that describe only deleted vendor assets. Preserve all canonical illustration files imported by `Visuals.jsx`.
 
-- [ ] **Step 4: Verify GREEN and scan references**
+- [x] **Step 4: Verify GREEN and scan references**
 
 Run:
 
@@ -170,7 +170,7 @@ rg -n "lancerai-grid|alert-triangle|badge-check|lightbulb|search\.svg|landing_im
 
 Expected: the test passes; `rg` has no stale reference except explanatory history in the cleanup design/plan, which may name deleted paths intentionally.
 
-- [ ] **Step 5: Commit obsolete artifact removal**
+- [x] **Step 5: Commit obsolete artifact removal**
 
 ```powershell
 git add -- tests/test_repository_hygiene.py docs/superpowers frontend/src/assets .design/assets
