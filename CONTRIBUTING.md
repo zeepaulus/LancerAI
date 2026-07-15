@@ -1,193 +1,182 @@
-# Hướng dẫn đóng góp — LancerAI
+# Hướng Dẫn Đóng Góp - LancerAI
 
-Tài liệu này mô tả quy trình phát triển, quy ước đặt tên branch và commit, nguyên tắc kiến trúc, tiêu chuẩn code, và cách submit thay đổi vào codebase.
+Tài liệu này mô tả cách thiết lập môi trường, quy trình làm việc, tiêu chuẩn code và quality gates khi đóng góp vào LancerAI.
 
----
-
-## Thiết lập môi trường
+## Thiết Lập Môi Trường
 
 ### Yêu cầu
 
-- Python 3.11+, Node.js 18+, [uv](https://docs.astral.sh/uv/), Docker
+- Python 3.11+
+- uv
+- Node.js 22 khuyến nghị
+- Docker và Docker Compose
+- Ollama hoặc API key LLM nếu chạy flow AI thật
 
-### Lần đầu thiết lập
+### Cài đặt lần đầu
 
 ```bash
-git clone https://github.com/<org>/lancerai.git
-cd lancerai
+git clone https://github.com/zeepaulus/LancerAI.git
+cd LancerAI
 
-# Python environment
-uv sync
 cp .env.example .env
-# Điền DATABASE_URL, AUTH_SECRET_KEY, cấu hình LLM vào .env
+cp frontend/.env.example frontend/.env
 
 docker compose up -d
 
-# Migration
+uv sync
 uv run alembic upgrade head
-
-# Khởi động backend
 uv run uvicorn app.main:app --reload --port 8000
-
-# Khởi động frontend (terminal khác)
-cd frontend && npm install && npm run dev
 ```
 
----
+Terminal frontend:
 
-## Quy trình làm việc
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-### Đặt tên branch
+Backend: http://localhost:8000
+
+Frontend: http://localhost:3000
+
+## Quy Trình Làm Việc
+
+### Branch
 
 | Mục đích | Pattern | Ví dụ |
 |---|---|---|
-| Tính năng mới | `feat/<scope>-<mô-tả-ngắn>` | `feat/extraction-paddleocr` |
-| Sửa lỗi | `fix/<scope>-<mô-tả-ngắn>` | `fix/auth-token-expiry` |
-| Tài liệu | `docs/<chủ-đề>` | `docs/interview-pipeline` |
+| Feature | `feat/<scope>-<short-desc>` | `feat/interview-events` |
+| Fix | `fix/<scope>-<short-desc>` | `fix/cv-upload-timeout` |
+| Docs | `docs/<topic>` | `docs/project-readme-refresh` |
 | Refactor | `refactor/<scope>` | `refactor/matching-service` |
-| Hạ tầng | `infra/<chủ-đề>` | `infra/docker-compose-neo4j` |
+| Test | `test/<scope>` | `test/topcv-crawler` |
+| Infra | `infra/<topic>` | `infra/prod-compose-nginx` |
 
-Branch mới được tách từ `dev`. Merge vào `dev`, không merge thẳng vào `main`.
+Nếu team đang dùng branch integration riêng, feature branch nên tách từ branch đó. Nếu project làm trực tiếp trên `main`, hãy giữ PR nhỏ và có test rõ ràng.
 
-- **`main`** — ổn định, chỉ nhận release
-- **`dev`** — integration branch; tất cả feature branch merge vào đây
+### Commit Message
 
-### Commit message
+Dùng Conventional Commits:
 
-Theo [Conventional Commits](https://www.conventionalcommits.org/):
-
-```
-<type>(<scope>): <mô tả ngắn>
-
-[phần thân tùy chọn]
-[footer: BREAKING CHANGE, closes #issue]
+```text
+<type>(<scope>): <short summary>
 ```
 
-Các type được dùng: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`
+Types thường dùng:
+
+- `feat`
+- `fix`
+- `docs`
+- `refactor`
+- `test`
+- `chore`
+- `ci`
+- `infra`
 
 Ví dụ:
-```
-feat(extraction): implement PDF text extraction với PyMuPDF
-fix(auth): trả về 401 thay vì 500 khi thiếu Authorization header
-docs(agents): bổ sung tài liệu LangGraph state schema
-test(matching): thêm unit test cho Hybrid Scoring weights
-```
 
-### Pull Requests
-
-1. Đảm bảo `uv run pytest` pass trên máy local trước khi mở PR.
-2. Giữ PR tập trung — mỗi PR chỉ liên quan đến một module hoặc một vấn đề cụ thể.
-3. Cập nhật `README.md` của module tương ứng nếu thay đổi behavior.
-4. Cập nhật mục tương ứng trong `TODO.md` khi hoàn thành.
-5. PR cần được review trước khi merge (theo quy ước nhóm).
-
----
-
-## Kiến trúc — Mỗi thứ đặt ở đâu
-
-Backend tuân theo kiến trúc phân tầng nghiêm ngặt. Mọi request đi qua các tầng theo thứ tự:
-
-```
-router/ → service/ → repository/ → models/
+```text
+feat(extraction): add unreadable CV validation
+fix(interview): persist transcript on disconnect
+docs(readme): refresh setup and API reference
+test(matching): cover semantic-score fallback
 ```
 
-### Quy tắc từng tầng
+## Kiến Trúc Và Quy Tắc Lớp
 
-| Tầng | Trách nhiệm | Không được phép |
+Backend đi theo luồng:
+
+```text
+router -> service -> repository / connector -> external system
+```
+
+| Layer | Được làm | Không nên làm |
 |---|---|---|
-| `router/` | Validate input, gọi service, trả về HTTP/WebSocket response | Chứa business logic, gọi repository trực tiếp |
-| `service/` | Điều phối logic nghiệp vụ, gọi connector và repository | Gọi SQLAlchemy trực tiếp; biết về chi tiết HTTP |
-| `repository/` | Đọc/ghi dữ liệu; luôn filter theo `user_id` hoặc `tenant_id` | Gọi LLM hoặc thực hiện tính toán nghiệp vụ |
-| `models/` | Định nghĩa ORM schema và relationship | Chứa method vượt ra ngoài schema helper đơn giản |
+| `router/` | Validate request, auth, rate limit, gọi service | Business logic dài, SQL trực tiếp |
+| `service/` | Điều phối nghiệp vụ, gọi repository/connector | Phụ thuộc FastAPI `Depends`, biết chi tiết HTTP |
+| `repository/` | Truy cập DB/vector/graph/cache | Gọi LLM hoặc xử lý nghiệp vụ |
+| `models/` | ORM schema và relationships | Logic nghiệp vụ phức tạp |
+| `schema/` | API contracts | Logic xử lý |
+| `core/` | Settings, providers, security, connectors | Product workflow |
 
-### Dependency injection
+## Thêm Tính Năng Mới
 
-Connector và repository singleton nằm trong `app/core/providers/` (thread-safe lazy init). `app/core/providers/services.py` khai báo `get_*_service`, `get_template_renderer`, và `get_interview_pipeline_factory` với `Depends(...)`. `app/core/providers/auth.py` cung cấp `get_current_user`. Không tạo connector/repo nặng trực tiếp trong router hay trong method service.
+1. Cập nhật schema trong `app/schema/request.py` và `app/schema/response.py` nếu API contract thay đổi.
+2. Thêm hoặc sửa route trong `app/router/v1/`.
+3. Implement logic trong `app/service/<module>/`.
+4. Dùng repository/provider hiện có thay vì tự tạo connection trong route.
+5. Thêm migration nếu model/schema DB thay đổi.
+6. Thêm hoặc cập nhật tests.
+7. Cập nhật README/docs liên quan.
 
-### Thêm tính năng mới
+## Quality Gates
 
-1. Định nghĩa Pydantic schema trong `app/schema/request.py` và `response.py`.
-2. Thêm endpoint vào file `app/router/v1/*.py` tương ứng.
-3. Implement logic trong `app/service/<module>/service.py` (hoặc package tương ứng).
-4. Truy cập DB qua `RelationalRepository` / repository đã có — không SQL thô trong router.
-5. Thêm provider trong `app/core/providers/services.py` nếu cần factory đặc biệt (ví dụ: `get_interview_pipeline_factory`).
-6. Viết test trong `tests/`.
+Backend:
 
----
-
-## Phân công module
-
-| Module | File chính | Phạm vi |
-|---|---|---|
-| Auth | `app/service/auth/service.py`, `app/core/security.py`, `app/core/providers/auth.py` | JWT, password hashing, `get_current_user` |
-| CV Extraction (M1) | `app/service/extraction/service.py`, `app/core/ocr_processor.py` | PyMuPDF, OCR, LLM structured output |
-| CV Optimization (M2) | `app/service/optimization/`, `app/service/optimization/template_renderer.py` | LangGraph agents, template render |
-| Job Matching (M3) | `app/service/matching/service.py`, `app/repository/vector_repository.py` | Hybrid scoring, vector search |
-| Voice Interview (M4) | `app/service/interview/`, `app/core/voice_*_connector.py` | STT, TTS, pipeline WebSocket, STAR |
-| Frontend | `frontend/src/` | React + Vite pages, API integration, WebSocket audio |
-| Hạ tầng | `docker-compose.yml`, `migration/` | Docker, Alembic, CI |
-
----
-
-## Tiêu chuẩn code
-
-### Python
-
-- Formatter và linter: **ruff** — cấu hình trong `pyproject.toml`. Chạy `uv run ruff check .` trước khi commit.
-- Type hints bắt buộc trên tất cả function và method công khai.
-- Docstring: theo Google style, viết bằng tiếng Anh cho các API surface công khai.
-- Async: dùng `async def` nhất quán cho các thao tác I/O-bound. Không gọi blocking code bên trong async function.
-- Connector method mới nên theo pattern stub (raise `NotImplementedError` kèm message mô tả) cho đến khi có implementation đầy đủ.
-
-### JavaScript / React
-
-- Chưa có script `lint` / ESLint trong `frontend/package.json`; khi bổ sung cấu hình thì thêm script và ghi vào README module frontend.
-- Ưu tiên kiểu rõ ràng, tránh `any` ngầm định.
-
-### Testing
-
-Chạy test:
 ```bash
 uv run pytest
-```
-
-Kèm báo cáo coverage:
-```bash
-uv run pytest --cov=app --cov-report=html
-```
-
-- Unit test nằm trong `tests/` và phản ánh cấu trúc của `app/`.
-- Với service hoặc repository mới, viết ít nhất một test cho happy path và một test cho edge case / lỗi.
-- `tests/conftest.py` cung cấp fixture SQLite async; integration test full stack Compose có thể bổ sung sau.
-
----
-
-## Quy tắc bảo mật
-
-- Không commit `.env`, API key, hay secret. Các thông tin nhạy cảm thuộc về `.env` (đã git-ignore) hoặc secrets manager.
-- Không để lộ full stack trace ra client trong production (`APP_DEBUG=false`).
-- Mọi input từ bên ngoài phải đi qua Pydantic schema trước khi đến service code.
-- Đường dẫn model/asset phải được cấu hình qua environment variable, không hardcode trong source.
-- Mọi database query đọc dữ liệu của user phải filter theo `user_id` (và `tenant_id` khi multi-tenancy được bật).
-
----
-
-## Các lệnh thường dùng
-
-```bash
-# Chạy linter
 uv run ruff check app tests
-
-# Chạy type checker
 uv run mypy app tests
+```
 
-# Chạy tests
-uv run pytest
+Frontend:
 
-# Xuất requirements.txt từ uv lock
-uv export --frozen --no-dev --no-hashes --format requirements.txt -o requirements.txt
+```bash
+cd frontend
+npm run build
+```
 
-# Tạo Alembic migration mới
-uv run alembic revision --autogenerate -m "mô tả thay đổi"
+Migration:
+
+```bash
 uv run alembic upgrade head
 ```
+
+Integration tests, khi có hạ tầng cần thiết:
+
+```bash
+uv run pytest -m integration
+```
+
+## Testing Guidelines
+
+Thêm test cho:
+
+- Happy path.
+- Validation/error path.
+- Ownership checks cho resource theo user.
+- Fallback khi LLM/vector/graph/STT/TTS unavailable.
+- Worker result payload và retry behavior.
+- Pydantic schema validation khi thêm field.
+
+Test suite hiện dùng SQLite in-memory cho nhiều unit tests; các test cần Docker services nên đánh dấu `@pytest.mark.integration`.
+
+## Security Guidelines
+
+- Không commit `.env`, API keys hoặc secret.
+- Production không được bật `AUTH_ALLOW_WEAK_SECRET`.
+- Không expose stack trace ra client khi `APP_DEBUG=false`.
+- Mọi endpoint dùng `cv_id`, `session_id`, `job_id` cần ownership check.
+- URL do user cung cấp phải kiểm tra SSRF/private IP nếu backend fetch.
+- Upload file cần size/type validation; ưu tiên thêm magic-byte validation cho flow mới.
+- Không log raw secret, token hoặc password.
+
+## Documentation Guidelines
+
+Khi thay đổi behavior, cập nhật ít nhất một tài liệu tương ứng:
+
+- Root [README.md](README.md) nếu thay đổi setup/API/feature status.
+- `docs/SYSTEM_OVERVIEW.md` nếu thay đổi kiến trúc.
+- `docs/FLOW_STUDY_CASES.md` nếu thay đổi flow hoặc failure mode.
+- `app/*/README.md` nếu thay đổi module internals.
+- `TODO.md` nếu hoàn thành hoặc thêm backlog.
+
+## Pull Request Checklist
+
+- Tests liên quan đã chạy.
+- Lint/type check đã chạy hoặc nêu rõ chưa chạy.
+- Migration được kiểm tra thủ công nếu có.
+- README/docs được cập nhật khi behavior thay đổi.
+- Không có secret hoặc file local-only trong diff.
+- PR tập trung vào một mục tiêu rõ ràng.

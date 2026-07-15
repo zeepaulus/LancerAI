@@ -1,510 +1,323 @@
-# LancerAI Flow and Study Cases
+# LancerAI Flow And Study Cases
 
-Tai lieu nay tong hop cach he thong di qua tung buoc, cac study case nguoi dung co the tao ra, loi/rui ro co the gap, va huong xu ly theo muc do. Noi dung duoc doc tu code hien tai trong `app/`, `frontend/src/`, `tests/`.
+Cập nhật: 2026-07-10.
 
-## 1. Ban Do He Thong
+Tài liệu này tổng hợp các flow người dùng chính, hành vi hiện tại, failure modes và backlog ưu tiên. Nội dung được đối chiếu từ `app/`, `frontend/src/`, `tests/`, Docker và cấu hình môi trường.
 
-### 1.1 Thanh phan chinh
-
-| Tang | Thu muc | Vai tro |
-|---|---|---|
-| Frontend | `frontend/src/pages`, `frontend/src/api` | UI React, goi REST API va WebSocket |
-| Router | `app/router/v1` | Nhan request, validate input, auth, rate limit, goi service |
-| Service | `app/service` | Business logic: CV extraction, optimization, matching, interview |
-| Repository | `app/repository` | Doc/ghi PostgreSQL, vector DB, Neo4j |
-| Connector | `app/core` | LLM, OCR, STT, TTS, settings, auth, rate limit |
-| Models | `app/models` | SQLAlchemy ORM cho PostgreSQL |
-| Schemas | `app/schema` | Pydantic request/response contracts |
-
-### 1.2 Luong request chung
+## 1. Bản Đồ Hệ Thống
 
 ```text
 Browser
-  -> React page / api wrapper
+  -> React page
+  -> frontend/src/api wrapper
   -> FastAPI router
   -> auth dependency + rate limit
   -> service layer
-  -> connector/repository
-  -> database/vector/LLM/STT/TTS
-  -> response JSON/WebSocket event
+  -> repository/connector
+  -> DB/vector/graph/LLM/STT/TTS
 ```
 
-### 1.3 Nguyen tac bao ve hien co
-
-- REST endpoint chinh yeu cau `Authorization: Bearer <JWT>` qua `get_current_user`.
-- WebSocket interview yeu cau token trong JSON message dau tien.
-- Endpoint co `cv_id`/`session_id` deu co ownership check bang `user_id`.
-- Rate limit dung SlowAPI, mac dinh theo `request.client.host`; chi tin `X-Forwarded-For` neu bat `RATE_LIMIT_TRUST_FORWARDED_FOR`.
-- Frontend sanitize mot so technical error message trong `apiJson`.
+| Tầng | Thư mục | Vai trò |
+|---|---|---|
+| Frontend | `frontend/src/pages`, `frontend/src/api` | UI, REST calls, WebSocket room |
+| Router | `app/router/v1` | Validate, auth, rate limit, call service |
+| Service | `app/service` | Business logic |
+| Repository | `app/repository` | PostgreSQL, vector DB, Neo4j, LLM cache |
+| Connector | `app/core` | LLM, OCR, STT, TTS, settings, security |
+| Models | `app/models` | ORM schema |
+| Schemas | `app/schema` | Pydantic contracts |
+| Workers | `app/workers` | Celery crawler/export tasks |
 
 ## 2. Auth Flow
 
-### 2.1 Signup
-
 ```text
-AuthPage
-  -> POST /api/v1/auth/signup
-  -> AuthSignupRequest validate password/display_name
-  -> AuthService.signup()
-  -> normalize email, check duplicate
-  -> hash password
-  -> create User
-  -> response user profile
+Signup/Login
+  -> AuthPage
+  -> POST /api/v1/auth/signup hoặc /login
+  -> AuthService
+  -> User table
+  -> JWT access token
+  -> frontend stores token
 ```
 
-### 2.2 Login
+Study cases:
 
-```text
-AuthPage
-  -> POST /api/v1/auth/login
-  -> AuthService.login()
-  -> find user by email/display_name
-  -> verify bcrypt password
-  -> create JWT access token
-  -> frontend stores token in localStorage
-```
-
-### 2.3 Study cases
-
-| Case | Current behavior | Risk | Xu ly nen co |
+| Case | Current behavior | Risk | Recommended handling |
 |---|---|---|---|
-| Sai password | 401 `Invalid email or password` | Low | UI hien loi dang nhap ro rang |
-| Token het han | 401 | Low | Frontend logout/redirect login |
-| Client gui `tenant_id` khi signup | Server ignore, tenant = user_id | Low | Dung hien tai |
-| Brute force login | Co rate limit default/global, nhung chua thay limit rieng login trong router snippet | Medium | Them limit chat hon cho login, lockout tam thoi theo email/IP |
-| Email format xau | `email` hien la string, chua `EmailStr` | Medium | Them `pydantic[email]`, validate email |
+| Sai mật khẩu | 401 | Low | UI hiển thị lỗi đăng nhập |
+| Token hết hạn/sai | 401 | Low | Frontend logout hoặc redirect login |
+| Signup trùng email | 400/409 theo service behavior | Low | Giữ message user-friendly |
+| Brute force login | Có rate limit route | Medium | Thêm lockout theo email/IP nếu cần |
+| Email format xấu | `email` hiện là `str` | Medium | Thêm `pydantic[email]` và `EmailStr` |
 
-## 3. CV Upload and Extraction Flow
-
-### 3.1 Frontend
-
-File: `frontend/src/pages/CVUploadPage.jsx`
+## 3. CV Upload And Extraction
 
 ```text
-User chon/drag CV
-  -> validate type: PDF/JPG/PNG/WebP
-  -> validate size <= 10 MB
+CVUploadPage
   -> uploadCV(file)
-  -> POST /api/v1/extraction/cvs multipart/form-data
-  -> navigate /cv-optimization voi cvId
+  -> POST /api/v1/extraction/cvs
+  -> validate MIME + size
+  -> PDF: PyMuPDF text layer, OCR fallback for low-density pages
+  -> Image: OCR
+  -> LLM JSON extraction
+  -> CVRecord
+  -> vector embedding best-effort
 ```
 
-### 3.2 Backend
+Study cases:
 
-Files:
+| Case | Current behavior | Severity | Recommended handling |
+|---|---|---:|---|
+| PDF có text layer | Extract text, LLM parse, save | Normal | Cho user review/edit extracted data |
+| PDF scan | Render page to PNG, OCR if available | Normal | Có progress/async job cho file lớn |
+| Ảnh CV | OCR then LLM | Normal | Gợi ý ảnh rõ, đủ sáng |
+| File > 10 MB | FE/BE chặn | Low | Giữ hiện tại |
+| MIME không hỗ trợ | 415 | Low | Đồng bộ FE/BE accepted types |
+| Spoof MIME | BE chưa magic-byte check | High | Add file signature validation |
+| PDF encrypted/corrupt | Có thể thành 500 generic | Medium | Catch và trả 422 rõ nghĩa |
+| Raw text quá ít | Có thể vẫn tạo record rỗng | Medium | Reject unreadable CV hoặc mark partial |
+| LLM JSON invalid | Fallback empty schema | Medium | Retry + partial status, tránh silent success |
+| Vector DB down | Log warning, extraction vẫn thành công | Low | Hiển thị semantic search degraded |
 
-- `app/router/v1/extraction_api.py`
-- `app/service/extraction/service.py`
+## 4. CV Review And Update
 
 ```text
-POST /api/v1/extraction/cvs
-  -> auth user
-  -> rate limit 10/minute
-  -> check file.content_type in application/pdf, image/png, image/jpeg, image/webp
-  -> read full bytes
-  -> check <= 10 MB
-  -> PDF: PyMuPDF extract text
-      -> if page text density < 5 chars, render page to PNG and OCR
-  -> Image: OCRProcessor.extract_text_grouped
-  -> _build_extraction_prompt(raw_text[:8000])
-  -> LLM generate JSON with _CV_EXTRACTION_SYSTEM
-  -> parse into CVExtractionResponse
-  -> retry with simpler prompt if missing name
-  -> persist CVRecord with raw_text + structured data
-  -> best-effort embedding store in vector DB
-  -> return CVExtractionResponse
+CVExtractionResultPage / CVReviewPage
+  -> GET /api/v1/extraction/cv/{cv_id}
+  -> user chỉnh structured fields
+  -> PUT /api/v1/extraction/cvs/{cv_id}
+  -> reset optimized_data/audit_score/status
+  -> update embedding best-effort
 ```
 
-### 3.3 Study cases: file upload
+Study cases:
 
-| Case | Current behavior | Severity | Possible bug/risk | Xu ly |
-|---|---|---:|---|---|
-| Upload PDF hop le co text layer | Extract text, LLM parse, save DB | Normal | LLM co the parse sai/missing field | Validate warnings, cho user review/edit CV data sau extraction |
-| Upload scanned PDF | Render low-density pages, OCR | Normal | OCR cham, co the loi voi PDF nhieu page | Gioi han page count/time, async job cho file lon |
-| Upload image CV | OCR image, LLM parse | Normal | OCR chat luong thap neu anh mo | UI goi y upload PDF/anh ro, hien raw text preview |
-| File > 10 MB | FE chan; BE tra 413 | Low | Neu bypass FE van bi BE chan | Dung hien tai |
-| File type khong ho tro | FE chan; BE tra 415 | Low | `image/jpg` FE cho nhung BE chi cho `image/jpeg`; browser thuong gui jpeg, nhung van co lech | Them `image/jpg` vao BE hoac FE bo `image/jpg` |
-| Doi extension `.pdf` nhung content la exe | BE chi check `content_type` multipart | High | MIME spoof, PyMuPDF/OCR co the crash/DoS | Magic-byte sniffing, verify PDF header/image decoder, reject mismatch |
-| PDF rat nhieu page nhung <10 MB | BE doc/render sync trong thread | Medium | CPU/memory spike, request timeout | Limit page count, background job, per-page OCR timeout |
-| PDF encrypted/password | PyMuPDF co the fail -> 500 generic | Medium | User khong biet ly do | Catch encrypted PDF, tra 422 "PDF bi khoa mat khau" |
-| CV rong/anh khong doc duoc | LLM nhan raw_text rong, co the tao empty schema | Medium | User tuong upload thanh cong nhung data trong | Neu raw_text < threshold, tra 422 yeu cau file ro hon |
-| LLM JSON invalid | `_parse_extraction_response` fallback empty schema | Medium | Silent failure, van tao CV record rong | Neu parse fail + raw_text co noi dung, nen retry; neu van fail tra 502/partial status |
-| Vector DB down | Log warning, extraction van thanh cong | Low | Recommendations sau do co the rong | UI/ops canh bao "semantic search unavailable"; retry background |
+| Case | Current behavior | Severity | Recommended handling |
+|---|---|---:|---|
+| User sửa dữ liệu trước optimize | Supported | Normal | Nên khuyến khích review trước matching/interview |
+| User sửa CV đã optimized | Optimized data reset | Normal | UI cảnh báo cần chạy optimize lại |
+| Embedding update fail | Non-fatal | Low | Retry background nếu cần |
 
-## 4. CV Optimization Flow
-
-### 4.1 Entry point
-
-Files:
-
-- `app/router/v1/optimization_api.py`
-- `app/service/optimization/service.py`
-- `app/service/optimization/graph.py`
-- `app/service/optimization/*_agent.py`
+## 5. CV Optimization
 
 ```text
 POST /api/v1/optimization/cvs/{cv_id}/optimizations
-  -> auth user
-  -> ownership check via ExtractionService.get_cv
-  -> OptimizationService.analyze_cv
-  -> load extracted_data
-  -> build LangGraph initial state
-  -> retrieval_agent: role benchmarks
-  -> roast_agent: evidence-first CV issues
-  -> rewrite_agent: rewrite high/critical issues only
-  -> audit_agent: approve/reject rewrites
-  -> build deterministic CV scorecard
-  -> persist optimized_data, audit_score, status=optimized
-  -> return CVOptimizationResponse
+  -> ownership check
+  -> LangGraph initial state
+  -> retrieval_agent
+  -> roast_agent
+  -> rewrite_agent
+  -> audit_agent
+  -> build_cv_scorecard
+  -> persist optimized_data + audit_score
 ```
 
-### 4.2 Prompt guardrails hien co
+Study cases:
 
-- `roast_agent` bo qua low-impact issue, GPA/thang diem/noise.
-- `rewrite_agent` chi rewrite critical/high, khong invent number, bo rewrite low-value.
-- `audit_agent` chan rewrite them metric/scope/role khong co trong CV goc.
+| Case | Current behavior | Severity | Recommended handling |
+|---|---|---:|---|
+| CV đủ dữ liệu | Scorecard + issues/rewrite | Normal | UI phân biệt issue high/critical |
+| CV thiếu thông tin | Agents có guardrails/fallback | Medium | Thêm inquiry loop để hỏi user |
+| LLM down | Pipeline có thể 500 | High | Fallback deterministic scorecard |
+| Rewrite bịa số liệu | Audit/guardrail chặn claim số mới | Medium | Mở rộng audit cho scope/role/tech |
+| `mode` lạ | Schema vẫn là `str` | Medium | Đổi thành `Literal["standard","roast"]` |
+| Update DB bị ngắt giữa chừng | Có nhiều commit | Medium | Gom transaction hoặc recovery logic |
 
-### 4.3 Study cases: CV optimization
-
-| Case | Current behavior | Severity | Possible bug/risk | Xu ly |
-|---|---|---:|---|---|
-| CV co data tot | It issue, scorecard deterministic | Normal | LLM co the van tao issue lan man | Backend filter da co; tiep tuc test prompt guardrails |
-| CV thieu kinh nghiem/du an | Issue co `needs_clarification` | Normal | Chua co UI inquiry loop day du | UI nen hoi them thong tin truoc rewrite |
-| LLM down | Router tra 500 pipeline failed | Medium | User mat context | Fallback deterministic scorecard + "AI suggestions unavailable" |
-| LLM tao rewrite bia so lieu | `_has_new_numeric_claim` va audit filter | Medium | Van co claim dinh tinh thoi phong | Mo rong audit cho role/scope/tech stack |
-| User dung `cv_id` cua nguoi khac | 404 access denied | Low | Dung hien tai |
-| `mode` bat ky string | Schema hien `mode: str`, service pass through | Medium | Prompt/graph co the xu ly mode la | Doi schema thanh Literal hoac validate allowed values |
-| Optimized data update thanh cong nhung audit_score update loi | Co 2 commit rieng | Medium | CV co optimized_data nhung status/audit_score chua update | Gom transaction hoac rollback/compensating update |
-
-## 5. Template Render / PDF Flow
+## 6. Template Render And Document Export
 
 ```text
 POST /api/v1/optimization/cvs/{cv_id}/render
-  -> ownership check
   -> source = optimized_data or extracted_data
-  -> CVTemplateRenderer.render_cv(source, template)
-  -> return RenderedCVResponse
+  -> CVTemplateRenderer.render_cv
+  -> RenderedCVResponse
 
 GET /api/v1/optimization/cvs/{cv_id}/pdf
-  -> ownership check
-  -> render_pdf
-  -> stream PDF or JSON fallback bytes
+  -> CVTemplateRenderer.render_pdf
+  -> StreamingResponse
 ```
 
-### Study cases
+Worker:
 
-| Case | Current behavior | Severity | Xu ly |
+```text
+generate_document(cv_data, template, output_format)
+  -> PDF via CVTemplateRenderer/WeasyPrint
+  -> DOCX via python-docx
+  -> base64 output
+```
+
+Study cases:
+
+| Case | Current behavior | Severity | Recommended handling |
 |---|---|---:|---|
-| Template name invalid | 422 | Low | UI dropdown only known templates |
-| PDF renderer missing/fails | 500 | Medium | Return 501/422 with actionable message; fallback JSON download |
-| User tries other user's CV | 404 | Low | Dung hien tai |
+| Template invalid | 422 | Low | UI dropdown từ template whitelist |
+| PDF renderer không tạo PDF thật | API dùng media type JSON fallback | Medium | UI label fallback, expose download JSON |
+| Export lớn | Worker tránh block API | Low | Lưu artifact vào object storage |
 
-## 6. Job Matching Flow
-
-### 6.1 Manual JD match
-
-Files:
-
-- `app/router/v1/job_matching_api.py`
-- `app/service/matching/service.py`
+## 7. Job Matching And Recommendations
 
 ```text
 POST /api/v1/jobs/matches
-  -> auth user
-  -> body requires cv_id + (jd_text or jd_url)
-  -> ownership check CV
-  -> if jd_url and no jd_text: _fetch_jd_from_url
-  -> tokenize JD/CV
-  -> frequency score
-  -> position score
-  -> semantic score via embeddings
-  -> if embedding unavailable, exclude semantic and renormalize deterministic scores
-  -> LLM feedback missing_skills/improvement_feedback
-  -> Neo4j related skill adjustment if available
+  -> body: cv_id + jd_text hoặc jd_url
+  -> ownership check
+  -> safe JD fetch if URL
+  -> frequency + position + semantic score
+  -> LLM missing skills feedback
+  -> Neo4j related-skill adjustment best-effort
   -> save JobMatchResult
-  -> return JobMatchResponse
 ```
 
-### 6.2 JD URL fetch security
+Study cases:
 
-`_fetch_jd_from_url` calls `_is_public_http_url` before fetching:
+| Case | Current behavior | Severity | Recommended handling |
+|---|---|---:|---|
+| JD text trực tiếp | Supported | Normal | Giữ text preview |
+| JD URL public | Fetch qua Jina/direct fallback | Normal | Show crawl failure clearly |
+| URL private/localhost | Rejected by safety check | High mitigated | Consider allowlist/pinned IP transport |
+| Embedding unavailable | Semantic excluded, score renormalized | Low | UI label "semantic unavailable" |
+| LLM feedback fail | Deterministic gap fallback | Low | Mark feedback source |
+| Fresh DB no jobs | Recommendations empty | Medium | Provide crawler/seed job runbook |
 
-- only `http`/`https`
-- reject localhost
-- reject private/loopback/link-local/multicast/reserved/unspecified IP
-- resolve hostname and require all resolved IPs public
-- Jina Reader first, direct fetch fallback
+## 8. Job Crawler
 
-### 6.3 Study cases: matching
+```text
+Celery crawl_job_listings(source="topcv", max_pages=5)
+  -> approved TopCV URL builder
+  -> static HTML fetch
+  -> Playwright fallback when needed
+  -> detail parser
+  -> upsert JobListing by source_url
+  -> embedding best-effort
+```
 
-| Case | Current behavior | Severity | Possible bug/risk | Xu ly |
-|---|---|---:|---|---|
-| `jd_text` empty and no URL | Pydantic validator 422 | Low | Dung hien tai | UI require JD source |
-| URL private/internal | `_is_public_http_url` rejects, fetch returns "" -> 422 empty JD | High mitigated | DNS rebinding still possible between resolve and request | Pin resolved IP/custom transport or prefer server-side allowlist |
-| URL huge page | Text truncated 12000/8000 | Medium | Bandwidth/time cost | Limit content length, timeout already co 10/20s |
-| Embedding unavailable | Semantic excluded, score deterministic | Low | Score less accurate | UI label "semantic unavailable" |
-| LLM feedback fails | Deterministic skill gaps fallback | Low | Feedback generic | Good fallback, add logging/monitoring |
-| Job listings query with `%` broad | Limit max 100 | Low | Expensive ilike on large table | Add indexes/full-text search later |
+Study cases:
 
-## 7. Interview Session Flow
+| Case | Current behavior | Severity | Recommended handling |
+|---|---|---:|---|
+| TopCV blocks request | Task stops safely/status returned | Medium | Backoff schedule and ops alert |
+| Parser sees duplicate URL | Upsert/update | Low | Good current behavior |
+| Non-IT listing | Filtered by IT keywords/skills | Low | Periodic sampling QA |
+| Embedding fail | Job still saved | Low | Retry embedding job |
 
-### 7.1 Create interview session
+## 9. Interview Session And Voice
 
-Files:
-
-- `app/router/v1/interview_api.py`
-- `app/service/interview/service.py`
-- `app/service/interview/planning.py`
+REST:
 
 ```text
 POST /api/v1/interview/sessions
-  -> auth user
-  -> validate InterviewSessionRequest
-  -> ownership check CV
-  -> choose cv.optimized_data else extracted_data
-  -> build JD data from jd_text/jd_url/job_listing_id
-  -> infer/normalize IT job title
-  -> build_interview_plan(cv, jd, mode, focus_area, duration)
-  -> create InterviewSession row
-  -> store setup/interview_plan in star_scores JSON
-  -> return session_id + meeting_url + plan
+  -> CV ownership check
+  -> optional JD text/URL/job_listing_id
+  -> interview plan
+  -> InterviewSession row
 ```
 
-### 7.2 WebSocket protocol
-
-Endpoint: `WS /api/v1/interview/ws`
+WebSocket:
 
 ```text
-Client opens WS
-  -> server accepts
-  -> first message must be JSON:
-     {"token": "...", "session_id": "...", "duration_minutes": 5}
-  -> validate JWT
-  -> load session by session_id + user_id
-  -> load CV ownership
-  -> create InterviewPipeline
-  -> pipeline.start(...)
-  -> server sends JSON events:
-     session_started, phase_change, transcript, assistant_text, session_ended, error
-  -> client sends binary PCM Int16 mono 16kHz
-  -> client may send JSON actions:
-     stop, behavior_event, text_answer
+WS /api/v1/interview/ws
+  -> first JSON token/session_id
+  -> server validates JWT + ownership
+  -> pipeline start
+  -> binary PCM from browser
+  -> VAD -> STT -> LLM -> TTS
+  -> JSON events + audio bytes to client
+  -> stop persists final evaluation
 ```
 
-### 7.3 Live interview pipeline
+Study cases:
 
-File: `app/service/interview/pipeline.py`
+| Case | Current behavior | Severity | Recommended handling |
+|---|---|---:|---|
+| Missing token/session_id | Close 1008 | Low | UI map to auth/session message |
+| Other user's session | Close 1008 | Low | Good current behavior |
+| Mic permission denied | Frontend should handle media error | Low | Clear browser permission copy |
+| User speaks too quietly | STT may return empty | Medium | Send `no_speech_detected` event |
+| Long speech no silence | Buffer can grow | Medium | Add max utterance seconds |
+| STT/TTS model missing | Voice flow fails | High | Preflight/warm-up |
+| LLM latency high | Delayed response | Medium | Show "thinking", stream text |
+| Disconnect mid-session | Finally block attempts stop/persist | Medium | Incremental transcript persistence |
+| Behavior event spam | Client throttles only | Medium | Server-side throttle |
 
-```text
-start
-  -> build system prompt from CV/JD/plan
-  -> if new session: phase SPEAKING, generate greeting question
-  -> if resume: phase LISTENING
-
-feed_audio
-  -> only accept during LISTENING
-  -> buffer PCM
-  -> VAD checks 512-sample windows
-  -> silence threshold crossed
-  -> _process_user_turn
-
-_process_user_turn
-  -> phase PROCESSING
-  -> STT transcribe buffered utterance
-  -> if empty: phase LISTENING
-  -> send transcript event
-  -> evaluate latest answer with LLM
-  -> decide follow_up/ask/wrap_up
-  -> phase SPEAKING
-  -> generate LLM interviewer response stream
-  -> split sentences
-  -> TTS each sentence and send PCM bytes
-  -> append assistant_text
-  -> phase LISTENING or stop
-
-stop
-  -> final evaluation + scorecard
-  -> persist_session writes scores/transcripts
-```
-
-### 7.4 Audio connectors
-
-STT:
-
-- `VoiceSTTConnector`
-- faster-whisper lazy-loaded
-- `STT_MODEL_PATH` can point to local model
-- skip very short/low-RMS audio
-- language fixed `vi`
-
-TTS:
-
-- `VoiceTTSConnector`
-- engine `vieneu` can load local GGUF + codec ONNX
-- current local VieNeu path: `models/tts/vieneu-turbo/vieneu-tts-v2-turbo.gguf`
-- local VieNeu no longer falls back to Edge TTS when GGUF fails
-
-### 7.5 Study cases: interview
-
-| Case | Current behavior | Severity | Possible bug/risk | Xu ly |
-|---|---|---:|---|---|
-| WS first message missing token/session_id | Close 1008 | Low | UI may show generic disconnect | Map 1008 to auth/session message |
-| User opens WS for another user's session | Close 1008 | Low | Dung hien tai |
-| Mic permission denied | Frontend shows media error, closes socket | Low | Dung hien tai |
-| Browser sends audio while AI speaking | Pipeline drops audio unless LISTENING | Normal | User starts too early, answer lost | UI disable/indicate "wait until AI finishes"; optional barge-in support later |
-| User speaks too quietly/too short | STT skips low energy/short audio, returns listening | Medium | User thinks ignored | Send event `no_speech_detected` to UI |
-| VAD never detects silence | Buffer grows during long speech | Medium | Memory growth/delay | Add max utterance seconds and force flush |
-| STT local model missing | Runtime error during transcribe | High | Interview unusable | Startup health check/warm-up, UI preflight |
-| LLM latency high | Processing long after transcript | Medium | Poor UX | Disable realtime evaluate_node, smaller model, streaming partial event |
-| TTS local VieNeu timeout | Pipeline logs TTS sentence failed, no audio for sentence | Medium | Text may appear later, audio missing | Send `tts_error`, fallback to text-only, warm-up VieNeu |
-| Client disconnects mid-session | finally calls pipeline.stop and persist final evaluation | Medium | If stop evaluation fails, session incomplete | Persist partial transcript incrementally |
-| Reconnect existing session | Existing transcript loaded, phase LISTENING | Medium | Duplicate transcripts possible after multiple stops | Check existing turn hash/turn_number before insert |
-| Behavior event spam | Client throttles; backend records events | Low/Medium | Malicious client can spam JSON events | Server-side throttle per event kind/session |
-| User sends `text_answer` while speaking | `feed_text` only accepts LISTENING/PROCESSING | Low | Text ignored if phase SPEAKING | UI disable input until LISTENING |
-
-## 8. Interview Report Flow
+## 10. Interview Report
 
 ```text
 GET /api/v1/interview/sessions/{session_id}/report
-  -> auth user
-  -> verify session.user_id
-  -> InterviewService.get_report
-  -> parse stored star_scores JSON
-  -> attach transcript turns
-  -> return InterviewReportResponse
+  -> verify user owns session
+  -> read star_scores JSON
+  -> read transcript rows
+  -> InterviewReportResponse
 ```
 
-Report is built from:
+Study cases:
 
-- per-answer `star_scores`
-- final `scorecard`
-- behavior score/observations
-- persisted transcript
-- setup title/focus/interview plan
-
-### Study cases
-
-| Case | Current behavior | Severity | Xu ly |
+| Case | Current behavior | Severity | Recommended handling |
 |---|---|---:|---|
-| Report before interview completed | May return incomplete report/list status incomplete | Low | UI label incomplete |
-| Session not owned by user | 404 | Low | Dung hien tai |
-| Scorecard LLM fails during stop | fallback_scorecard | Medium | Report less detailed; mark generated_by=fallback |
-| Persist final evaluation fails | Logged in WS finally | High | Session may remain incomplete | Retry job/background persistence, incremental transcript save |
+| Report before completion | Status can be incomplete | Low | UI label incomplete |
+| Scorecard fallback | Report still possible | Medium | Mark `generated_by=fallback` |
+| Persist final eval fails | Session may remain incomplete | High | Retry job or incremental save |
 
-## 9. Frontend Error Handling
+## 11. Cross-Cutting Failure Modes
 
-### 9.1 REST API wrapper
-
-`frontend/src/api/http.js`:
-
-- attaches Bearer token by default
-- JSON timeout default 120s
-- sanitizes technical messages containing `sqlalchemy`, `traceback`, `websocket`, etc.
-
-### 9.2 Upload-specific wrapper
-
-`frontend/src/api/extraction.js` uses raw `fetch` without timeout. Large/slow upload can hang until browser/network decides.
-
-Recommendation:
-
-- add `AbortController` timeout to `uploadCV`
-- share `detailToMessage`
-- show retry action
-
-## 10. Cross-Cutting Failure Modes
-
-| Failure | Current behavior | Impact | Recommended handling |
+| Failure | Impact | Current behavior | Recommended handling |
 |---|---|---|---|
-| Database down | `/ready` 503; endpoints fail 500 | App unusable | Health checks, clear maintenance UI |
-| Redis down | Celery/background affected | Background jobs unavailable | Mark async features degraded |
-| Vector DB down | Extraction/matching log fallback | Recommendations may be empty | Non-blocking alert, retry embedding store |
-| Neo4j down | Matching graph adjustment skipped | Skill relation weaker | Non-blocking |
-| Ollama/API LLM down | Extraction/optimization/interview may fail | Core AI flows fail | Per-module fallback + user-facing degraded status |
-| Local STT/TTS model missing | Interview audio fails | Voice interview unusable | Startup preflight and model path validation |
-| CORS misconfig | Browser cannot call API | Full frontend break | Production startup warning exists; enforce deploy checklist |
-| Rate limit false IP behind proxy | Limits all users as proxy or can be spoofed if XFF trusted wrongly | Availability/security | Configure trusted proxy correctly |
+| Database down | App unusable | `/ready` returns 503 | Health UI and ops alert |
+| Redis down | Workers unavailable | API mostly still runs | Mark async features degraded |
+| Vector DB down | Semantic/recommendation weaker | Best-effort warnings | Retry embeddings |
+| Neo4j down | Related skill adjustment skipped | Best-effort warnings | Optional graph health |
+| LLM down | AI flows fail or fallback | Depends on module | Degraded state and fallback scorecards |
+| STT/TTS missing | Voice interview fails | Runtime errors/warnings | Preflight check |
+| CORS misconfig | Browser cannot call API | Production warning if empty | Deployment checklist |
+| Weak JWT secret | Security risk | Production validation blocks weak secret | Keep validation |
 
-## 11. Priority Backlog By Severity
+## 12. Priority Backlog
 
-### P0/P1 - Should fix before production-like demo
+### P0
 
-1. Magic-byte/file signature validation for CV upload.
-2. Raw text threshold: reject unreadable CV instead of saving empty extraction silently.
-3. Interview partial persistence: save transcript turns incrementally, not only at WS close.
-4. Startup/preflight health for STT/TTS model paths and local assets.
-5. Server-side throttling for WebSocket behavior events and max audio buffer duration.
+1. Magic-byte validation for upload.
+2. Reject/mark unreadable CV extraction.
+3. STT/TTS/LLM/vector/OCR preflight endpoint.
+4. Interview incremental transcript persistence.
+5. Max utterance seconds and server-side behavior-event throttle.
 
-### P2 - Important UX/reliability
+### P1
 
-1. Add timeout to `uploadCV`.
-2. Send explicit interview events: `no_speech_detected`, `stt_started`, `llm_thinking`, `tts_started`, `tts_error`.
-3. Mark report scorecard as `llm` or `fallback`.
-4. Validate `OptimizationRequest.mode` as Literal.
-5. Improve user-facing errors for encrypted/corrupt PDFs.
+1. Upload timeout/retry in frontend.
+2. Interview state events for no-speech/STT/LLM/TTS.
+3. Mark AI outputs as `llm`, `fallback`, or `cached`.
+4. Validate optimization mode with `Literal`.
+5. Clear PDF/OCR user-facing errors.
 
-### P3 - Nice to have / later
+### P2
 
-1. Background queue for heavy CV OCR/LLM extraction.
-2. Full-text search indexes for job listings.
-3. Admin observability dashboard for LLM/STT/TTS latency.
-4. User-editable extracted CV before optimization/matching/interview.
+1. Background extraction job for large OCR/LLM workloads.
+2. Full-text search/indexes for job listings.
+3. Admin observability for AI latency and fallback rates.
+4. Skill graph seed and management scripts.
+5. Rich match/report history dashboards.
 
-## 12. Suggested Test Matrix
+## 13. Suggested Test Matrix
 
-### Auth
+| Area | Tests |
+|---|---|
+| Auth | duplicate signup, wrong password, invalid/expired token, profile update, password change |
+| CV upload | valid PDF, valid image, >10 MB, unsupported MIME, spoof MIME, corrupt/encrypted PDF, unreadable scan |
+| Extraction | LLM invalid JSON, missing name retry, vector DB down |
+| Optimization | strong CV, vague CV, invented metric guardrail, LLM unavailable |
+| Matching | JD text, JD URL, private URL, embedding down, LLM feedback down |
+| Jobs | TopCV URL builder, parser, duplicate upsert, empty crawl |
+| Interview | WS auth failure, ownership denial, low-volume audio, long speech, TTS/STT missing, disconnect |
+| Frontend | auth guard, upload retry, error sanitizer, route navigation, report incomplete state |
 
-- Signup duplicate email.
-- Login wrong password.
-- Expired/invalid JWT.
-- Access other user's CV/session.
-
-### CV upload
-
-- Valid PDF text-layer.
-- Valid scanned PDF.
-- Valid PNG/JPEG/WebP.
-- File > 10 MB.
-- Unsupported MIME.
-- Spoofed MIME vs real bytes.
-- Encrypted/corrupt PDF.
-- Empty image/unreadable scan.
-
-### Optimization
-
-- CV with strong evidence: no noisy low-value issues.
-- CV with vague project bullets: high-value issues + rewrites.
-- GPA-only education case: no rewrite like "da hoc tap... GPA 8.0".
-- LLM invalid JSON: fallback behavior.
-
-### Matching
-
-- JD text only.
-- JD URL public.
-- JD URL localhost/private IP.
-- Embedding unavailable.
-- LLM feedback unavailable.
-
-### Interview
-
-- WS auth missing/invalid.
-- Session ownership denied.
-- Mic permission denied.
-- Low-volume audio.
-- Long speech without silence.
-- TTS local model missing.
-- Client disconnect before stop.
-- Reconnect existing session.
-
-## 13. Quick Reference: Main Files
+## 14. Quick File Reference
 
 | Area | Main files |
 |---|---|
 | Auth | `app/router/v1/auth_api.py`, `app/service/auth/service.py`, `app/core/providers/auth.py` |
-| CV upload/extraction | `app/router/v1/extraction_api.py`, `app/service/extraction/service.py`, `frontend/src/pages/CVUploadPage.jsx` |
-| CV optimization | `app/router/v1/optimization_api.py`, `app/service/optimization/*` |
-| Job matching | `app/router/v1/job_matching_api.py`, `app/service/matching/service.py` |
-| Interview REST/WS | `app/router/v1/interview_api.py`, `app/service/interview/pipeline.py`, `app/service/interview/service.py` |
+| CV extraction | `app/router/v1/extraction_api.py`, `app/service/extraction/service.py`, `frontend/src/pages/CVUploadPage.jsx` |
+| CV optimization | `app/router/v1/optimization_api.py`, `app/service/optimization/*`, `app/service/cv_analysis/scorecard.py` |
+| Matching | `app/router/v1/job_matching_api.py`, `app/service/matching/service.py` |
+| Jobs/crawler | `app/workers/crawler_worker.py`, `app/models/job_listing.py` |
+| Interview | `app/router/v1/interview_api.py`, `app/service/interview/pipeline.py`, `app/service/interview/service.py` |
 | STT/TTS | `app/core/voice_stt_connector.py`, `app/core/voice_tts_connector.py` |
-| LLM routing | `app/core/llm_connector.py`, `app/core/providers/connectors.py`, `.env` |
+| LLM/cache | `app/core/llm_connector.py`, `app/models/llm_cache.py`, `app/repository/llm_cache_repository.py` |
 | Frontend API | `frontend/src/api/*.js` |
-
+| Tests | `tests/*.py` |

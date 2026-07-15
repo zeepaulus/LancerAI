@@ -102,11 +102,11 @@ def extract_json_str(text: str) -> str:
     if first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket):
         last_brace = text.rfind("}")
         if last_brace != -1:
-            return text[first_brace:last_brace + 1]
+            return text[first_brace : last_brace + 1]
     elif first_bracket != -1:
         last_bracket = text.rfind("]")
         if last_bracket != -1:
-            return text[first_bracket:last_bracket + 1]
+            return text[first_bracket : last_bracket + 1]
 
     return text
 

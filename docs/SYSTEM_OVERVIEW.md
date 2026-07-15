@@ -1,463 +1,321 @@
-# LancerAI — System Overview
+# LancerAI System Overview
 
-Tài liệu mô tả kiến trúc tổng thể của hệ thống, cách frontend và backend giao tiếp, và luồng xử lý của từng chức năng chính.
+Tài liệu này mô tả kiến trúc tổng thể của LancerAI, cách frontend và backend giao tiếp, các lớp trong backend, các service bên ngoài và luồng dữ liệu chính.
 
----
+Cập nhật: 2026-07-10.
 
-## Tổng quan
+## 1. Tổng Quan
 
-LancerAI gồm hai thành phần chạy độc lập:
+LancerAI là hệ thống hỗ trợ ứng viên chuẩn bị ứng tuyển, gồm:
 
-- **Backend** (`app/`): API server Python / FastAPI — xử lý toàn bộ business logic: đọc CV, phân tích AI, phỏng vấn giọng nói.
-- **Frontend** (`frontend/`): SPA viết bằng React + Vite — giao diện người dùng trên trình duyệt.
+- `frontend/`: React + Vite SPA, chạy UI cho candidate.
+- `app/`: FastAPI backend, xử lý API, WebSocket, business logic, database và connector AI.
+- `migration/`: Alembic migration cho PostgreSQL.
+- `workers/`: Celery tasks cho crawler job và export document.
+- `docs/`, `app/*/README.md`: tài liệu kiến trúc và vận hành.
 
-Frontend và backend giao tiếp qua REST API và WebSocket.
+Sơ đồ tổng quát:
 
-```
-Trình duyệt (user)
-    |
-    | HTTP request / WebSocket
-    v
-Frontend — React + Vite (port 3000)
-    |
-    | fetch() / WebSocket
-    v
-Backend — FastAPI (port 8000)
-    |
-    |-- PostgreSQL  (lưu trữ user, CV, phiên phỏng vấn)
-    |-- Redis       (hàng đợi tác vụ nền)
-    |-- ChromaDB    (tìm kiếm ngữ nghĩa / vector)
-    |-- Neo4j       (đồ thị kỹ năng)
-    |-- Ollama      (LLM local)
+```text
+Browser
+  -> React SPA
+  -> REST API / WebSocket
+  -> FastAPI app
+  -> Router layer
+  -> Service layer
+  -> Repository / Connector layer
+  -> PostgreSQL / Redis / Vector DB / Neo4j / LLM / STT / TTS
 ```
 
----
+## 2. Runtime Components
 
-## Cấu trúc thư mục gốc
-
-```
-lancerai/
-├── app/               Backend FastAPI — toàn bộ business logic
-├── frontend/          Frontend React + Vite — giao diện người dùng
-├── docs/              Tài liệu kiến trúc (file này nằm ở đây)
-├── migration/         Alembic — quản lý thay đổi schema database
-├── tests/             Test tự động (pytest)
-├── infra/             Cấu hình infrastructure (Docker, cloud)
-├── docker-compose.yml Khởi động PostgreSQL, Redis, ChromaDB, Neo4j
-├── pyproject.toml     Khai báo dependencies Python
-├── .env.example       Mẫu biến môi trường
-└── uv.lock            Lock file dependencies (uv package manager)
-```
-
----
-
-## Backend — Cách tổ chức code
-
-Backend được chia theo 4 tầng rõ ràng, mỗi tầng có một nhiệm vụ duy nhất. Khi một request đến từ frontend, nó đi qua từng tầng theo thứ tự sau:
-
-```
-Request từ frontend
-    |
-    v
-[1] router/          Tiếp nhận request, kiểm tra định dạng đầu vào
-    |
-    v
-[2] service/         Xử lý logic nghiệp vụ (gọi AI, phân tích, tính toán)
-    |
-    v
-[3] repository/      Đọc / ghi dữ liệu vào database
-    |
-    v
-[4] models/          Định nghĩa cấu trúc bảng trong PostgreSQL
-```
-
-### Tầng 1 — `router/` (Điểm kết nối với frontend)
-
-Mỗi file trong `router/v1/` tương ứng một nhóm chức năng, khai báo các địa chỉ URL (endpoints) mà frontend gọi tới.
-
-```
-router/
-└── v1/
-    ├── auth_api.py          /api/v1/auth/...      Đăng nhập, đăng ký
-    ├── extraction_api.py    /api/v1/extraction/... Upload và đọc CV
-    ├── optimization_api.py  /api/v1/optimization/. Phân tích và tối ưu CV
-    ├── job_matching_api.py  /api/v1/jobs/...       So khớp CV với việc làm
-    └── interview_api.py     /api/v1/interview/...  Phỏng vấn giọng nói
-```
-
-Router chỉ làm hai việc: (a) xác nhận dữ liệu đầu vào có đúng định dạng không, và (b) chuyển giao cho service tương ứng xử lý. Router không chứa bất kỳ logic tính toán nào.
-
-**Ví dụ:** Khi người dùng upload CV, frontend gửi file đến `POST /api/v1/extraction/cvs`. `extraction_api.py` nhận file, kiểm tra định dạng, rồi gọi `ExtractionService` để thực hiện việc đọc và phân tích.
-
-### Tầng 2 — `service/` (Trung tâm xử lý)
-
-`service/` chứa toàn bộ logic thực sự của ứng dụng. Đây là nơi AI được gọi, dữ liệu được phân tích, và kết quả được tổng hợp.
-
-```
-service/
-├── auth/service.py       M0 — xác thực
-├── extraction/service.py  M1 — trích xuất / cấu trúc hoá CV
-├── matching/service.py    M3 — so khớp CV–JD
-├── optimization/        M2 — LangGraph + template
-│   ├── service.py
-│   ├── template_renderer.py
-│   ├── graph.py
-│   ├── state.py
-│   ├── retrieval_agent.py
-│   ├── roast_agent.py
-│   ├── rewrite_agent.py
-│   └── audit_agent.py
-└── interview/           M4 — phỏng vấn giọng nói
-    ├── service.py
-    ├── pipeline.py
-    ├── state.py
-    └── agents.py
-```
-
-### Tầng 3 — `repository/` (Truy cập dữ liệu)
-
-`repository/` là lớp duy nhất được phép đọc ghi vào database. Service layer không bao giờ gọi SQL trực tiếp.
-
-```
-repository/
-├── relational_repository.py  PostgreSQL (user, CV, session, job, …)
-├── base_vector_repository.py  ABC embedding store
-├── vector_repository.py      Chroma / Qdrant
-└── graph_repository.py       Neo4j (stub)
-```
-
-### Tầng 4 — `models/` (Cấu trúc database)
-
-`models/` định nghĩa các bảng dữ liệu trong PostgreSQL bằng SQLAlchemy ORM.
-
-```
-models/
-├── user.py
-├── cv_record.py
-├── interview_session.py
-├── interview_transcript.py
-├── job_listing.py
-└── job_match_result.py
-```
-
-### Các thành phần hỗ trợ
-
-```
-core/
-├── settings.py          Config (.env)
-├── database.py          Engine + session async
-├── sync_singleton.py    Singleton thread-safe (sync factory)
-├── providers/           factories: connectors, repositories, services (incl. get_interview_pipeline_factory), auth
-├── llm_connector.py
-├── voice_stt_connector.py
-├── voice_tts_connector.py
-├── ocr_processor.py
-├── security.py
-├── logger.py
-└── lifespan.py
-```
-
-```
-schema/
-├── request.py           Pydantic — request bodies
-└── response.py          Pydantic — responses
-
-workers/
-├── crawler_worker.py    Celery — crawl JD
-└── document_worker.py   Celery — xuất CV PDF/DOCX
-```
-
----
-
-## Frontend — Cách tổ chức code
-
-Frontend được xây dựng bằng **React 18 + Vite 5**, chạy ở port 3000.
-
-```
-frontend/
-├── src/
-│   ├── pages/              Các trang chính
-│   │   ├── LandingPage.jsx             Trang hiện ra đầu tiên khi người dùng truy cập lần đầu
-│   │   ├── AuthPage.jsx                Đăng nhập / đăng ký
-│   │   ├── AccountSettingsPage.jsx     Phần dropdown/quản lý tài khoản 
-│   │   ├── AboutUsPage.jsx             Trang giới thiệu
-│   │   ├── ProfilePage.jsx             Phần dropdown/thông tin cá nhân của người dùng
-│   │   └── MainDashboard.jsx           Dashboard chính (sau khi đăng nhập)
-│   ├── features/
-│   │   └── ocr-cv/         Feature: upload và xem kết quả trích xuất CV
-│   ├── components/
-│   │   └── Layout/         Các component layout dùng chung
-│   │   │   └── Navbar.jsx         Thanh điều hướng trong dashboard chính
-│   ├── utils/
-│   │   └── validation.js   Hàm validate dữ liệu form
-│   ├── App.jsx             Định nghĩa routes (react-router-dom)
-│   └── main.jsx            Entry point
-├── public/                 Static assets
-├── vite.config.js          Cấu hình Vite (port 3000, polling watch)
-└── package.json            Dependencies: react 18, react-router-dom 6, vite 5
-```
-
-Frontend giao tiếp với backend qua `fetch()` (REST API) và `WebSocket` (phỏng vấn giọng nói). Địa chỉ backend được cấu hình qua biến môi trường.
-
----
-
-## Các chức năng chính — Hoạt động từ đầu đến cuối
-
-Luồng dưới đây mô tả hành vi mục tiêu khi các service đã implement. Hiện nhiều endpoint trả MVP mock data — xem `README.md` (bảng trạng thái) và `TODO.md`.
-
-### 1. Đăng ký và Đăng nhập
-
-**Frontend gửi:** `POST /api/v1/auth/signup` với email, password, display name.
-
-**Backend xử lý:**
-- `auth_api.py` nhận request, validate định dạng qua `AuthSignupRequest` schema.
-- `AuthService.signup()` hash password bằng bcrypt, tạo bản ghi `User` trong PostgreSQL.
-- Trả về thông tin user vừa tạo.
-
-**Đăng nhập:** `POST /api/v1/auth/login` — backend kiểm tra password, ký một **JWT token** với thông tin user và trả về. Frontend lưu token này (localStorage hoặc cookie) và đính kèm vào header `Authorization: Bearer <token>` cho mọi request tiếp theo.
-
-**Bảo vệ endpoint:** `get_current_user` (`app/core/providers/auth.py`, dùng qua `Depends`) — `Authorization: Bearer` hợp lệ thì resolve `User`; không có demo bypass.
-
----
-
-### 2. Upload và Kiểm tra CV
-
-**Frontend gửi:** `POST /api/v1/extraction/cvs` — multipart form với file CV (PDF hoặc ảnh).
-
-**Backend xử lý theo pipeline:**
-
-```
-File CV (PDF/ảnh)
-    |
-    v
-[Bước 1] Trích xuất text
-    - Nếu là PDF có text: dùng PyMuPDF để lấy text trực tiếp
-    - Nếu là ảnh hoặc PDF scan: dùng PaddleOCR để nhận diện chữ
-    |
-    v
-[Bước 2] Phân tích cấu trúc bằng LLM
-    - Gửi raw text đến LLM (Ollama local hoặc Groq cloud)
-    - LLM trả về JSON có cấu trúc: thông tin cá nhân, học vấn,
-      kinh nghiệm, kỹ năng, chứng chỉ,...
-    |
-    v
-[Bước 3] Lưu trữ
-    - Lưu structured CV data vào bảng cv_records (PostgreSQL)
-    - Tạo vector embedding và lưu vào ChromaDB (cho tìm kiếm sau)
-    |
-    v
-Trả về: cv_id + toàn bộ CV đã được cấu trúc hóa
-```
-
-**Frontend nhận được:** `cv_id` — mã định danh CV. Mọi chức năng tiếp theo (tối ưu CV, so khớp việc làm, phỏng vấn) đều dùng `cv_id` này để tham chiếu đến CV của người dùng.
-
-**Xem lại CV:** `GET /api/v1/extraction/cv/{cv_id}` — frontend gửi `cv_id`, backend tra cứu trong PostgreSQL và trả về dữ liệu đã phân tích.
-
----
-
-### 3. Phân tích và Tối ưu hóa CV
-
-**Frontend gửi:** `POST /api/v1/optimization/cvs/{cv_id}/optimizations` với `cv_id` (path param), vị trí mục tiêu (`target_job_title`), ngành mục tiêu, và chế độ phân tích (`standard` hoặc `roast`).
-
-**Backend chạy một pipeline nhiều AI agent (LangGraph):**
-
-```
-[Agent 1: retrieval_agent] Thu thập ngữ cảnh
-  - Tìm kiếm trong ChromaDB: các JD tương tự, tiêu chuẩn ngành
-  - Tổng hợp: kỹ năng bắt buộc, từ khóa ATS phổ biến cho vị trí này
-
-[Agent 2: roast_agent] Phát hiện điểm yếu
-  - Đọc CV với con mắt của recruiter
-  - Gắn nhãn từng vấn đề: "vague_claim" (tuyên bố mơ hồ),
-    "missing_metric" (thiếu số liệu), "weak_verb" (động từ yếu),
-    "buzzword" (từ sáo rỗng),...
-
-[Agent 3: rewrite_agent] Viết lại các phần yếu
-  - Áp dụng công thức Google XYZ:
-    "Accomplished X, as measured by Y, by doing Z"
-  - Không được bịa ra số liệu — chỉ viết lại dựa trên thông tin gốc
-
-[Agent 4: audit_agent] Kiểm duyệt
-  - So sánh bản viết lại với CV gốc
-  - Phán quyết từng phần: approved / needs_revision / rejected
-  - Ghép các phần được duyệt vào bản CV tối ưu cuối cùng
-```
-
-**Frontend nhận được:** Báo cáo phân tích (danh sách vấn đề, giải thích) + CV đã được tối ưu.
-
-**Xuất PDF:** `GET /api/v1/optimization/cvs/{cv_id}/pdf?template=...` — hiện trả 501 (out of MVP); cần WeasyPrint.
-
----
-
-### 4. So khớp CV với Việc làm
-
-**Frontend gửi:** `POST /api/v1/jobs/matches` với `cv_id` và job description (URL của tin tuyển dụng hoặc paste thẳng nội dung JD).
-
-**Backend tính điểm bằng Hybrid Scoring:**
-
-```
-final_score = 0.20 x (frequency_score)   <- mức độ overlap từ khóa
-            + 0.30 x (position_score)     <- từ khóa xuất hiện ở vị trí quan trọng
-            + 0.50 x (semantic_score)     <- độ tương đồng ngữ nghĩa (vector + LLM)
-```
-
-**Frontend nhận được:** Điểm phù hợp tổng thể (0–100%), danh sách kỹ năng còn thiếu (`missing_skills`) phân loại theo mức độ ảnh hưởng (critical / important / nice_to_have).
-
-**Gợi ý việc làm:** `GET /api/v1/jobs/recommendations/{cv_id}` — backend tìm trong kho tin tuyển dụng đã crawl (bảng `job_listings`) những vị trí phù hợp nhất với CV thông qua vector similarity search.
-
----
-
-### 5. Phỏng vấn Giọng nói (Real-time)
-
-Đây là chức năng phức tạp nhất, sử dụng WebSocket để truyền dữ liệu audio liên tục hai chiều.
-
-**Khởi tạo phiên:** Frontend gửi `POST /api/v1/interview/sessions` với `cv_id`, chế độ phỏng vấn (`practice` / `mock` / `quick`), thời lượng mong muốn. Backend tạo một bản ghi trong PostgreSQL, trả về `session_id`.
-
-**Kết nối WebSocket:** Frontend mở `ws://localhost:8000/api/v1/interview/ws`. Sau khi connect, client gửi JSON message đầu tiên: `{"token": "<jwt>"}`. Backend validate token rồi mới bắt đầu phiên. Từ đây, giao tiếp diễn ra real-time.
-
-**Luồng audio trong một lượt hỏi-đáp:**
-
-```
-[Người dùng nói vào microphone]
-    |
-    | Chunk audio PCM Int16 mono @ 16kHz (raw bytes)
-    v
-Frontend gửi binary frames qua WebSocket
-    |
-    v
-Backend — InterviewPipeline nhận audio
-    |
-    v
-[Bước 1: Turn detection] Phát hiện khi người dùng dừng nói (silence gate)
-    |
-    v
-[Bước 2: STT] PhoWhisper chuyển audio thành text (tiếng Việt)
-    |
-    v
-[Bước 3: LLM] Gửi transcript vào LLM cùng với lịch sử hội thoại
-  → LLM đóng vai interviewer, trả lời hoặc đặt câu hỏi tiếp theo
-    |
-    v
-[Bước 4: TTS] Chuyển câu trả lời của AI thành giọng nói PCM @ 24kHz
-    |
-    v
-Backend gửi audio bytes qua WebSocket về trình duyệt
-    |
-    v
-[Loa phát ra giọng AI interviewer]
-```
-
-**Backend cũng gửi JSON events** xen kẽ với audio frames để frontend hiển thị trạng thái: transcript của người dùng, câu hỏi hiện tại, thời gian còn lại.
-
-**Kết thúc phiên:** Frontend gửi `{"type": "end_session"}`. Backend chạy đánh giá STAR (Situation / Task / Action / Result) trên toàn bộ transcript, tính điểm từng câu trả lời, tổng hợp nhận xét, lưu vào `interview_sessions`.
-
-**Xem kết quả:** `GET /api/v1/interview/sessions/{session_id}/report` — trả về báo cáo đầy đủ: điểm tổng thể, điểm STAR từng câu, danh sách vấn đề logic, gợi ý cải thiện.
-
----
-
-## Tác vụ nền (Background Workers)
-
-Một số công việc tốn thời gian không chạy trong request cycle mà được đẩy vào hàng đợi Celery (qua Redis) để chạy nền:
-
-| Worker | Trigger | Chức năng |
+| Thành phần | Vai trò | Local default |
 |---|---|---|
-| `crawler_worker.py` | Lịch hàng ngày | Tự động crawl tin tuyển dụng từ TopCV, ITviec |
-| `document_worker.py` | Khi user xuất CV | Render PDF/DOCX theo template, trả về link download |
+| Frontend | React SPA | `http://localhost:3000` |
+| Backend | FastAPI API server | `http://localhost:8000` |
+| PostgreSQL | User, CV, interview, job, cache data | `localhost:5432` |
+| Redis | Celery broker/result backend | `localhost:6379` |
+| ChromaDB | Vector search mặc định | `localhost:8001` |
+| Qdrant | Vector backend thay thế | Theo `VECTOR_DB_BACKEND=qdrant` |
+| Neo4j | Skill knowledge graph | `localhost:7687` |
+| Ollama | LLM local | `localhost:11434` |
+| Celery worker | Background jobs | Chạy riêng |
 
----
+## 3. Backend Layering
 
-## Sơ đồ luồng dữ liệu tổng hợp
+Backend dùng các lớp rõ ràng:
 
-```mermaid
-flowchart LR
-    Frontend[Frontend]
-
-    subgraph Router [Backend Router]
-        R_Auth[auth_api.py]
-        R_Ext[extraction_api.py]
-        R_Opt[optimization_api.py]
-        R_Int[interview_api.py]
-    end
-
-    subgraph Service [Service]
-        S_Auth[AuthService]
-        S_Ext[ExtractionService]
-        S_Opt[OptimizationService]
-        S_Int[InterviewPipeline]
-    end
-
-    subgraph DB_AI [DB / AI]
-        PG[(PostgreSQL)]
-        Chroma[(ChromaDB)]
-        LLM[Ollama LLM]
-        OCR[PyMuPDF / OCR]
-        STT[PhoWhisper STT]
-        TTS[Edge TTS / Piper]
-    end
-
-    Frontend -->|POST /auth/login| R_Auth
-    Frontend -->|POST /extraction/cvs\nfile.pdf| R_Ext
-    Frontend -->|POST /optimization/cvs/{cv_id}/optimizations| R_Opt
-    Frontend -->|WS /interview/ws\nPCM audio| R_Int
-
-    R_Auth --> S_Auth
-    R_Ext --> S_Ext
-    R_Opt --> S_Opt
-    R_Int --> S_Int
-
-    S_Auth -->|User lookup| PG
-    
-    S_Ext -->|Parse PDF| OCR
-    S_Ext -->|Extract info| LLM
-    S_Ext -->|cv_records| PG
-    S_Ext -->|embedding| Chroma
-
-    S_Opt -->|LangGraph pipeline| LLM
-
-    S_Int -->|Speech to Text| STT
-    S_Int -->|Chat| LLM
-    S_Int -->|Text to Speech| TTS
+```text
+router/v1
+  -> service
+  -> repository / core connector
+  -> database / vector DB / graph DB / external AI
 ```
 
----
-
-## Môi trường và Cấu hình
-
-Cấu hình được đọc từ file `.env` (backend) và `.env` (frontend).
-
-**Backend (`.env`):**
-
-| Nhóm | Biến | Ý nghĩa |
+| Layer | Thư mục | Trách nhiệm |
 |---|---|---|
-| App | `APP_ENV`, `APP_DEBUG` | Môi trường chạy |
-| App URL | `FRONTEND_BASE_URL`, `ALLOWED_ORIGINS` | Public web URL và CORS origins khi deploy cloud |
-| Auth | `AUTH_SECRET_KEY` | Khóa ký JWT |
-| Database | `DATABASE_URL` | Chuỗi kết nối PostgreSQL |
-| Cache | `REDIS_URL` | Kết nối Redis (broker Celery) |
-| LLM | `LLM_LOCAL_BASE_URL`, `LLM_LOCAL_MODEL` | Địa chỉ và tên model Ollama |
-| LLM self-hosted | `LLM_HOSTED_BASE_URL`, `LLM_HOSTED_MODEL` | Endpoint OpenAI-compatible của model tự host trên cloud |
-| LLM cloud | `LLM_CLOUD_API_KEY` | API key Groq (cloud fallback) |
-| STT | `STT_MODEL_ID` | Model STT (mặc định: PhoWhisper-base) |
-| TTS | `TTS_ENGINE`, `TTS_VOICE`, `TTS_MODEL_PATH` | TTS: `edge` (mạng) hoặc `piper` (ONNX cục bộ) |
+| App entry | `app/main.py` | FastAPI instance, middleware, system endpoints, include routers |
+| Core | `app/core/` | Settings, DB session, security, rate limit, logging, connectors, DI providers |
+| Router | `app/router/v1/` | Nhận request, validate input, auth/rate limit, gọi service |
+| Service | `app/service/` | Business logic theo module |
+| Repository | `app/repository/` | Data access cho PostgreSQL, vector DB, Neo4j, LLM cache |
+| Models | `app/models/` | SQLAlchemy ORM tables |
+| Schema | `app/schema/` | Pydantic request/response contracts |
+| Workers | `app/workers/` | Celery app và background tasks |
 
-**Frontend (`.env`):**
+Nguyên tắc:
 
-| Biến | Ý nghĩa |
+- Router không chứa business logic dài.
+- Service không phụ thuộc trực tiếp vào FastAPI `Depends`.
+- Repository nhận `AsyncSession` theo method, transaction boundary nằm ở service/router.
+- Connector nặng được lazy-load và inject qua `app/core/providers/`.
+- Endpoint dùng `cv_id`, `session_id`, `job_id` phải kiểm tra ownership/user scope.
+
+## 4. Frontend Organization
+
+Frontend đặt trong `frontend/src`.
+
+| Khu vực | Vai trò |
 |---|---|
-| `VITE_API_BASE_URL` | Địa chỉ backend API (mặc định: `http://localhost:8000`) |
+| `App.jsx` | React Router routes |
+| `api/` | Wrapper REST API, token attach, timeout và error sanitizer |
+| `pages/` | Landing, auth, dashboard, CV upload/review/optimization, matching, interview, reports |
+| `components/` | Shared UI components và layout |
+| `config/` | API base URL, storage keys |
+| `store/` | Theme context |
+| `assets/` | Logo, illustrations, icons, lottie |
 
----
+Routes public:
 
-## Tài liệu liên quan
+- `/`
+- `/login`
+- `/signup`
+- `/about`
 
-- [`docker-compose.yml`](../docker-compose.yml) — Docker Compose: PostgreSQL, Redis, ChromaDB, Neo4j
-- [`app/README.md`](../app/README.md) — tổng quan backend package
-- [`app/core/README.md`](../app/core/README.md) — infrastructure: settings, DI, connectors
-- `app/models/` — SQLAlchemy ORM models (database schema)
-- [`app/repository/README.md`](../app/repository/README.md) — data access layer
-- [`app/router/README.md`](../app/router/README.md) — API endpoints
-- [`app/service/README.md`](../app/service/README.md) — business logic services
-- [`app/service/optimization/README.md`](../app/service/optimization/README.md) — LangGraph CV pipeline (bounded context)
-- [`app/service/interview/README.md`](../app/service/interview/README.md) — voice interview pipeline (bounded context)
-- [`app/workers/README.md`](../app/workers/README.md) — background tasks
-- [`TODO.md`](../TODO.md) — danh sách công việc còn lại
+Routes cần auth:
+
+- `/dashboard`
+- `/candidate`
+- `/profile`
+- `/settings`
+- `/cv-upload`
+- `/cv-extraction-result`
+- `/cv-optimization`
+- `/cv-review`
+- `/job-matching`
+- `/job-recommendations`
+- `/interview`
+- `/interview-report`
+- `/question-bank`
+- `/reports`
+- `/chat`
+
+## 5. Main Flows
+
+### 5.1 Auth
+
+```text
+AuthPage
+  -> POST /api/v1/auth/signup hoặc /login
+  -> AuthService
+  -> bcrypt password hash/verify
+  -> JWT access token
+  -> localStorage token
+  -> Authorization: Bearer <token>
+```
+
+Endpoints:
+
+- `POST /api/v1/auth/signup`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/auth/me`
+- `PATCH /api/v1/auth/me`
+- `PUT /api/v1/auth/password`
+
+### 5.2 CV Extraction
+
+```text
+CVUploadPage
+  -> POST /api/v1/extraction/cvs
+  -> content-type + 10 MB validation
+  -> PyMuPDF text extraction for PDF
+  -> OCR fallback for scanned page/image if OCR is available
+  -> LLM JSON extraction
+  -> CVRecord in PostgreSQL
+  -> embedding best-effort into ChromaDB/Qdrant
+  -> CVExtractionResponse
+```
+
+Supporting endpoints:
+
+- `GET /api/v1/extraction/cvs`: CV history.
+- `GET /api/v1/extraction/cv/{cv_id}`: full extracted CV.
+- `PUT /api/v1/extraction/cvs/{cv_id}`: save user-reviewed extraction.
+
+### 5.3 CV Optimization
+
+```text
+POST /api/v1/optimization/cvs/{cv_id}/optimizations
+  -> ownership check
+  -> OptimizationService
+  -> LangGraph: retrieval -> roast -> rewrite -> audit
+  -> deterministic scorecard
+  -> update CVRecord.optimized_data, audit_score, status
+  -> CVOptimizationResponse
+```
+
+Template/PDF:
+
+- `POST /api/v1/optimization/cvs/{cv_id}/render`
+- `GET /api/v1/optimization/cvs/{cv_id}/pdf?template=harvard`
+
+### 5.4 Job Matching
+
+```text
+POST /api/v1/jobs/matches
+  -> ownership check CV
+  -> JD text direct hoặc fetch URL an toàn
+  -> frequency score
+  -> position score
+  -> semantic embedding score
+  -> LLM missing skills feedback
+  -> graph-related skill adjustment best-effort
+  -> persist JobMatchResult
+```
+
+Weights:
+
+```text
+overall = 0.20 * frequency + 0.30 * position + 0.50 * semantic
+```
+
+Nếu embedding unavailable, semantic score được loại khỏi tổng và điểm được renormalize theo các component deterministic.
+
+Job listing endpoints:
+
+- `GET /api/v1/jobs/listings`
+- `GET /api/v1/jobs/listings/{job_id}`
+- `GET /api/v1/jobs/recommendations/{cv_id}`
+
+### 5.5 Interview Voice
+
+REST setup:
+
+```text
+POST /api/v1/interview/sessions
+  -> ownership check CV
+  -> optional JD: text, URL, hoặc job_listing_id
+  -> infer/normalize job title
+  -> build interview plan
+  -> create InterviewSession
+  -> return session_id + meeting_url + plan
+```
+
+WebSocket:
+
+```text
+Client opens /api/v1/interview/ws
+  -> first JSON: {"token":"...","session_id":"...","duration_minutes":5}
+  -> server validates JWT and session ownership
+  -> pipeline.start()
+  -> client sends PCM Int16 mono 16 kHz bytes
+  -> VAD detects turn boundary
+  -> STT transcribes
+  -> LLM evaluates/responds
+  -> TTS sends PCM 24 kHz bytes
+  -> stop persists STAR scores, behavior observations, transcript
+```
+
+Report endpoints:
+
+- `GET /api/v1/interview/sessions`
+- `GET /api/v1/interview/sessions/{session_id}/report`
+
+## 6. Persistence Model
+
+Core tables:
+
+| Table | Model | Nội dung |
+|---|---|---|
+| `users` | `User` | Account, tenant boundary, role, password hash |
+| `cv_records` | `CVRecord` | Raw/extracted/optimized CV data, score, status |
+| `job_listings` | `JobListing` | Crawled job data |
+| `job_match_results` | `JobMatchResult` | Match scores, missing skills, workflow status |
+| `interview_sessions` | `InterviewSession` | Interview setup, status, STAR/report summary |
+| `interview_transcripts` | `InterviewTranscript` | Turn-level transcript |
+| `llm_response_cache` | `LLMResponseCache` | Semantic cache for LLM responses |
+
+## 7. External AI Routing
+
+LLM connector priority:
+
+- Local Ollama for default local calls.
+- Self-hosted OpenAI-compatible endpoint when configured.
+- Groq cloud when `LLM_CLOUD_API_KEY` is real.
+- NVIDIA NIM when `LLM_NVIDIA_API_KEY` is real.
+- Fallback chain depends on `use_cloud`/`use_nvidia`.
+
+Embedding priority:
+
+- Ollama `/api/embeddings`.
+- NVIDIA embedding endpoint if key exists.
+- OpenAI-compatible embedding endpoint when cloud is requested.
+
+STT:
+
+- Groq Whisper API first if API key exists.
+- faster-whisper local fallback.
+
+TTS:
+
+- `edge`: Microsoft Edge TTS.
+- `piper`: local Piper CLI/model, fallback to Edge if missing.
+- `vieneu`: local VieNeu SDK/CLI/GGUF; GGUF failures raise rather than silently using network TTS.
+
+## 8. Security And Reliability Notes
+
+- JWT is required for business endpoints; WebSocket validates token in the first message.
+- `AUTH_SECRET_KEY` must be strong in production.
+- Rate limit uses SlowAPI.
+- `RATE_LIMIT_TRUST_FORWARDED_FOR` must stay false unless behind a trusted proxy.
+- JD URL fetching blocks localhost/private/reserved IPs to reduce SSRF risk.
+- File upload validates content type and size; magic-byte validation is still a recommended hardening item.
+- Vector, graph, OCR, LLM and TTS failures are often treated as non-fatal where possible, but core AI flows can still fail if no backend is available.
+
+## 9. Deployment Shape
+
+Local dev:
+
+```text
+docker-compose.yml
+  -> postgres, redis, chromadb, neo4j
+
+local shell
+  -> uvicorn backend
+  -> Vite frontend
+  -> optional Celery worker
+```
+
+Production compose:
+
+```text
+docker-compose.prod.yml
+  -> postgres
+  -> redis
+  -> chromadb
+  -> neo4j
+  -> backend
+  -> celery_worker
+  -> frontend-prod
+  -> nginx
+```
+
+## 10. References
+
+- [../README.md](../README.md)
+- [FLOW_STUDY_CASES.md](FLOW_STUDY_CASES.md)
+- [PROJECT_REPORT.md](PROJECT_REPORT.md)
+- [TEAM_PLAN.md](TEAM_PLAN.md)
+- [../app/README.md](../app/README.md)
+- [../app/router/v1/README.md](../app/router/v1/README.md)
+- [../app/service/README.md](../app/service/README.md)

@@ -199,7 +199,7 @@ def summarize_behavior(events: list[dict[str, Any] | BehaviorEvent]) -> Behavior
             continue
         grouped.setdefault(event.kind, []).append(event)
 
-    score = 100.0
+    score = 86.0
     observations: list[BehaviorObservation] = []
     for kind, items in grouped.items():
         catalog = BEHAVIOR_CATALOG.get(kind, {})

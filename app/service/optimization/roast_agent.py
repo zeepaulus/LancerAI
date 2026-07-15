@@ -132,10 +132,7 @@ def _should_keep_issue(issue: RoastIssue, raw_cv: dict[str, Any], job_title: str
 
     # Medium issues without a concrete source quote are usually vague system
     # guesses. Keep high/critical section-level gaps, but suppress medium noise.
-    if issue.severity == "medium" and not issue.original_text.strip():
-        return False
-
-    return True
+    return not (issue.severity == "medium" and not issue.original_text.strip())
 
 
 def _normalize_issue(item: dict[str, Any]) -> dict[str, Any]:

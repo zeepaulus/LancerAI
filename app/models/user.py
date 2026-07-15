@@ -46,6 +46,4 @@ class User(Base):
     interview_sessions = relationship(
         "InterviewSession", back_populates="owner", lazy="noload", cascade="all, delete-orphan"
     )
-    job_matches = relationship(
-        "JobMatchResult", back_populates="owner", lazy="noload", cascade="all, delete-orphan"
-    )
+    job_matches = relationship("JobMatchResult", back_populates="owner", lazy="noload", cascade="all, delete-orphan")

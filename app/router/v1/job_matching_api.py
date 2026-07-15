@@ -85,9 +85,7 @@ async def get_job_listing(
     user: Annotated[User, Depends(get_current_user)],
 ) -> JobListingResponse:
     """Return one active crawled job listing."""
-    result = await db.execute(
-        select(JobListing).where(JobListing.id == job_id, JobListing.is_active.is_(True))
-    )
+    result = await db.execute(select(JobListing).where(JobListing.id == job_id, JobListing.is_active.is_(True)))
     job = result.scalars().first()
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job listing not found.")

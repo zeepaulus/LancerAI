@@ -73,15 +73,18 @@ class OCRProcessor:
         """
         self._ensure_ocr()
         if self._ocr is False:
-            return [{
-                "text": "[OCR Tạm Thời Không Khả Dụng - Vui lòng tải CV PDF định dạng văn bản]",
-                "confidence": 1.0,
-                "bbox": [0, 0, 100, 100]
-            }]
+            return [
+                {
+                    "text": "[OCR Tạm Thời Không Khả Dụng - Vui lòng tải CV PDF định dạng văn bản]",
+                    "confidence": 1.0,
+                    "bbox": [0, 0, 100, 100],
+                }
+            ]
 
         # Decode bytes → numpy array (BGR, as expected by PaddleOCR)
         try:
             import cv2
+
             arr = np.frombuffer(image_bytes, dtype=np.uint8)
             img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             if img is None:
@@ -92,6 +95,7 @@ class OCRProcessor:
             import io
 
             from PIL import Image
+
             pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
             img = np.array(pil_img)[:, :, ::-1]  # RGB → BGR
 
@@ -139,6 +143,7 @@ class OCRProcessor:
     def _run_tesseract(self, image_bytes: bytes) -> str:
         """Run system tesseract binary to perform lightweight OCR."""
         import subprocess
+
         # Try with Vietnamese + English first
         try:
             proc = subprocess.run(
@@ -150,7 +155,7 @@ class OCRProcessor:
             return proc.stdout.decode("utf-8", errors="ignore").strip()
         except Exception as e:
             logger.warning("[OCR] Tesseract with vie+eng failed: %s. Retrying with eng...", e)
-            
+
         # Fallback to English only
         try:
             proc = subprocess.run(
@@ -221,4 +226,3 @@ class OCRProcessor:
             lines.append(" ".join(line_buffer))
 
         return "\n".join(lines)
-

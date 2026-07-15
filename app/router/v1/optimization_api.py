@@ -116,6 +116,7 @@ async def render_template_pdf(
         media_type = "application/pdf" if pdf_bytes[:4] == b"%PDF" else "application/json"
         filename = f"cv_{cv_id[:8]}_{template}.{'pdf' if media_type == 'application/pdf' else 'json'}"
         import io
+
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type=media_type,

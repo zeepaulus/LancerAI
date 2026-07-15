@@ -286,8 +286,7 @@ def _build_question_plan(
             "stage": "cv_deep_dive",
             "goal": "Kiểm chứng kinh nghiệm nổi bật trong CV",
             "question": (
-                f"Trong vai trò {recent_role}, trách nhiệm hoặc thành tựu nào "
-                "thể hiện rõ nhất năng lực của bạn?"
+                f"Trong vai trò {recent_role}, trách nhiệm hoặc thành tựu nào thể hiện rõ nhất năng lực của bạn?"
             ),
         },
         {
@@ -302,8 +301,7 @@ def _build_question_plan(
             "stage": "technical_depth",
             "goal": "Đào sâu kỹ năng cốt lõi",
             "question": (
-                f"Bạn đã dùng {core_skill} trong tình huống thực tế nào, "
-                "và bạn ra quyết định kỹ thuật ra sao?"
+                f"Bạn đã dùng {core_skill} trong tình huống thực tế nào, và bạn ra quyết định kỹ thuật ra sao?"
             ),
         },
         {
@@ -318,16 +316,14 @@ def _build_question_plan(
             "stage": "communication",
             "goal": "Quan sát cách diễn đạt và xử lý tình huống mơ hồ",
             "question": (
-                "Khi yêu cầu thay đổi hoặc chưa rõ, bạn thường làm rõ vấn đề "
-                "và phối hợp với team như thế nào?"
+                "Khi yêu cầu thay đổi hoặc chưa rõ, bạn thường làm rõ vấn đề và phối hợp với team như thế nào?"
             ),
         },
         {
             "stage": "wrap_up",
             "goal": "Kết thúc và cho ứng viên bổ sung evidence",
             "question": (
-                "Có điểm mạnh, dự án hoặc kinh nghiệm nào trong CV bạn muốn "
-                "nhấn mạnh thêm trước khi kết thúc không?"
+                "Có điểm mạnh, dự án hoặc kinh nghiệm nào trong CV bạn muốn nhấn mạnh thêm trước khi kết thúc không?"
             ),
         },
     ]
@@ -339,8 +335,7 @@ def _build_question_plan(
                 "stage": "focus_area",
                 "goal": "Đào sâu trọng tâm do người dùng chọn",
                 "question": (
-                    f"Bạn hãy nói kỹ hơn về {focus_area.strip()} và một ví dụ cụ thể "
-                    "bạn đã xử lý trong công việc."
+                    f"Bạn hãy nói kỹ hơn về {focus_area.strip()} và một ví dụ cụ thể bạn đã xử lý trong công việc."
                 ),
             },
         )
@@ -407,16 +402,13 @@ def _build_question_plan(
         {
             "stage": "warmup",
             "goal": "Mở đầu và xác nhận mục tiêu nghề nghiệp",
-            "question": (
-                f"Bạn hãy giới thiệu ngắn gọn kinh nghiệm hoặc dự án phù hợp nhất với vị trí {target_role}?"
-            ),
+            "question": (f"Bạn hãy giới thiệu ngắn gọn kinh nghiệm hoặc dự án phù hợp nhất với vị trí {target_role}?"),
         },
         {
             "stage": "cv_deep_dive",
             "goal": "Kiểm chứng kinh nghiệm nổi bật trong CV",
             "question": (
-                f"Trong vai trò {recent_role}, thành tựu hoặc trách nhiệm nào "
-                "thể hiện rõ nhất năng lực của bạn?"
+                f"Trong vai trò {recent_role}, thành tựu hoặc trách nhiệm nào thể hiện rõ nhất năng lực của bạn?"
             ),
         },
         {
@@ -430,31 +422,25 @@ def _build_question_plan(
         {
             "stage": "technical_depth",
             "goal": "Đào sâu kỹ thuật/kỹ năng cốt lõi",
-            "question": (
-                f"Trong tình huống dùng {core_skill}, trade-off kỹ thuật quan trọng nhất bạn cân nhắc là gì?"
-            ),
+            "question": (f"Trong tình huống dùng {core_skill}, trade-off kỹ thuật quan trọng nhất bạn cân nhắc là gì?"),
         },
         {
             "stage": "jd_fit",
             "goal": "Kiểm tra mức độ phù hợp với yêu cầu vị trí",
-            "question": (
-                f"Với yêu cầu {gap_skill}, bạn đã có evidence thực tế nào hoặc sẽ bù gap này ra sao?"
-            ),
+            "question": (f"Với yêu cầu {gap_skill}, bạn đã có evidence thực tế nào hoặc sẽ bù gap này ra sao?"),
         },
         {
             "stage": "communication",
             "goal": "Quan sát cách diễn đạt và phản biện",
             "question": (
-                "Khi gặp yêu cầu mơ hồ hoặc thay đổi giữa chừng, "
-                "bạn thường làm rõ và phối hợp với team như thế nào?"
+                "Khi gặp yêu cầu mơ hồ hoặc thay đổi giữa chừng, bạn thường làm rõ và phối hợp với team như thế nào?"
             ),
         },
         {
             "stage": "wrap_up",
             "goal": "Kết thúc và cho ứng viên bổ sung",
             "question": (
-                "Có điểm mạnh, dự án hoặc kinh nghiệm nào trong CV bạn muốn "
-                "nhấn mạnh thêm trước khi kết thúc không?"
+                "Có điểm mạnh, dự án hoặc kinh nghiệm nào trong CV bạn muốn nhấn mạnh thêm trước khi kết thúc không?"
             ),
         },
     ]
@@ -507,10 +493,7 @@ def _extract_jd_skills(jd_data: dict[str, Any]) -> list[str]:
             elif isinstance(items, str):
                 values.extend(_split_skill_text(items))
 
-    text = " ".join(
-        str(jd_data.get(key) or "")
-        for key in ("title", "description", "raw_text")
-    )
+    text = " ".join(str(jd_data.get(key) or "") for key in ("title", "description", "raw_text"))
     values.extend(_guess_skills_from_text(text))
     return _dedupe(values)
 

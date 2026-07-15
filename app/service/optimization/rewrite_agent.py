@@ -89,10 +89,7 @@ async def rewrite_agent(state: CVOptimizationState, llm: LLMConnector) -> dict[s
         return {"rewritten_sections": [], "current_step": "rewrite_done"}
 
     # Filter to high/critical issues only (avoid over-rewriting)
-    priority_issues = [
-        issue for issue in roast_issues
-        if issue.severity in ("critical", "high")
-    ]
+    priority_issues = [issue for issue in roast_issues if issue.severity in ("critical", "high")]
     if not priority_issues:
         logger.info("[rewrite_agent] No high-impact issues to rewrite — skipping")
         return {"rewritten_sections": [], "current_step": "rewrite_done"}
@@ -120,6 +117,7 @@ Viết lại các đoạn trên theo công thức XYZ/STAR. Trả về JSON:"""
             json_mode=True,
         )
         from app.core.json_extractor import clean_and_parse_json
+
         data: dict[str, Any] = clean_and_parse_json(raw)
         rewrites_raw: list[dict[str, Any]] = data.get("rewrites", [])
 
@@ -210,7 +208,4 @@ def _is_low_value_rewrite(section: RewrittenSection) -> bool:
 
     original_words = len(section.original.split())
     rewritten_words = len(section.rewritten.split())
-    if original_words <= 4 and rewritten_words >= original_words + 8:
-        return True
-
-    return False
+    return original_words <= 4 and rewritten_words >= original_words + 8

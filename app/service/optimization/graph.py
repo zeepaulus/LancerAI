@@ -55,4 +55,3 @@ def build_cv_optimization_graph(
     builder.add_edge("rewrite", "audit")
     builder.add_edge("audit", END)
     return builder.compile()
-

@@ -1,74 +1,70 @@
-# `app/schema/` — Pydantic Request & Response Schemas
+# `app/schema/` - Pydantic Contracts
 
-Package định nghĩa toàn bộ **data contracts** cho API surface — request validation (inbound) và response serialization (outbound) — bằng **Pydantic v2**.
+`app/schema/` defines API request validation and response serialization using Pydantic v2.
 
-Routers import schema từ đây; response nên map sang model Pydantic trước khi trả (tránh raw dict lệch contract).
+Routers should import schemas from here and avoid returning arbitrary dicts where a stable contract exists.
 
 ## Files
 
-### `request.py` — Inbound Validation Schemas
+| File | Purpose |
+|---|---|
+| `request.py` | Inbound request bodies |
+| `response.py` | Outbound response models |
 
-| Schema | Endpoint | Fields |
+## Request Schemas
+
+| Schema | Endpoint | Key fields |
 |---|---|---|
-| `AuthSignupRequest` | `POST /auth/signup` | `email`, `password` (min 8), `display_name`, `tenant_id?` |
-| `AuthLoginRequest` | `POST /auth/login` | `email`, `password` |
-| `CVUploadRequest` | `POST /extraction/cvs` (khi wire form metadata) | `language` (`vi` \| `en`, default `vi`) — hiện router chỉ nhận `UploadFile` |
-| `OptimizationRequest` | `POST /optimization/cvs/{cv_id}/optimizations` | `target_job_title?`, `target_industry`, `mode` (`standard` \| `roast`) — `cv_id` is path param |
-| `RenderTemplateRequest` | `POST /optimization/cvs/{cv_id}/render` | `template` — `cv_id` is path param |
-| `JobMatchRequest` | `POST /jobs/matches` | `cv_id`, `jd_url?` hoặc `jd_text?` |
-| `InterviewSessionRequest` | `POST /interview/sessions` | `cv_id`, `mode` (Literal), `focus_area?`, `duration_minutes` (1–60) |
+| `AuthSignupRequest` | `POST /auth/signup` | `email`, `password`, `display_name`, optional ignored `tenant_id` |
+| `AuthLoginRequest` | `POST /auth/login` | `identifier`, `password` |
+| `UserProfileUpdateRequest` | `PATCH /auth/me` | `display_name` |
+| `PasswordChangeRequest` | `PUT /auth/password` | `current_password`, `new_password` |
+| `CVExtractionUpdateRequest` | `PUT /extraction/cvs/{cv_id}` | Editable structured CV fields |
+| `OptimizationRequest` | `POST /optimization/cvs/{cv_id}/optimizations` | `target_job_title`, `target_industry`, `mode` |
+| `RenderTemplateRequest` | `POST /optimization/cvs/{cv_id}/render` | `template` |
+| `JobMatchRequest` | `POST /jobs/matches` | `cv_id`, `jd_text` or `jd_url` |
+| `InterviewSessionRequest` | `POST /interview/sessions` | `cv_id`, optional JD context, `mode`, `focus_area`, `duration_minutes` |
 
-**Validation highlights:**
-- `InterviewSessionRequest.mode` dùng `Literal["practice", "mock", "quick"]` — FastAPI/Pydantic sẽ reject bất kỳ giá trị ngoài enum này với 422.
-- `password` có `min_length=8, max_length=128`.
-- `duration_minutes` có `ge=1, le=60` (Pydantic constraint, không cần validator riêng).
+Validation highlights:
 
-### `response.py` — Outbound Serialization Schemas
+- Passwords require 8-128 chars.
+- `InterviewSessionRequest.mode` is `Literal["practice", "mock", "quick"]`.
+- `duration_minutes` is constrained to 1-60.
+- `JobMatchRequest` requires at least one JD source.
+- `email` is currently plain `str`; switching to `EmailStr` requires adding `pydantic[email]`.
 
-#### Module 1 — CV Extraction
+## Response Schemas
 
-| Schema | Description |
+| Schema | Purpose |
 |---|---|
-| `PersonalInfo` | name, email, phone, linkedin, location |
-| `Education` | school, degree, major, gpa, period |
-| `Experience` | company, title, period, descriptions, key_impacts, tech_stack |
-| `Project` | name, role, tech_stack, description, key_impacts, potential_roast_points |
-| `SkillsMatrix` | languages, frameworks, tools, soft_skills |
-| `CVExtractionResponse` | Root response — assembles tất cả sub-schemas trên |
+| `AuthTokenResponse` | Bearer token response |
+| `UserProfileResponse` | Basic user profile |
+| `CVExtractionResponse` | Full structured extracted CV |
+| `CVRecordSummaryResponse` | Compact CV history row |
+| `CVOptimizationResponse` | Optimization output, issues, rewrites, scorecard |
+| `RenderedCVResponse` | Template render output |
+| `JobListingResponse` | Public job listing row/detail |
+| `JobMatchResponse` | Match scores, feedback and missing skills |
+| `JobRecommendationResponse` | Vector recommendation row |
+| `InterviewSessionResponse` | Session creation metadata |
+| `InterviewReportResponse` | STAR report, behavior, transcript, scorecard |
 
-`CVExtractionResponse` là "Deep JSON schema" — LLM được prompt để output JSON conform schema này.
+## CV Extraction Shape
 
-#### Module 2 — Optimization
+`CVExtractionResponse` contains:
 
-| Schema | Description |
-|---|---|
-| `CVOptimizationResponse` | cv_id, audit_score (0–100), optimized_data |
-| `RenderedCVResponse` | template_name, rendered_data |
+- `personal_info`
+- `education`
+- `experience`
+- `projects`
+- `skills_matrix`
+- `certifications`
+- `languages`
 
-#### Module 3 — Job Matching
-
-| Schema | Description |
-|---|---|
-| `SkillGap` | skill_name, impact_level (`critical` \| `important` \| `nice_to_have`), reason |
-| `JobMatchResponse` | overall_score (0–100), frequency_score, position_score, semantic_score, improvement_feedback, missing_skills |
-
-#### Module 4 — Interview
-
-| Schema | Description |
-|---|---|
-| `STARScore` | situation, task, action, result (mỗi chiều 0–10) |
-| `InterviewReportResponse` | session_id, overall_confidence, total_questions, star_scores, logic_issues, improvement_suggestions |
-| `InterviewSessionResponse` | session_id, cv_id, mode, status |
-
-## Technology
-
-| Component | Library |
-|---|---|
-| Schema validation | **Pydantic v2** (`BaseModel`, `Field`) |
-| Type constraints | `Literal`, `ge`, `le`, `min_length`, `max_length` |
-| JSON mode | Pydantic `.model_dump()` / `.model_validate()` |
+This schema is also used as the LLM extraction target.
 
 ## Notes
 
-- `email` field hiện là `str` thuần; switch sang `pydantic[email]` (`EmailStr`) khi dependency được thêm vào.
-- Tất cả response schemas đều có `default_factory=list` / `default_factory=dict` để tránh shared mutable defaults.
+- Use `default_factory` for list/dict fields to avoid shared mutable defaults.
+- Keep request schemas minimal; path params like `cv_id` should stay in the URL.
+- Update this README when adding public fields because frontend API wrappers depend on these shapes.

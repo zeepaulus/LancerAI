@@ -108,9 +108,7 @@ class LLMConnector:
     def has_cloud(self) -> bool:
         """True when a remote/heavy-reasoning backend is configured."""
         return (
-            self.has_hosted
-            or _is_configured_secret(self._cloud_api_key)
-            or _is_configured_secret(self._nvidia_api_key)
+            self.has_hosted or _is_configured_secret(self._cloud_api_key) or _is_configured_secret(self._nvidia_api_key)
         )
 
     @property
@@ -163,7 +161,6 @@ class LLMConnector:
         # Default is local only
         chain.append((False, False, "Ollama (Local)"))
         return chain
-
 
     def _chat_url(self, use_cloud: bool, use_nvidia: bool = False) -> str:
         if use_nvidia:
@@ -290,17 +287,26 @@ class LLMConnector:
                 await cache_repo.increment_hit(entry.id)
                 logger.info(
                     "[LLMCache] Serving from cache — score=%.4f model=%s user=%s",
-                    score, initial_model, user_id,
+                    score,
+                    initial_model,
+                    user_id,
                 )
                 return entry.response_text
 
         # --- LLM call -------------------------------------------------------
-        response_text, succeeded_model, succeeded_backend = await self._call_llm(messages, use_cloud, use_nvidia, json_mode)
+        response_text, succeeded_model, succeeded_backend = await self._call_llm(
+            messages, use_cloud, use_nvidia, json_mode
+        )
 
         # --- Persist to cache -----------------------------------------------
         if cache_repo is not None:
             await self._cache_save(
-                cache_repo, prompt_str, response_text, succeeded_model, succeeded_backend, user_id,
+                cache_repo,
+                prompt_str,
+                response_text,
+                succeeded_model,
+                succeeded_backend,
+                user_id,
             )
 
         return response_text
@@ -325,18 +331,14 @@ class LLMConnector:
             raise RuntimeError("No LLM backend available in the fallback chain")
 
         use_cloud, use_nvidia, label = chain[0]
-        payload = self._build_chat_payload(
-            messages, use_cloud, use_nvidia, stream=False, json_mode=json_mode
-        )
+        payload = self._build_chat_payload(messages, use_cloud, use_nvidia, stream=False, json_mode=json_mode)
         url = self._chat_url(use_cloud, use_nvidia)
         model_name = self._model(use_cloud, use_nvidia)
         backend = self._backend_name(use_cloud, use_nvidia)
 
         try:
             logger.info("[LLM] Trying backend: %s", label)
-            resp = await self._client.post(
-                url, json=payload, headers=self._headers(use_cloud, use_nvidia)
-            )
+            resp = await self._client.post(url, json=payload, headers=self._headers(use_cloud, use_nvidia))
             resp.raise_for_status()
             data = resp.json()
             choice = data["choices"][0]

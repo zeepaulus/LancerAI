@@ -141,10 +141,7 @@ class MockExtractionService:
 
         safe_limit = max(1, min(int(limit or 50), 100))
         result = await session.execute(
-            select(CVRecord)
-            .where(CVRecord.user_id == user_id)
-            .order_by(CVRecord.created_at.desc())
-            .limit(safe_limit)
+            select(CVRecord).where(CVRecord.user_id == user_id).order_by(CVRecord.created_at.desc()).limit(safe_limit)
         )
         return list(result.scalars().all())
 
@@ -293,8 +290,6 @@ class MockCVTemplateRenderer:
 
 def _override_get_template_renderer() -> MockCVTemplateRenderer:
     return MockCVTemplateRenderer()
-
-
 
 
 async def _override_get_db_session() -> AsyncGenerator[AsyncSession, None]:

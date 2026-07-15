@@ -28,8 +28,7 @@ _settings = get_settings()
 
 if _settings.app_env == "production" and not _settings.allowed_origins:
     logger.critical(
-        "[CORS] allowed_origins is empty in production — "
-        "cross-origin browser clients cannot call this API."
+        "[CORS] allowed_origins is empty in production — cross-origin browser clients cannot call this API."
     )
 
 app = FastAPI(

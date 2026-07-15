@@ -1,0 +1,89 @@
+# Lightweight CI smoke stack. It validates the built containers without
+# starting ChromaDB, Qdrant, Neo4j, crawlers, GPU runtimes, or model downloads.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lancerai_ci
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lancerai_ci"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - ci
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - ci
+
+  backend:
+    image: ${BACKEND_IMAGE:-lancerai-backend:ci}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    env_file: .env.test.example
+    environment:
+      APP_ENV: test
+      APP_DEBUG: "false"
+      LOG_TO_FILE: "false"
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/lancerai_ci
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      VECTOR_DB_HOST: /tmp/lancerai-chroma
+      VECTOR_DB_BACKEND: chroma
+      NEO4J_URI: bolt://neo4j-disabled:7687
+      LLM_CACHE_ENABLED: "false"
+      STT_MODEL_SIZE: tiny
+      STT_MODEL_PATH: ""
+      TTS_ENGINE: edge
+      TTS_MODEL_PATH: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "18000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - ci
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-lancerai-frontend:ci}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend-prod
+      args:
+        VITE_API_BASE_URL: ""
+    ports:
+      - "13000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+    networks:
+      - ci
+
+networks:
+  ci:
+    driver: bridge

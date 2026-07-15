@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import io
-import re
 import logging
+import re
 import subprocess
 import tempfile
 import typing
@@ -47,6 +47,7 @@ def _mp3_bytes_to_pcm(mp3_bytes: bytes) -> bytes:
     """Convert MP3 bytes to PCM Int16 mono 24 kHz via pydub."""
     try:
         from pydub import AudioSegment  # type: ignore[import-untyped]
+
         seg = AudioSegment.from_file(io.BytesIO(mp3_bytes), format="mp3")
         seg = seg.set_frame_rate(OUTPUT_SAMPLE_RATE).set_channels(1).set_sample_width(2)
         return typing.cast(bytes, seg.raw_data)
@@ -58,9 +59,24 @@ def _mp3_bytes_to_pcm(mp3_bytes: bytes) -> bytes:
 def _ffmpeg_mp3_to_pcm(mp3_bytes: bytes) -> bytes:
     """Transcode MP3 to PCM s16le via ffmpeg subprocess."""
     proc = subprocess.run(
-        ["ffmpeg", "-y", "-f", "mp3", "-i", "pipe:0",
-         "-f", "s16le", "-ar", str(OUTPUT_SAMPLE_RATE), "-ac", "1", "pipe:1"],
-        input=mp3_bytes, capture_output=True, check=True,
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "mp3",
+            "-i",
+            "pipe:0",
+            "-f",
+            "s16le",
+            "-ar",
+            str(OUTPUT_SAMPLE_RATE),
+            "-ac",
+            "1",
+            "pipe:1",
+        ],
+        input=mp3_bytes,
+        capture_output=True,
+        check=True,
     )
     return proc.stdout
 
@@ -138,7 +154,9 @@ class VoiceTTSConnector:
         return b"".join(chunks)
 
     async def synthesize_stream(
-        self, text: str, voice: str | None = None,
+        self,
+        text: str,
+        voice: str | None = None,
     ) -> AsyncGenerator[bytes, None]:
         """Yield PCM Int16 chunks as they become available.
 
@@ -213,7 +231,10 @@ class VoiceTTSConnector:
 
             piper_sr = 22_050
             proc = await asyncio.create_subprocess_exec(
-                "piper", "--model", str(self._model_path), "--output-raw",
+                "piper",
+                "--model",
+                str(self._model_path),
+                "--output-raw",
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
@@ -248,8 +269,10 @@ class VoiceTTSConnector:
 
         model_path = Path(self._model_path)
         candidates = [
-            model_path.parent / "vieneu", model_path.parent / "vieneu.exe",
-            Path("vieneu"), Path("vieneu.exe"),
+            model_path.parent / "vieneu",
+            model_path.parent / "vieneu.exe",
+            Path("vieneu"),
+            Path("vieneu.exe"),
         ]
         binary = next((b for b in candidates if b.exists()), None)
 
@@ -266,8 +289,15 @@ class VoiceTTSConnector:
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                str(binary), "--model", str(model_path),
-                "--speaker", voice, "--output", str(tmp_path), "--text", text,
+                str(binary),
+                "--model",
+                str(model_path),
+                "--speaker",
+                voice,
+                "--output",
+                str(tmp_path),
+                "--text",
+                text,
                 stderr=asyncio.subprocess.DEVNULL,
             )
             await proc.wait()
@@ -293,9 +323,7 @@ class VoiceTTSConnector:
                 timeout=self._local_timeout_seconds,
             )
         except TimeoutError as exc:
-            raise TimeoutError(
-                f"VieNeu SDK exceeded {self._local_timeout_seconds:.1f}s"
-            ) from exc
+            raise TimeoutError(f"VieNeu SDK exceeded {self._local_timeout_seconds:.1f}s") from exc
         if pcm_data:
             yield pcm_data
 

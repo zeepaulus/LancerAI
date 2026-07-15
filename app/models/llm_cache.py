@@ -24,9 +24,7 @@ class LLMResponseCache(Base):
 
     __tablename__ = "llm_response_cache"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
 
     # Quick exact-match lookup before doing vector similarity scan
     prompt_hash: Mapped[str] = mapped_column(
@@ -48,34 +46,28 @@ class LLMResponseCache(Base):
     model_name: Mapped[str] = mapped_column(
         String(128), nullable=False, comment="LLM model name used to generate the response"
     )
-    backend: Mapped[str] = mapped_column(
-        String(32), nullable=False, comment="nvidia | groq | ollama"
-    )
+    backend: Mapped[str] = mapped_column(String(32), nullable=False, comment="nvidia | groq | ollama")
 
     # The user whose request caused this cache MISS and triggered the LLM call.
     # Null if created by a system/background process.
     triggered_by_user_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True, index=True,
-        comment="user.id who triggered the original LLM call (analytics only)"
+        String(36), nullable=True, index=True, comment="user.id who triggered the original LLM call (analytics only)"
     )
 
     # Cache performance tracking
     hit_count: Mapped[int] = mapped_column(
-        Integer, default=0, nullable=False,
-        comment="Number of times this entry was served from cache"
+        Integer, default=0, nullable=False, comment="Number of times this entry was served from cache"
     )
     similarity_score: Mapped[float | None] = mapped_column(
-        Float, nullable=True,
-        comment="Cosine similarity of the best-matched cached prompt (populated on cache HIT)"
+        Float, nullable=True, comment="Cosine similarity of the best-matched cached prompt (populated on cache HIT)"
     )
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_accessed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
     expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
         comment="Optional TTL — NULL means the entry never expires",
     )
