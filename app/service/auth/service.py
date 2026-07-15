@@ -43,11 +43,26 @@ class AuthService:
     ) -> User:
         """Create a new user and return the persisted record."""
         email_norm = email.lower().strip()
-        existing = await self._users.filter_by(session, email=email_norm, limit=1)
-        if existing:
+        display_name_norm = display_name.strip()
+        
+        if not display_name_norm:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Display name is required.",
+            )
+
+        existing_email = await self._users.filter_by(session, email=email_norm, limit=1)
+        if existing_email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered.",
+            )
+
+        existing_name = await self._users.filter_by(session, display_name=display_name_norm, limit=1)
+        if existing_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Display name already registered.",
             )
 
         user_id = str(uuid.uuid4())
@@ -63,7 +78,7 @@ class AuthService:
                 id=user_id,
                 tenant_id=tenant,
                 email=email_norm,
-                display_name=display_name.strip(),
+                display_name=display_name_norm,
                 password_hash=pwd_hash,
                 role=UserRole.USER,
                 is_active=True,
@@ -72,7 +87,7 @@ class AuthService:
             await session.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered.",
+                detail="Email or display name already registered.",
             ) from None
 
     async def login(self, session: AsyncSession, identifier: str, password: str) -> str:
@@ -87,7 +102,7 @@ class AuthService:
         if user is None or not verify_password(password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password.",
+                detail="Invalid email, display name, or password.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         if not user.is_active:
