@@ -29,13 +29,6 @@ export function me() {
     return apiJson(AUTH_ME_PATH, { method: 'GET' });
 }
 
-export function updateMe({ display_name }) {
-    return apiJson(AUTH_ME_PATH, {
-        method: 'PATCH',
-        body: { display_name },
-    });
-}
-
 export function changePassword({ current_password, new_password }) {
     return apiJson(AUTH_PASSWORD_PATH, {
         method: 'PUT',

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Layout/Navbar';
 import { Alert, Page, PageHero, Panel, StatusBadge } from '../components/Common/AppUI';
-import { changePassword, me, updateMe } from '../api/auth';
+import { changePassword, me } from '../api/auth';
 import * as keys from '../config/storageKeys';
 
 const initialPasswordForm = {
@@ -18,13 +18,10 @@ const AccountSettingsPage = () => {
             return {};
         }
     });
-    const [displayName, setDisplayName] = useState(profile.display_name || '');
     const [passwordForm, setPasswordForm] = useState(initialPasswordForm);
     const [showPassword, setShowPassword] = useState(false);
     const [loadingProfile, setLoadingProfile] = useState(false);
-    const [savingProfile, setSavingProfile] = useState(false);
     const [savingPassword, setSavingPassword] = useState(false);
-    const [profileMessage, setProfileMessage] = useState('');
     const [passwordMessage, setPasswordMessage] = useState('');
     const [error, setError] = useState('');
 
@@ -35,7 +32,6 @@ const AccountSettingsPage = () => {
             .then((data) => {
                 if (!active) return;
                 setProfile(data || {});
-                setDisplayName(data?.display_name || '');
                 localStorage.setItem(keys.LANCERAI_USER_PROFILE, JSON.stringify(data || {}));
             })
             .catch((err) => {
@@ -46,30 +42,6 @@ const AccountSettingsPage = () => {
             });
         return () => { active = false; };
     }, []);
-
-    const handleProfileSubmit = async (event) => {
-        event.preventDefault();
-        setError('');
-        setProfileMessage('');
-        const cleaned = displayName.trim();
-        if (!cleaned) {
-            setError('Vui lòng nhập họ tên hiển thị.');
-            return;
-        }
-
-        setSavingProfile(true);
-        try {
-            const updated = await updateMe({ display_name: cleaned });
-            setProfile(updated || {});
-            setDisplayName(updated?.display_name || cleaned);
-            localStorage.setItem(keys.LANCERAI_USER_PROFILE, JSON.stringify(updated || {}));
-            setProfileMessage('Đã cập nhật hồ sơ.');
-        } catch (err) {
-            setError(err.message || 'Không thể cập nhật hồ sơ.');
-        } finally {
-            setSavingProfile(false);
-        }
-    };
 
     const handlePasswordSubmit = async (event) => {
         event.preventDefault();
@@ -113,7 +85,7 @@ const AccountSettingsPage = () => {
                 <PageHero
                     kicker="Cài đặt"
                     title="Tài khoản"
-                    description="Quản lý tên hiển thị trong LancerAI và đổi mật khẩu khi cần."
+                    description="Xem thông tin tài khoản và đổi mật khẩu khi cần."
                     actions={<StatusBadge tone="settings">Tài khoản người dùng</StatusBadge>}
                     tone="settings"
                 />
@@ -141,18 +113,20 @@ const AccountSettingsPage = () => {
                         </div>
                     </Panel>
 
-                    <Panel className="span-7" title="Thông tin hồ sơ" subtitle="Cập nhật tên hiển thị trên dashboard, báo cáo và phần chuẩn bị phỏng vấn.">
-                        <form className="ui-stack" onSubmit={handleProfileSubmit}>
+                    <Panel className="span-7" title="Thông tin hồ sơ" subtitle="Thông tin định danh của tài khoản chỉ có thể xem.">
+                        <div className="ui-stack">
                             <label htmlFor="settings-full-name" className="ui-field">
                                 <span>Họ tên hiển thị</span>
                                 <input
                                     id="settings-full-name"
                                     className="text-input"
-                                    value={displayName}
-                                    onChange={(event) => setDisplayName(event.target.value)}
+                                    value={profile.display_name || ''}
+                                    readOnly
+                                    aria-describedby="settings-display-name-note"
                                     autoComplete="name"
                                 />
                             </label>
+                            <p id="settings-display-name-note" className="caption">Tên hiển thị được đặt khi đăng ký và không thể chỉnh sửa.</p>
                             <label htmlFor="settings-email" className="ui-field">
                                 <span>Email</span>
                                 <input
@@ -164,13 +138,7 @@ const AccountSettingsPage = () => {
                                 />
                             </label>
                             <p id="settings-email-note" className="caption">Email dùng để đăng nhập và chưa thể chỉnh sửa trong phiên bản này.</p>
-                            <div className="ui-cluster">
-                                <button className="btn-primary" type="submit" disabled={savingProfile}>
-                                    {savingProfile ? 'Đang lưu...' : 'Lưu hồ sơ'}
-                                </button>
-                                {profileMessage && <StatusBadge tone="success">{profileMessage}</StatusBadge>}
-                            </div>
-                        </form>
+                        </div>
                     </Panel>
 
                     <Panel className="span-12" title="Mật khẩu" subtitle="Đổi mật khẩu định kỳ nếu bạn dùng chung thiết bị hoặc nghi ngờ tài khoản bị lộ.">
