@@ -160,7 +160,6 @@ const Navbar = () => {
     const handleLogout = () => {
         localStorage.removeItem(keys.LANCERAI_ACCESS_TOKEN);
         localStorage.removeItem(keys.LANCERAI_USER_PROFILE);
-        localStorage.removeItem(keys.LANCERAI_MOCK_USER_LEGACY);
         navigate('/');
     };
 

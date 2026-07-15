@@ -395,7 +395,6 @@ Used by login and signup.
 Responsibilities:
 
 - Auth card or split auth screen.
-- OAuth action placement.
 - Auth error states.
 
 ### `AppShell`

@@ -39,7 +39,6 @@ Preferred visual categories:
 | --- | --- | --- |
 | `frontend/src/assets/landing_image.png` | Landing hero image in `LandingPage.jsx` | Replace or refresh with an actual LancerAI product mockup/hero visual. Current direct `src="src/assets/..."` usage should eventually become an imported asset. |
 | `frontend/src/assets/Logo/lancerai_logo.png` | Auth logo, likely legacy branding | Keep if brand-approved; otherwise replace with simplified app mark matching the graphite/teal system. |
-| Social logos: Google, Microsoft, GitHub, LinkedIn | Auth OAuth buttons | Keep as logo assets. Use monochrome contained buttons for consistency. |
 | Member photos under `assets/Members` | About Us profile photos | Keep for About page only. Not suitable for candidate avatars or product UI. |
 | Public favicons/app icons | Browser/site identity | Keep, but eventually align colors with new brand tokens. |
 

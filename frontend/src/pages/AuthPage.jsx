@@ -4,19 +4,8 @@ import * as keys from '../config/storageKeys';
 import { login as apiLogin, me as apiMe, signup as apiSignup } from '../api/auth';
 import { validateAuthForm } from '../utils/validation';
 
-import googleLogo from '../assets/Logo/google_logo.png';
-import microsoftLogo from '../assets/Logo/microsoft_logo.png';
-import githubLogo from '../assets/Logo/github_logo.png';
-import linkedinLogo from '../assets/Logo/linkedin_logo.png';
 import logoImg from '../assets/Logo/lancerai_logo.png';
 import { ProductMockupGraphic } from '../components/Common/Visuals';
-
-const socials = [
-    { src: googleLogo, alt: 'Google' },
-    { src: microsoftLogo, alt: 'Microsoft' },
-    { src: linkedinLogo, alt: 'LinkedIn' },
-    { src: githubLogo, alt: 'GitHub' },
-];
 
 const initialForm = {
     username: '',
@@ -46,52 +35,6 @@ const AuthPage = () => {
         setFormData((current) => ({ ...current, [name]: value }));
         setErrors((current) => ({ ...current, [name]: '' }));
         setSubmitError('');
-    };
-
-    const handleSocialLogin = async (provider) => {
-        // Microsoft, LinkedIn, GitHub, Google: use dynamic sandbox accounts
-        setSubmitting(true);
-        setSubmitError('');
-        
-        const mockEmail = `candidate.${provider.toLowerCase()}@lancerai.com`;
-        const mockPassword = "SocialLoginPassword123!";
-        const mockName = `${provider} Candidate`;
-
-        try {
-            let data;
-            try {
-                data = await apiLogin({
-                    identifier: mockEmail,
-                    password: mockPassword,
-                });
-            } catch (err) {
-                await apiSignup({
-                    email: mockEmail,
-                    password: mockPassword,
-                    display_name: mockName,
-                });
-                data = await apiLogin({
-                    identifier: mockEmail,
-                    password: mockPassword,
-                });
-            }
-
-            if (data?.access_token) {
-                localStorage.setItem(keys.LANCERAI_ACCESS_TOKEN, data.access_token);
-                try {
-                    const profile = await apiMe();
-                    localStorage.setItem(keys.LANCERAI_USER_PROFILE, JSON.stringify(profile));
-                } catch {
-                    // Ignored
-                }
-                localStorage.removeItem(keys.LANCERAI_MOCK_USER_LEGACY);
-                navigate('/dashboard');
-            }
-        } catch (err) {
-            setSubmitError(`Lỗi kết nối ${provider}: ${err instanceof Error ? err.message : String(err)}`);
-        } finally {
-            setSubmitting(false);
-        }
     };
 
     const handleSubmit = async (event) => {
@@ -124,7 +67,6 @@ const AuthPage = () => {
                     // Keep login usable when profile hydration is not available.
                 }
 
-                localStorage.removeItem(keys.LANCERAI_MOCK_USER_LEGACY);
                 navigate('/dashboard');
             } else {
                 await apiSignup({
@@ -132,7 +74,6 @@ const AuthPage = () => {
                     password: formData.password,
                     display_name: formData.username.trim(),
                 });
-                localStorage.removeItem(keys.LANCERAI_MOCK_USER_LEGACY);
                 navigate('/login', { replace: false, state: { signupOk: true } });
             }
         } catch (err) {
@@ -224,26 +165,6 @@ const AuthPage = () => {
                         {submitting ? 'Đang xử lý...' : (isLogin ? 'Đăng nhập' : 'Đăng ký')}
                     </button>
                 </form>
-
-                <div className="auth-divider">
-                    <span />
-                    <strong>hoặc tiếp tục với</strong>
-                    <span />
-                </div>
-
-                <div className="auth-socials">
-                    {socials.map((social) => (
-                        <button
-                            key={social.alt}
-                            type="button"
-                            className="auth-social-btn"
-                            aria-label={`Tiếp tục với ${social.alt}`}
-                            onClick={() => handleSocialLogin(social.alt)}
-                        >
-                            <img src={social.src} alt="" />
-                        </button>
-                    ))}
-                </div>
 
                 <div className="auth-footer">
                     {isLogin ? (
