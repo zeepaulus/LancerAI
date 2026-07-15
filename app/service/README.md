@@ -40,7 +40,7 @@ service/
 
 | Module | Main service | Responsibilities |
 |---|---|---|
-| Auth | `AuthService` | Signup, login, resolve token, update profile, change password |
+| Auth | `AuthService` | Signup, login, resolve token, change password |
 | CV analysis | `scorecard.py` | Deterministic CV scoring and skill-gap helpers |
 | Extraction | `ExtractionService` | PDF/image text extraction, LLM structuring, persistence, vector embedding |
 | Optimization | `OptimizationService` | LangGraph pipeline and CV score persistence |

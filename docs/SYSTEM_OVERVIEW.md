@@ -129,7 +129,6 @@ Endpoints:
 - `POST /api/v1/auth/signup`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
-- `PATCH /api/v1/auth/me`
 - `PUT /api/v1/auth/password`
 
 ### 5.2 CV Extraction

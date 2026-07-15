@@ -265,7 +265,6 @@ All business endpoints use the `/api/v1` prefix.
 | Auth | POST | `/api/v1/auth/signup` | Create account |
 | Auth | POST | `/api/v1/auth/login` | Login and return JWT |
 | Auth | GET | `/api/v1/auth/me` | Current user profile |
-| Auth | PATCH | `/api/v1/auth/me` | Update display name |
 | Auth | PUT | `/api/v1/auth/password` | Change password |
 | Extraction | POST | `/api/v1/extraction/cvs` | Upload PDF/PNG/JPEG/WebP CV |
 | Extraction | GET | `/api/v1/extraction/cvs` | List user CV history |

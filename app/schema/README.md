@@ -17,7 +17,6 @@ Routers should import schemas from here and avoid returning arbitrary dicts wher
 |---|---|---|
 | `AuthSignupRequest` | `POST /auth/signup` | `email`, `password`, `display_name`, optional ignored `tenant_id` |
 | `AuthLoginRequest` | `POST /auth/login` | `identifier`, `password` |
-| `UserProfileUpdateRequest` | `PATCH /auth/me` | `display_name` |
 | `PasswordChangeRequest` | `PUT /auth/password` | `current_password`, `new_password` |
 | `CVExtractionUpdateRequest` | `PUT /extraction/cvs/{cv_id}` | Editable structured CV fields |
 | `OptimizationRequest` | `POST /optimization/cvs/{cv_id}/optimizations` | `target_job_title`, `target_industry`, `mode` |

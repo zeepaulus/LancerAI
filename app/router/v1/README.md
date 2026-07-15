@@ -19,7 +19,6 @@ API v1 exposes LancerAI's REST and WebSocket surface. All paths below are mounte
 | POST | `/auth/signup` | No | Create account |
 | POST | `/auth/login` | No | Return JWT access token |
 | GET | `/auth/me` | Bearer | Current user profile |
-| PATCH | `/auth/me` | Bearer | Update display name |
 | PUT | `/auth/password` | Bearer | Change password |
 
 ## Extraction
